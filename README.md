@@ -119,7 +119,7 @@ This detects your project type, generates `spechub/project.yaml` with workflow s
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+[MIT](LICENSE)
 
 ## Credits
 
