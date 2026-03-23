@@ -1,0 +1,44 @@
+{
+  "name": "@ac8318740/spechub-cli",
+  "version": "0.1.0",
+  "description": "CLI for spec-driven development with SpecHub",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "ac8318740"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ac8318740/spechub"
+  },
+  "bin": {
+    "spechub": "./bin/spechub.js"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "schemas/"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "chalk": "^5.4.0",
+    "commander": "^14.0.0",
+    "fast-glob": "^3.3.0",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

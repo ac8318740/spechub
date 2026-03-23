@@ -1,0 +1,21 @@
+name: default
+description: Standard spec-driven workflow – propose, design, implement, archive
+
+artifacts:
+  - name: proposal
+    filename: proposal.md
+    description: Feature proposal with user stories and acceptance criteria
+    required: true
+    template: proposal.md
+
+  - name: design
+    filename: design.md
+    description: Implementation design – architecture, components, API changes
+    required: false
+    template: design.md
+
+  - name: tasks
+    filename: tasks.md
+    description: Dependency-ordered task list for implementation
+    required: false
+    template: tasks.md
