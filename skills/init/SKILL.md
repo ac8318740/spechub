@@ -32,28 +32,36 @@ Read the matching profile from the plugin's `profiles/` directory. Detect toolin
 
 ## Step 2: Present Defaults and Ask What to Customize
 
-Show a clean summary of ALL proposed defaults, then use **AskUserQuestion** to ask which sections to customize.
+Show a clean summary of ALL proposed defaults, then use **AskUserQuestion** with TWO questions in a single call. The tool supports up to 4 questions per call, each with up to 4 options. Both questions use `multiSelect: true`.
 
 The summary should look like:
 
 ```
 Here are the proposed defaults for your project:
 
-1. Profile & paths:  Node/TypeScript, src/, tests/
-2. Commands:         npm test, npm run build, eslint, tsc, prettier
-3. Frontend:         directory: ./, dev: localhost:3000, React, Playwright
-4. Workflow:         feature tier, strict TDD, strict orchestrator, spec sync on
+Profile:      Node/TypeScript
+Directories:  src/ (source), tests/ (tests)
+Commands:     npm test, npm run build, eslint, tsc, prettier
+Frontend:     directory: ./, dev: localhost:3000, React
+Workflow:     feature tier, strict TDD, strict orchestrator, spec sync on
 ```
 
-**AskUserQuestion** with `multiSelect: true`: "Which sections do you want to customize? Select none to use all defaults."
+Then call **AskUserQuestion** with these two questions simultaneously:
 
-Provide exactly these 4 options (the tool supports 2–4 options max):
-- "Profile & paths" – language/framework, source dir, test dir
-- "Commands" – test, build, lint, typecheck, format
-- "Frontend" – directory, dev server, framework, Playwright
-- "Workflow" – tier, TDD strictness, orchestrator mode, spec sync
+**Question 1** (header: "Setup", multiSelect: true): "Customize project setup? Select items to change, or none to keep defaults."
+Options (exactly 3):
+- "Profile & paths" – change language/framework, source dir, test dir
+- "Commands" – adjust test, build, lint, typecheck, format commands
+- "Frontend" – change directory, dev server, framework, Playwright
 
-If the user selects nothing (or types "use defaults"), proceed with all defaults.
+**Question 2** (header: "Workflow", multiSelect: true): "Customize workflow? Select items to change, or none to keep defaults."
+Options (exactly 4):
+- "Workflow tier" – change minimum tier (patch/feature/project/initiative)
+- "TDD strictness" – change from strict to relaxed
+- "Orchestrator" – allow direct code work instead of delegation
+- "Spec sync" – disable automatic spec sync on commit
+
+If the user selects nothing in both questions, proceed with all defaults.
 
 **STOP HERE. Wait for the user's answer.**
 
