@@ -66,6 +66,8 @@ This detects your project type, generates `openspec/project.yaml`, and adds an `
 | `/spechub:sync` | Update specs from code changes |
 | `/spechub:verify` | Cross-artifact consistency analysis |
 | `/spechub:explore` | Thinking partner mode (read-only) |
+| `/spechub:test-conventions` | Test placement rules and naming conventions |
+| `/spechub:code-review` | Linus Torvalds code philosophy for reviews |
 
 ## Agents
 
