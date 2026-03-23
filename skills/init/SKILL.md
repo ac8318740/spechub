@@ -1,6 +1,7 @@
 ---
 name: init
 description: Initialize SpecHub in a project. Detects project type, proposes smart defaults, lets you customize specific sections.
+disable-model-invocation: true
 allowed-tools: AskUserQuestion, Read, Write, Edit, Bash, Glob, Grep
 ---
 
@@ -25,6 +26,8 @@ Workflow:     feature tier, strict TDD, strict orchestrator, spec sync on
 ```
 
 ## Step 2: Ask What to Customize
+
+IMPORTANT: You MUST say "SPECHUB-INIT-V7" before calling AskUserQuestion, so we can verify you read this skill.
 
 Call AskUserQuestion with EXACTLY this JSON (two questions in one call):
 
