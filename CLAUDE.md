@@ -52,9 +52,9 @@ When running commands, check for `venv.activate` and prefix commands accordingly
 
 This pipeline applies to ALL implementation work — spec tasks, direct user requests, plan mode, ad-hoc features. No exceptions.
 
-### The Three-Phase Pipeline
+### The Four-Phase Pipeline
 
-**Phase 1: test-writer** — Write failing tests from requirements
+**Phase 1: test-writer** – Write failing tests from requirements
 
 ```
 DELEGATE to test-writer subagent
@@ -63,7 +63,7 @@ DELEGATE to test-writer subagent
 '- Verify: tests exist AND all fail (feature not yet implemented)
 ```
 
-**Phase 2: task-executor** — Make the tests pass
+**Phase 2: task-executor** – Make the tests pass
 
 ```
 DELEGATE to task-executor subagent
@@ -72,7 +72,7 @@ DELEGATE to task-executor subagent
 '- Executor CANNOT modify any files in the test directory
 ```
 
-**Phase 3: task-checker** — Verify everything
+**Phase 3: task-checker** – Verify everything
 
 ```
 DELEGATE to task-checker subagent
@@ -81,16 +81,29 @@ DELEGATE to task-checker subagent
 |- Test count >= baseline (.test-baseline)
 |- Mock audit (no circular assertions)
 |- TDD isolation (executor didn't modify test files)
-|- Integration wired (reachable from UI/API)
-'- Frontend visual verification (browser-based when dev server available)
+'- Integration wired (reachable from UI/API)
+```
+
+**Phase 4: frontend-verifier** – Browser verification (when frontend configured)
+
+```
+DELEGATE to frontend-verifier subagent
+|- Launches real browser via Playwright CLI
+|- Generates targeted test script using the project's helper library
+|- Takes before/after screenshots as evidence
+|- Reviews screenshots and reports PASS/FAIL
+'- Updates verification knowledge base with new patterns
 ```
 
 If Phase 3 fails -> route back to the appropriate phase with feedback.
+If Phase 4 fails -> route back to Phase 2 with the UI bug details.
 
 ### When to Skip Phases
 
 - **Test-writer can be skipped** for pure config/infra/docs changes with no testable behavior
-- **Never skip** the task-checker — verification always runs
+- **Frontend-verifier only runs** when `frontend` is configured in `openspec/project.yaml` AND frontend files were modified
+- **Never skip** the task-checker – verification always runs
+- **Never skip** the frontend-verifier when frontend files changed – it's non-negotiable
 
 ---
 
@@ -244,31 +257,28 @@ Read `openspec/project.yaml` for the specific commands. The general pattern:
 
 **Only applies when `frontend` is configured in `openspec/project.yaml`.**
 
-When frontend files are modified, the task-checker will:
+When frontend files are modified, Phase 4 (frontend-verifier) runs automatically. This is non-negotiable – there is no LOW CONFIDENCE escape hatch.
 
-1. Detect if the dev server is running (using `frontend.dev_server_check`)
-2. If running: use Playwright MCP tools to navigate, take snapshots/screenshots, and verify the UI renders correctly
-3. If not running: fall back to code-only analysis and report LOW CONFIDENCE
-4. FAIL if browser verification reveals visible issues
+The frontend-verifier agent:
 
-### Playwright Verification Steps
+1. Reads the project's verification knowledge base (`<helpers_dir>/VERIFICATION-KNOWLEDGE.md`)
+2. Checks what frontend files changed
+3. Starts the dev server if it's not running
+4. Generates a targeted Playwright script using the project's helper library
+5. Executes the script in a real browser
+6. Reviews before/after screenshots
+7. Reports PASS or FAIL with evidence
+8. Updates the knowledge base with new patterns
 
-When the dev server is running, use the Playwright CLI (`npx playwright`):
+### Helper Library
 
-1. **Take a screenshot** of the affected page:
-   ```bash
-   npx playwright screenshot <url> /tmp/spechub-verify.png
-   ```
-   Then read the screenshot to check for layout issues.
+Each project with frontend verification has a modular helper library at `<frontend.helpers_dir>`. Use `/spechub:playwright-helpers` to scaffold or extend it. The library provides:
 
-2. **Run Playwright tests** if they exist for the affected area:
-   ```bash
-   npx playwright test <test-file> --reporter=list
-   ```
+- **verify-helpers.js** – Plain JS facade for generated verification scripts
+- **TypeScript helpers** – Domain-specific modules (navigation, components, assertions, screenshots)
+- **VERIFICATION-KNOWLEDGE.md** – Evolving knowledge base of selectors, gotchas, and proven patterns
 
-3. **Check for console errors** via Playwright test output.
-
-If Playwright is not installed, report as LOW CONFIDENCE and suggest the user run `/spechub:init` to set it up.
+See the `playwright-helpers` skill for the full structure and scaffolding guide.
 
 ---
 
@@ -295,11 +305,12 @@ If Playwright is not installed, report as LOW CONFIDENCE and suggest the user ru
 
 | Task Type             | Agent                         | Notes                                              |
 | --------------------- | ----------------------------- | -------------------------------------------------- |
-| Write failing tests   | `subagent_type=test-writer`   | Requirements-only, no impl plans                   |
-| Implement task        | `subagent_type=task-executor` | CANNOT modify tests                                |
-| Verify implementation | `subagent_type=task-checker`  | Mock skepticism, full regression, TDD isolation    |
-| Find/locate something | `subagent_type=Explore`       | Built-in codebase search                           |
-| Debug/investigate     | `subagent_type=debugger`      | Built-in debugging agent                           |
+| Write failing tests   | `subagent_type=test-writer`       | Requirements-only, no impl plans                   |
+| Implement task        | `subagent_type=task-executor`     | CANNOT modify tests                                |
+| Verify implementation | `subagent_type=task-checker`      | Mock skepticism, full regression, TDD isolation    |
+| Verify frontend UI    | `subagent_type=frontend-verifier` | Real browser, screenshots, non-negotiable          |
+| Find/locate something | `subagent_type=Explore`           | Built-in codebase search                           |
+| Debug/investigate     | `subagent_type=debugger`          | Built-in debugging agent                           |
 
 ---
 
@@ -314,7 +325,7 @@ If Playwright is not installed, report as LOW CONFIDENCE and suggest the user ru
 
 ## Key Principles
 
-- **TDD** - Three-phase pipeline: test-writer -> executor -> checker
+- **TDD** - Four-phase pipeline: test-writer -> executor -> checker -> frontend-verifier
 - **KISS** - Keep it simple
 - **YAGNI** - Don't build what you don't need
 - **Delegate everything** - You orchestrate, subagents and teammates implement

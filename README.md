@@ -75,7 +75,8 @@ This detects your project type, generates `openspec/project.yaml`, and adds an `
 |-------|------|
 | `test-writer` | TDD Phase 1 – writes failing tests from requirements only |
 | `task-executor` | TDD Phase 2 – makes tests pass, cannot modify tests |
-| `task-checker` | TDD Phase 3 – verifies everything (mock audit, regression, visual) |
+| `task-checker` | TDD Phase 3 – verifies everything (mock audit, regression, TDD isolation) |
+| `frontend-verifier` | TDD Phase 4 – real browser verification with Playwright (when frontend configured) |
 
 ## Language Profiles
 

@@ -97,11 +97,17 @@ Options: "Yes, install it", "No, skip"
 If yes:
 1. Run `npm init playwright@latest` (or `npx playwright install` if already partially set up)
 2. Install browser binaries: `npx playwright install chromium`
-3. Note in the report that Playwright is configured
+3. Scaffold the helper library using `/spechub:playwright-helpers`:
+   - Create `<frontend.directory>/tests/helpers/` (or the path from project.yaml)
+   - Generate `verify-helpers.js` with project-specific `DEV_URL`
+   - Generate `VERIFICATION-KNOWLEDGE.md` empty template
+   - Generate TypeScript helper stubs (navigation, components, assertions, screenshots)
+4. Set `frontend.helpers_dir` in `openspec/project.yaml`
+5. Note in the report that Playwright and helper library are configured
 
 If no:
-- Frontend visual verification will report LOW CONFIDENCE when UI files change
-- The user can always install later with `npx playwright install`
+- Frontend visual verification will FAIL when UI files change (there is no LOW CONFIDENCE mode)
+- The user can install later with `npx playwright install` and run `/spechub:playwright-helpers`
 
 ### 7. Set Up Test Baseline
 
@@ -148,10 +154,12 @@ frontend:
   directory: "frontend/"
   dev_server_url: "http://localhost:3000"
   dev_server_check: "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000"
+  helpers_dir: "frontend/tests/helpers/"
   commands:
     build: "npx tsc --noEmit"
     lint: "npm run lint -- --fix"
     test: "npm test"
+    dev: "npm run dev"
   framework: "react"
 
 orchestrator:

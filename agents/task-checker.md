@@ -121,49 +121,17 @@ This is where most failures hide. Verify the complete chain:
 - State exists but nothing displays it
 - Button exists but handler is empty/missing
 
-### 5.5 Frontend Visual Verification
+### 5.5 Frontend Files Check
 
-**Only if `frontend` is configured in `openspec/project.yaml`.**
+**Note:** Full browser verification is handled by the **frontend-verifier agent** (Phase 4). The task-checker only checks that frontend code compiles and passes static analysis.
 
-Check whether any frontend files were modified:
+If `frontend` is configured in `openspec/project.yaml` and frontend files were modified:
 
-```bash
-git diff --name-only -- <frontend_directory>/
-```
+1. Run `frontend.commands.build` (e.g., `npx tsc --noEmit`)
+2. Run `frontend.commands.lint`
+3. Run `frontend.commands.test` (unit tests)
 
-If NO frontend files were modified, skip this section entirely.
-
-If YES:
-
-**Step 1: Check if dev server is running** using `frontend.dev_server_check` from project.yaml.
-
-**Step 2a: If server IS running — Browser Verification**
-
-Use the Playwright CLI (`npx playwright`) to verify the UI:
-
-1. **Take a screenshot** of the affected page:
-   ```bash
-   npx playwright screenshot <url> /tmp/spechub-verify.png
-   ```
-   Then read the screenshot file to check for layout issues.
-
-2. **Run any Playwright tests** if they exist for the affected area:
-   ```bash
-   npx playwright test <test-file> --reporter=list
-   ```
-
-3. **Check for console errors** by writing a quick inline test:
-   ```bash
-   npx playwright test --grep "console" || true
-   ```
-
-If Playwright is not installed, report as LOW CONFIDENCE and suggest the user run `/spechub:init` to set it up.
-
-**Step 2b: If server is NOT running — Code-Only Fallback**
-
-- Analyze modified frontend files for obvious issues
-- Check components are properly exported and imported
-- Report as LOW CONFIDENCE
+Do NOT attempt browser verification – that's the frontend-verifier's job.
 
 ### 6. Dependencies Integrated
 
@@ -201,26 +169,20 @@ While verifying, read the living spec for affected domain(s) in `openspec/specs/
 ### User Access Path
 [How a user reaches this feature, or "NOT ACCESSIBLE" if unwired]
 
-### Frontend Visual Verification
-- Frontend files modified: yes/no
-- Dev server running: yes/no
-- [Verification details or LOW CONFIDENCE note]
-
 ### Verdict
-[One sentence: PASS, PASS (LOW CONFIDENCE), or FAIL with what must be fixed]
+[One sentence: PASS or FAIL with what must be fixed]
+[Note: browser-based UI verification is handled by the frontend-verifier (Phase 4)]
 ```
 
 ## Decision Rules
 
-**PASS**: Code exists, compiles, tests pass, feature accessible, visual verification OK.
+**PASS**: Code exists, compiles, tests pass, feature accessible.
 
-**PASS (LOW CONFIDENCE)**: All code-level checks pass but no dev server for visual verification.
-
-**FAIL**: Build errors, test failures, feature not accessible, broken UI, or core requirements not met.
+**FAIL**: Build errors, test failures, feature not accessible, or core requirements not met.
 
 ## Constraints
 
-- **READ-ONLY**: Never use Write or Edit tools. You verify, you don't fix. (Exception: Playwright CLI for browser verification.)
+- **READ-ONLY**: Never use Write or Edit tools. You verify, you don't fix.
 - **Be specific**: Always include file paths and line numbers for issues
 - **Binary decisions**: PASS or FAIL
 - **Verify, don't trust**: Check actual code, not documentation claims
