@@ -1,0 +1,18 @@
+{
+  "name": "spechub",
+  "description": "Spec-driven TDD workflow with OpenSpec integration, strict orchestrator pattern, and three-phase implementation pipeline (test-writer, task-executor, task-checker).",
+  "version": "1.0.0",
+  "author": {
+    "name": "ac8318740"
+  },
+  "repository": "https://github.com/ac8318740/ac8318740-plugins",
+  "license": "MIT",
+  "keywords": [
+    "tdd",
+    "openspec",
+    "spec-driven",
+    "testing",
+    "orchestrator",
+    "workflow"
+  ]
+}

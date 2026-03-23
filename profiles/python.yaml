@@ -1,0 +1,24 @@
+# Python project profile for spechub
+# Used by /spechub:init to generate openspec/project.yaml
+
+commands:
+  test: "pytest tests/ --tb=short -x"
+  test_collect: "pytest tests/ --co -q 2>/dev/null | tail -1 | grep -oP '\\d+'"
+  build: null
+  lint: "ruff check --fix"
+  typecheck: "mypy ."
+  format: "ruff format"
+
+directories:
+  source: "src/"
+  tests: "tests/"
+
+test_markers:
+  # Markers to exclude from default test runs (comma-separated for pytest -m)
+  exclude: "slow,integration"
+
+venv:
+  # If set, commands are prefixed with activation
+  activate: "source .venv/bin/activate"
+
+frontend: null

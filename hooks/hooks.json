@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f openspec/project.yaml ]; then echo 'spechub: project configured (openspec/project.yaml found)'; else echo 'spechub: no project config found. Run /spechub:init to set up.'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

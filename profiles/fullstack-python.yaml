@@ -1,0 +1,30 @@
+# Fullstack Python (backend) + Node/TS (frontend) profile for spechub
+# Used by /spechub:init to generate openspec/project.yaml
+
+commands:
+  test: "pytest tests/ --tb=short -x"
+  test_collect: "pytest tests/ --co -q 2>/dev/null | tail -1 | grep -oP '\\d+'"
+  build: null
+  lint: "ruff check --fix"
+  typecheck: null
+  format: "ruff format"
+
+directories:
+  source: "src/"
+  tests: "tests/"
+
+test_markers:
+  exclude: "slow,integration"
+
+venv:
+  activate: "source .venv/bin/activate"
+
+frontend:
+  directory: "frontend/"
+  dev_server_url: "http://localhost:3000"
+  dev_server_check: "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000"
+  commands:
+    build: "npx tsc --noEmit"
+    lint: "npm run lint -- --fix"
+    test: "npm test"
+  framework: "react"
