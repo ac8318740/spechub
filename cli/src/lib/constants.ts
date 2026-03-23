@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-export const SPECHUB_DIR = 'openspec';
+export const SPECHUB_DIR = 'spechub';
 export const CHANGES_DIR = 'changes';
 export const SPECS_DIR = 'specs';
 export const ARCHIVE_DIR = 'archive';

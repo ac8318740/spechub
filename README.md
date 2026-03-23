@@ -1,21 +1,57 @@
 # SpecHub
 
-A Claude Code plugin for spec-driven TDD development.
+A Claude Code plugin for spec-driven TDD development with modular workflow tiers.
 
 ## Overview
 
-SpecHub enforces a structured workflow where features start as proposals, get designed, broken into tasks, and then implemented through a three-phase TDD pipeline. Living specifications stay in sync with your codebase automatically.
+SpecHub provides right-sized workflows for any task – from a one-line fix to a fully planned initiative. Living specifications stay in sync with your codebase automatically via commit-time spec sync.
 
 Every rule exists because something went wrong without it. Built over months of actual product development with Claude Code.
 
+## Workflow Tiers
+
+Four tiers, each including everything from the tiers below it. The orchestrator auto-selects the right tier based on complexity, or you can force one explicitly.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                       WORKFLOW TIERS                             │
+├───────────┬────────────┬──────────────┬──────────────────────────┤
+│  PATCH    │  FEATURE   │  PROJECT     │  INITIATIVE              │
+│           │            │              │                          │
+│  Just     │  Tasks +   │  Design +    │  Proposal + Design +     │
+│  do it    │  TDD       │  Tasks +     │  Tasks + TDD + Archive   │
+│           │  pipeline  │  TDD         │                          │
+├───────────┼────────────┼──────────────┼──────────────────────────┤
+│ Planning  │  none      │  tasks.md    │  design.md               │ proposal.md
+│ artifacts │            │              │  tasks.md                │ design.md
+│           │            │              │                          │ tasks.md
+├───────────┼────────────┼──────────────┼──────────────────────────┤
+│ TDD       │  ✗         │  ✓           │  ✓                       │ ✓
+│ pipeline  │            │  test→exec   │  test→exec→check         │ test→exec→check
+│           │            │  →check      │  →verify                 │ →verify
+├───────────┼────────────┼──────────────┼──────────────────────────┤
+│ Spec      │  at commit │  at commit   │  at commit               │ at archive
+│ sync      │            │              │                          │ + at commit
+├───────────┼────────────┼──────────────┼──────────────────────────┤
+│ Invoke    │  (auto)    │  /feature    │  /project                │ /initiative
+│           │  or /patch │              │                          │
+├───────────┼────────────┼──────────────┼──────────────────────────┤
+│ Example   │ "fix typo" │ "add login   │ "refactor auth to       │ "build payments
+│ use case  │ "change    │  button"     │  use JWT"               │  system from
+│           │  color"    │ "new API     │ "add search with        │  scratch"
+│           │            │  endpoint"   │  filters"               │
+└───────────┴────────────┴──────────────┴──────────────────────────┘
+```
+
 ## Features
 
-- **Spec-driven development** – Features flow through proposal, design, task breakdown, and implementation phases
-- **Three-phase TDD pipeline** – test-writer (writes failing tests) → task-executor (makes them pass) → task-checker (verifies everything)
-- **Living specifications** – Cumulative specs that auto-sync with your codebase on every commit
+- **Modular workflow tiers** – Right-sized process for every task, from patch to initiative
+- **Commit-time spec sync** – Living specs auto-update on every commit, regardless of tier
+- **Four-phase TDD pipeline** – test-writer → task-executor → task-checker → frontend-verifier
 - **Orchestrator pattern** – Claude coordinates specialized agents rather than doing everything itself
 - **Quality gates** – Mock skepticism, test baseline enforcement, regression checking, TDD isolation audits
 - **Frontend visual verification** – Playwright-based UI verification when a frontend is present
+- **Project configuration** – Per-project workflow settings via `spechub/project.yaml`
 
 ## Prerequisites
 
@@ -35,11 +71,20 @@ Then in your project:
 /spechub:init
 ```
 
-This detects your project type, generates `openspec/project.yaml`, and adds an `@import` line to your CLAUDE.md that activates the orchestrator.
+This detects your project type, generates `spechub/project.yaml` with workflow settings, and adds an `@import` line to your CLAUDE.md that activates the orchestrator.
 
 ## Skills
 
-### Spec Workflow (Full Path)
+### Tier Entry Points
+
+| Command | Tier | Description |
+|---------|------|-------------|
+| `/patch` or simple request | PATCH | Just do it – spec sync at commit |
+| `/feature` | FEATURE | Tasks + TDD pipeline |
+| `/project` | PROJECT | Design + tasks + TDD |
+| `/initiative` | INITIATIVE | Full proposal → design → tasks → archive |
+
+### Spec Workflow (Initiative Tier)
 
 | Skill | Description |
 |-------|-------------|
@@ -50,24 +95,26 @@ This detects your project type, generates `openspec/project.yaml`, and adds an `
 | `/spechub:implement` | Execute tasks via TDD pipeline |
 | `/spechub:archive` | Archive change, update living specs |
 
-### Fast Path
+### Operations
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:implement-quick` | Quick implementation with deep analysis |
-| `/spechub:commit` | Git commit with automatic spec sync |
+| `/spechub:commit` | Git commit with mandatory spec sync |
+| `/spechub:config` | View/modify workflow settings |
+| `/spechub:sync` | Update specs from code changes |
 
-### Supporting
+### Setup and Supporting
 
 | Skill | Description |
 |-------|-------------|
 | `/spechub:init` | Initialize SpecHub in a project |
 | `/spechub:bootstrap` | Generate initial living specs from code |
-| `/spechub:sync` | Update specs from code changes |
 | `/spechub:verify` | Cross-artifact consistency analysis |
 | `/spechub:explore` | Thinking partner mode (read-only) |
+| `/spechub:implement-quick` | Quick implementation with deep analysis |
 | `/spechub:test-conventions` | Test placement rules and naming conventions |
 | `/spechub:code-review` | Linus Torvalds code philosophy for reviews |
+| `/spechub:playwright-helpers` | Scaffold Playwright test helper library |
 
 ## Agents
 
@@ -87,9 +134,10 @@ This detects your project type, generates `openspec/project.yaml`, and adds an `
 ## Design Principles
 
 - **TDD is structural, not aspirational.** Test-writer can't see the implementation plan. Executor can't touch test files. Tests stay independent of the code they verify.
-- **Specs converge toward reality.** Every commit updates the living specs. Agents fix inaccuracies on sight. Specs track what is implemented, never what's planned.
-- **Planning outweighs coding.** Three parallel explorers run before any code is written. Mock audits, mutation checks, regression suites, integration wiring. Most bugs came from not understanding existing code, not from writing bad new code.
-- **Strict defaults, easy to relax.** Set `orchestrator.strict: false` in `openspec/project.yaml` to allow direct code work for smaller projects.
+- **Specs converge toward reality.** Every commit updates the living specs via spec sync. Agents fix inaccuracies on sight. Specs track what is implemented, never what's planned.
+- **Right-sized workflow.** A typo fix doesn't need a proposal. A new payment system does. The orchestrator picks the right tier, or you force one explicitly.
+- **Planning outweighs coding.** Three parallel explorers run before any code is written. Mock audits, mutation checks, regression suites, integration wiring.
+- **Strict defaults, easy to relax.** Use `/spechub:config` to adjust TDD strictness, orchestrator mode, or default tier.
 
 ## License
 

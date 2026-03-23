@@ -14,13 +14,13 @@ Consider the user input before proceeding (if not empty).
 
 ## Overview
 
-Analyze deeply, then implement quickly. No OpenSpec scaffolding, no proposal/design/tasks documents. The 3-explorer pattern ensures changes are grounded in codebase reality before any code is written.
+Analyze deeply, then implement quickly. No SpecHub scaffolding, no proposal/design/tasks documents. The 3-explorer pattern ensures changes are grounded in codebase reality before any code is written.
 
 ## Steps
 
 ### 1. Read Project Configuration
 
-Read `openspec/project.yaml` for build/test/lint commands and directory paths.
+Read `spechub/project.yaml` for build/test/lint commands and directory paths.
 
 ### 2. Branch Setup
 
@@ -61,7 +61,7 @@ Launch **exactly 3 Explore subagents in parallel** using the Agent tool:
 > - Existing tests for the affected area
 > - Other consumers of the functions/components being modified
 > - What could break from this change
-> - Related living specs in openspec/specs/ that describe expected behavior
+> - Related living specs in spechub/specs/ that describe expected behavior
 
 ### 4. Synthesize Findings
 
@@ -123,7 +123,7 @@ Run the full build verification suite from project.yaml. ALL must pass.
 
 ### 9. Frontend Visual Verification
 
-**Only if `frontend` is configured in `openspec/project.yaml`.**
+**Only if `frontend` is configured in `spechub/project.yaml`.**
 
 If any frontend files changed:
 

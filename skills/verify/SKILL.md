@@ -20,7 +20,7 @@ Identify inconsistencies, duplications, ambiguities, and underspecified items ac
 
 **STRICTLY READ-ONLY**: Do **not** modify any files. Output a structured analysis report.
 
-**Constitution Authority**: If `openspec/constitution.md` exists, it is **non-negotiable** within this analysis scope.
+**Constitution Authority**: If `spechub/constitution.md` exists, it is **non-negotiable** within this analysis scope.
 
 ## Execution Steps
 
@@ -29,7 +29,7 @@ Identify inconsistencies, duplications, ambiguities, and underspecified items ac
 If `$ARGUMENTS` specifies a change name, use it. Otherwise:
 
 ```bash
-openspec list --json
+spechub list --json
 ```
 
 If only one active change, use it. If multiple, ask user.
@@ -39,7 +39,7 @@ If only one active change, use it. If multiple, ask user.
 **From proposal.md:** Overview, Functional Requirements, Non-Functional Requirements, User Stories, Edge Cases
 **From design.md:** Architecture/stack choices, Data Model, Phases, Technical constraints
 **From tasks.md:** Task IDs, Descriptions, Phase grouping, Parallel markers, File paths
-**From constitution:** Load `openspec/constitution.md` for principle validation (if exists)
+**From constitution:** Load `spechub/constitution.md` for principle validation (if exists)
 
 ### 3. Detection Passes
 

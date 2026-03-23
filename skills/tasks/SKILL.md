@@ -1,6 +1,6 @@
 ---
 name: tasks
-description: Generate an actionable, dependency-ordered tasks.md for the active OpenSpec change based on proposal and design artifacts.
+description: Generate an actionable, dependency-ordered tasks.md for the active SpecHub change based on proposal and design artifacts.
 disable-model-invocation: true
 ---
 
@@ -16,7 +16,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 A **tasks.md** file — a dependency-ordered checklist of implementation tasks referencing real files and integration points.
 
-**Output**: `openspec/changes/<name>/tasks.md`
+**Output**: `spechub/changes/<name>/tasks.md`
 
 **Prerequisite**: A proposal.md must exist. design.md is optional but recommended.
 
@@ -27,14 +27,14 @@ A **tasks.md** file — a dependency-ordered checklist of implementation tasks r
 If `$ARGUMENTS` specifies a change name, use it. Otherwise:
 
 ```bash
-openspec list --json
+spechub list --json
 ```
 
 If only one active change, use it. If multiple, ask the user.
 
 ### 2. Explore the Codebase
 
-Read proposal.md and design.md (if exists) from `openspec/changes/<name>/`, then **launch 3 parallel Explore subagents** in a single message, each with a different strategy:
+Read proposal.md and design.md (if exists) from `spechub/changes/<name>/`, then **launch 3 parallel Explore subagents** in a single message, each with a different strategy:
 
 **Explore 1 — File Inventory**: List actual files that exist today in all affected areas. For each file, note its size and purpose. Tasks must reference real paths, not hypothetical ones.
 
@@ -47,7 +47,7 @@ Read proposal.md and design.md (if exists) from `openspec/changes/<name>/`, then
 Get the task template:
 
 ```bash
-openspec instructions tasks --change "<name>" --json
+spechub instructions tasks --change "<name>" --json
 ```
 
 Parse `template`, `instruction`, `outputPath`.
@@ -66,7 +66,7 @@ Every task must follow the checklist format (see Task Generation Rules below).
 
 **Print the full draft tasks.md as markdown in chat.** The user reviews it here — no need to open a file.
 
-Then use the **AskUserQuestion tool** to ask: "Write this task list to `openspec/changes/<name>/tasks.md`? Or provide feedback to revise."
+Then use the **AskUserQuestion tool** to ask: "Write this task list to `spechub/changes/<name>/tasks.md`? Or provide feedback to revise."
 
 Options: "Write it", "Revise (I'll give feedback)"
 
@@ -79,7 +79,7 @@ Once approved:
 1. Write tasks.md to the `outputPath`
 2. Show status:
    ```bash
-   openspec status --change "<name>"
+   spechub status --change "<name>"
    ```
 3. Report: path to tasks.md, total task count, tasks per story, parallel opportunities, suggested MVP scope
 
@@ -87,7 +87,7 @@ Once approved:
 
 - **DO NOT** reference hypothetical file paths — every path must come from exploration
 - **DO NOT** write to disk before the user approves the draft
-- **DO NOT** skip the OpenSpec CLI steps (`openspec instructions tasks`)
+- **DO NOT** skip the SpecHub CLI steps (`spechub instructions tasks`)
 
 ## Task Generation Rules
 

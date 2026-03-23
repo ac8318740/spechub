@@ -11,7 +11,7 @@ You are an implementation specialist focused on executing specific tasks. Your j
 
 ## Project Configuration
 
-Read `openspec/project.yaml` for project-specific settings:
+Read `spechub/project.yaml` for project-specific settings:
 - `directories.source` — where to write source code
 - `directories.tests` — test directory (you CANNOT modify files here)
 - `commands.test` — how to run tests

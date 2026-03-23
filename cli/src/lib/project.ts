@@ -10,7 +10,7 @@ export interface ProjectConfig {
 }
 
 /**
- * Find the project root by walking up looking for an openspec/ directory.
+ * Find the project root by walking up looking for an spechub/ directory.
  */
 export function findProjectRoot(from: string = process.cwd()): string | null {
   let dir = resolve(from);
@@ -23,7 +23,7 @@ export function findProjectRoot(from: string = process.cwd()): string | null {
 }
 
 /**
- * Read the project config (openspec/config.yaml).
+ * Read the project config (spechub/config.yaml).
  */
 export function readProjectConfig(root: string): ProjectConfig | null {
   const configPath = join(root, SPECHUB_DIR, CONFIG_FILE);
@@ -33,7 +33,7 @@ export function readProjectConfig(root: string): ProjectConfig | null {
 }
 
 /**
- * Resolve the openspec directory path from a given root.
+ * Resolve the spechub directory path from a given root.
  */
 export function spechubDir(root: string): string {
   return join(root, SPECHUB_DIR);

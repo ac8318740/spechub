@@ -1,6 +1,6 @@
 ---
 name: design
-description: Generate the implementation design (architecture, tech approach, research) for an active OpenSpec change. Reads proposal.md, produces design.md and research.md.
+description: Generate the implementation design (architecture, tech approach, research) for an active SpecHub change. Reads proposal.md, produces design.md and research.md.
 disable-model-invocation: true
 ---
 
@@ -16,7 +16,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 **design.md** and **research.md** — the technical architecture and implementation approach for a change that already has a proposal.md. Translates WHAT/WHY into HOW.
 
-**Output**: `openspec/changes/<name>/design.md` and `openspec/changes/<name>/research.md`
+**Output**: `spechub/changes/<name>/design.md` and `spechub/changes/<name>/research.md`
 
 **Prerequisite**: A proposal.md must exist. Run `/propose` first.
 
@@ -27,14 +27,14 @@ You **MUST** consider the user input before proceeding (if not empty).
 If `$ARGUMENTS` specifies a change name, use it. Otherwise:
 
 ```bash
-openspec list --json
+spechub list --json
 ```
 
 If only one active change, use it. If multiple, ask the user.
 
 ### 2. Explore the Codebase
 
-Read `openspec/changes/<name>/proposal.md` and `openspec/constitution.md` (if exists), then **launch 3 parallel Explore subagents** in a single message, each with a different strategy:
+Read `spechub/changes/<name>/proposal.md` and `spechub/constitution.md` (if exists), then **launch 3 parallel Explore subagents** in a single message, each with a different strategy:
 
 **Explore 1 — Architecture & Patterns**: Map the current architecture in affected areas. Find actual patterns used (not what docs say — what code does). Trace call chains for every system this feature interacts with. Identify entry points, service boundaries, data flow.
 
@@ -47,7 +47,7 @@ Read `openspec/changes/<name>/proposal.md` and `openspec/constitution.md` (if ex
 Get the design template:
 
 ```bash
-openspec instructions design --change "<name>" --json
+spechub instructions design --change "<name>" --json
 ```
 
 Parse `template`, `instruction`, `outputPath`.
@@ -66,7 +66,7 @@ Draft the full design content containing:
 
 **Print the full draft design as markdown in chat.** The user reviews it here — no need to open a file.
 
-Then use the **AskUserQuestion tool** to ask: "Write this design to `openspec/changes/<name>/design.md`? Or provide feedback to revise."
+Then use the **AskUserQuestion tool** to ask: "Write this design to `spechub/changes/<name>/design.md`? Or provide feedback to revise."
 
 Options: "Write it", "Revise (I'll give feedback)"
 
@@ -76,11 +76,11 @@ If the user wants revisions, incorporate feedback and present again. Repeat unti
 
 Once approved:
 
-1. Write research.md to `openspec/changes/<name>/research.md`
+1. Write research.md to `spechub/changes/<name>/research.md`
 2. Write design.md to the `outputPath`
 3. Show status:
    ```bash
-   openspec status --change "<name>"
+   spechub status --change "<name>"
    ```
 4. Report: change name, design.md path, research.md path, next step (`/tasks`)
 

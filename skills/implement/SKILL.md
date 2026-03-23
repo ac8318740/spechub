@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Execute tasks from an active OpenSpec change following the TDD pipeline (test-writer -> task-executor -> task-checker). Creates a feature branch and implements phase by phase.
+description: Execute tasks from an active SpecHub change via the TDD pipeline (test-writer -> task-executor -> task-checker). Creates a feature branch and implements phase by phase.
 disable-model-invocation: true
 ---
 
@@ -12,7 +12,7 @@ $ARGUMENTS
 
 ## What This Skill Does
 
-Implements tasks from an active OpenSpec change's `tasks.md`. Creates a feature branch, executes tasks phase by phase using the TDD pipeline, and verifies everything builds. Keeps tasks.md updated as the single source of progress.
+Implements tasks from an active SpecHub change's `tasks.md`. Creates a feature branch, executes tasks phase by phase using the TDD pipeline, and verifies everything builds. Keeps tasks.md updated as the single source of progress.
 
 ## Steps
 
@@ -21,12 +21,12 @@ Implements tasks from an active OpenSpec change's `tasks.md`. Creates a feature 
 If `$ARGUMENTS` specifies a change name, use it. Otherwise:
 
 ```bash
-openspec list --json
+spechub list --json
 ```
 
 If only one active change, use it. If multiple, ask the user.
 
-Read all artifacts from `openspec/changes/<name>/`:
+Read all artifacts from `spechub/changes/<name>/`:
 
 - **tasks.md** (required — the task list to execute)
 - **proposal.md** (context — what/why)
@@ -35,7 +35,7 @@ Read all artifacts from `openspec/changes/<name>/`:
 
 ### 2. Read Project Configuration
 
-Read `openspec/project.yaml` for build/test/lint commands and directory paths.
+Read `spechub/project.yaml` for build/test/lint commands and directory paths.
 
 ### 3. Create Feature Branch
 
@@ -85,7 +85,7 @@ Moving to Phase N+1...
 
 ### 6. Build Verification (After Each Phase)
 
-Run the commands from `openspec/project.yaml`:
+Run the commands from `spechub/project.yaml`:
 
 - Backend/source build command
 - Frontend build command (if configured)
@@ -96,7 +96,7 @@ All must pass before moving to the next phase.
 
 ### 7. Frontend Visual Verification
 
-**Only if `frontend` is configured in `openspec/project.yaml`.**
+**Only if `frontend` is configured in `spechub/project.yaml`.**
 
 For any phase that creates or modifies UI components, the task-checker handles this automatically. For deeper visual audits, launch an Explore subagent to verify spacing, styling, and visual consistency.
 

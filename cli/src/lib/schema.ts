@@ -22,13 +22,13 @@ export interface SchemaArtifact {
 const PACKAGE_SCHEMAS_DIR = join(import.meta.dirname, '..', '..', 'schemas');
 
 /**
- * Resolution order: project openspec/schemas/ > user ~/.local/share/spechub/schemas/ > package schemas/
+ * Resolution order: project spechub/schemas/ > user ~/.local/share/spechub/schemas/ > package schemas/
  */
 export function resolveSchema(name: string, projectRoot?: string): SchemaDefinition | null {
   const locations: Array<{ dir: string; source: SchemaDefinition['source'] }> = [];
 
   if (projectRoot) {
-    locations.push({ dir: join(projectRoot, 'openspec', 'schemas'), source: 'project' });
+    locations.push({ dir: join(projectRoot, 'spechub', 'schemas'), source: 'project' });
   }
   locations.push({ dir: join(GLOBAL_DATA_DIR, 'schemas'), source: 'user' });
   locations.push({ dir: PACKAGE_SCHEMAS_DIR, source: 'package' });
@@ -53,7 +53,7 @@ export function listSchemas(projectRoot?: string): SchemaDefinition[] {
   const locations: Array<{ dir: string; source: SchemaDefinition['source'] }> = [];
 
   if (projectRoot) {
-    locations.push({ dir: join(projectRoot, 'openspec', 'schemas'), source: 'project' });
+    locations.push({ dir: join(projectRoot, 'spechub', 'schemas'), source: 'project' });
   }
   locations.push({ dir: join(GLOBAL_DATA_DIR, 'schemas'), source: 'user' });
   locations.push({ dir: PACKAGE_SCHEMAS_DIR, source: 'package' });

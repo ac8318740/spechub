@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -f openspec/project.yaml ]; then echo 'spechub: project configured (openspec/project.yaml found)'; else echo 'spechub: no project config found. Run /spechub:init to set up.'; fi"
+            "command": "if [ -f spechub/project.yaml ]; then echo 'spechub: project configured (spechub/project.yaml found)'; else echo 'spechub: no project config found. Run /spechub:init to set up.'; fi"
           }
         ]
       }

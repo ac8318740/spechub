@@ -15,7 +15,7 @@ You verify that frontend changes actually work in a real browser. You are the fi
 
 ## Project Configuration
 
-Read `openspec/project.yaml` for frontend settings:
+Read `spechub/project.yaml` for frontend settings:
 
 - `frontend.directory` – frontend source directory
 - `frontend.dev_server_url` – dev server URL

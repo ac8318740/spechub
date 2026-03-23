@@ -1,5 +1,5 @@
 # Fullstack Python (backend) + Node/TS (frontend) profile for spechub
-# Used by /spechub:init to generate openspec/project.yaml
+# Used by /spechub:init to generate spechub/project.yaml
 
 commands:
   test: "pytest tests/ --tb=short -x"

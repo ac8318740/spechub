@@ -7,7 +7,7 @@ description: Test placement rules and framework conventions. Invoke before writi
 
 ## Decision Tree: Where Does My Test Go?
 
-Read `openspec/project.yaml` for `directories.source`, `directories.tests`, and `frontend` config.
+Read `spechub/project.yaml` for `directories.source`, `directories.tests`, and `frontend` config.
 
 ```
 Backend code?             → <tests-dir>/<mirror-source-path>/test_<module>.py

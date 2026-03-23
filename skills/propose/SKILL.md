@@ -1,6 +1,6 @@
 ---
 name: propose
-description: Propose a new change with deep codebase exploration and feature specification. Uses OpenSpec CLI for scaffolding and produces a grounded proposal.md.
+description: Propose a new change with deep codebase exploration and feature specification. Uses SpecHub CLI for scaffolding and produces a grounded proposal.md.
 disable-model-invocation: true
 ---
 
@@ -16,7 +16,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 A **proposal.md** file — a feature specification describing WHAT users need and WHY. Not implementation plans, not architecture, not code. Those come later via `/design` and `/tasks`.
 
-**Output**: `openspec/changes/<name>/proposal.md`
+**Output**: `spechub/changes/<name>/proposal.md`
 
 ## Steps
 
@@ -25,9 +25,9 @@ A **proposal.md** file — a feature specification describing WHAT users need an
 **Launch an Explore subagent** to investigate:
 
 - **Existing functionality**: What code already exists related to this feature?
-- **Living specs**: Read `openspec/specs/*/spec.md` for affected domains. What requirements already exist?
+- **Living specs**: Read `spechub/specs/*/spec.md` for affected domains. What requirements already exist?
 - **Integration points**: Where does this feature connect to existing systems?
-- **Domain mapping**: Using `openspec/domain-map.yaml`, identify which domains this feature spans.
+- **Domain mapping**: Using `spechub/domain-map.yaml`, identify which domains this feature spans.
 - **Spec correction**: If any living spec FR contradicts actual code, fix it per the Spec Correction Protocol.
 
 ### 2. Scaffold the Change
@@ -35,13 +35,13 @@ A **proposal.md** file — a feature specification describing WHAT users need an
 Generate a kebab-case short name from the feature description, then:
 
 ```bash
-openspec new change "<name>"
+spechub new change "<name>"
 ```
 
 Get the proposal template:
 
 ```bash
-openspec instructions proposal --change "<name>" --json
+spechub instructions proposal --change "<name>" --json
 ```
 
 Parse `template`, `instruction`, `outputPath`. The `context` and `rules` fields are constraints for you — do NOT copy them into the output.
@@ -65,7 +65,7 @@ For unclear aspects, make informed guesses. Only use [NEEDS CLARIFICATION] marke
 
 **Print the full draft proposal as markdown in chat.** The user reviews it right here in the conversation — no need to open a file.
 
-Then use the **AskUserQuestion tool** to ask: "Write this proposal to `openspec/changes/<name>/proposal.md`? Or provide feedback to revise."
+Then use the **AskUserQuestion tool** to ask: "Write this proposal to `spechub/changes/<name>/proposal.md`? Or provide feedback to revise."
 
 Options: "Write it", "Revise (I'll give feedback)"
 
@@ -79,7 +79,7 @@ Once approved:
 2. Handle any [NEEDS CLARIFICATION] markers if the user wants to resolve them now
 3. Show status:
    ```bash
-   openspec status --change "<name>"
+   spechub status --change "<name>"
    ```
 4. Report: change name, proposal path, next step (`/clarify` or `/design`)
 
@@ -96,5 +96,5 @@ Once approved:
 
 - **DO NOT** produce architecture diagrams or component trees — that's `/design`
 - **DO NOT** list implementation phases or tasks — that's `/tasks`
-- **DO NOT** skip `openspec new change` — the change MUST be scaffolded
+- **DO NOT** skip `spechub new change` — the change MUST be scaffolded
 - **DO NOT** write to disk before the user approves the draft

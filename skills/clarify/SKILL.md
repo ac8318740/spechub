@@ -25,12 +25,12 @@ Execution steps:
    If `$ARGUMENTS` specifies a change name, use it. Otherwise:
 
    ```bash
-   openspec list --json
+   spechub list --json
    ```
 
    If only one active change exists, use it. If multiple, ask the user.
 
-   Read `openspec/changes/<name>/proposal.md` as the feature spec.
+   Read `spechub/changes/<name>/proposal.md` as the feature spec.
 
    If proposal.md doesn't exist, instruct user to run `/propose` first.
 
@@ -91,7 +91,7 @@ Execution steps:
    - No contradictory earlier statement remains
    - Markdown structure valid
 
-7. Write the updated proposal back to `openspec/changes/<name>/proposal.md`.
+7. Write the updated proposal back to `spechub/changes/<name>/proposal.md`.
 
 8. Report completion:
    - Number of questions asked & answered

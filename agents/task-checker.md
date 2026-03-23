@@ -13,7 +13,7 @@ You verify that implemented tasks actually work and are accessible to users. You
 
 ## Project Configuration
 
-Read `openspec/project.yaml` for project-specific settings:
+Read `spechub/project.yaml` for project-specific settings:
 - `commands.test` — how to run tests
 - `commands.test_collect` — how to count tests (for baseline)
 - `commands.build` — build verification
@@ -125,7 +125,7 @@ This is where most failures hide. Verify the complete chain:
 
 **Note:** Full browser verification is handled by the **frontend-verifier agent** (Phase 4). The task-checker only checks that frontend code compiles and passes static analysis.
 
-If `frontend` is configured in `openspec/project.yaml` and frontend files were modified:
+If `frontend` is configured in `spechub/project.yaml` and frontend files were modified:
 
 1. Run `frontend.commands.build` (e.g., `npx tsc --noEmit`)
 2. Run `frontend.commands.lint`
@@ -140,7 +140,7 @@ Do NOT attempt browser verification – that's the frontend-verifier's job.
 
 ### 7. Spec Correction (Fix It When You See It)
 
-While verifying, read the living spec for affected domain(s) in `openspec/specs/*/spec.md`. If any FR contradicts what you verified:
+While verifying, read the living spec for affected domain(s) in `spechub/specs/*/spec.md`. If any FR contradicts what you verified:
 
 - **Wrong behavior** -> update FR to match code
 - **Missing requirement** -> add it

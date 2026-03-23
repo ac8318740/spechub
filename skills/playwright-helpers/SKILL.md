@@ -11,7 +11,7 @@ Create a modular, reusable helper library for Playwright-based browser testing. 
 
 ## Project Configuration
 
-Read `openspec/project.yaml` for:
+Read `spechub/project.yaml` for:
 
 - `frontend.directory` – frontend source directory
 - `frontend.dev_server_url` – dev server URL

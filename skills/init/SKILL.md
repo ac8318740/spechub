@@ -1,6 +1,6 @@
 ---
 name: init
-description: Initialize spechub in a project. Detects project type, generates openspec/project.yaml with build/test/lint commands, and sets up OpenSpec. Run this first in any new project.
+description: Initialize SpecHub in a project. Detects project type, generates spechub/project.yaml with build/test/lint commands and workflow config, and sets up SpecHub. Run this first in any new project.
 disable-model-invocation: true
 ---
 
@@ -12,12 +12,12 @@ $ARGUMENTS
 
 ## What This Skill Does
 
-Sets up spechub in the current project by:
+Sets up SpecHub in the current project by:
 1. Detecting the project type and language
-2. Generating `openspec/project.yaml` with the correct commands
-3. Running `openspec init` if not already initialized
-4. Adding the spechub `@import` line to the project's CLAUDE.md
-5. Optionally setting up `.test-baseline`
+2. Generating `spechub/project.yaml` with the correct commands and workflow settings
+3. Running `spechub init` if not already initialized
+4. Adding the SpecHub `@import` line to the project's CLAUDE.md
+5. Optionally enabling spec sync and setting up `.test-baseline`
 
 ## Steps
 
@@ -55,7 +55,7 @@ Read the matching profile from the plugin's `profiles/` directory and customize 
 - Detect linter (ruff, eslint, biome)
 - Detect formatter (ruff format, prettier, biome)
 
-Present the proposed `openspec/project.yaml` to the user for review using **AskUserQuestion**:
+Present the proposed `spechub/project.yaml` to the user for review using **AskUserQuestion**:
 
 "Here's the proposed project configuration. Approve or provide feedback?"
 
@@ -65,9 +65,9 @@ Options: "Looks good, write it", "Let me adjust (I'll give feedback)"
 
 Once approved:
 
-1. Create `openspec/` directory if it doesn't exist
-2. Write `openspec/project.yaml`
-3. Run `openspec init` if `openspec/` wasn't already initialized
+1. Create `spechub/` directory if it doesn't exist
+2. Write `spechub/project.yaml`
+3. Run `spechub init` if `spechub/` wasn't already initialized
 
 ### 5. Add SpecHub to CLAUDE.md
 
@@ -84,9 +84,52 @@ The orchestrator instructions live in the spechub plugin's `CLAUDE.md`. To activ
    @<absolute-path-to-spechub-plugin>/CLAUDE.md
    ```
 
-4. Show the user what was added and where. Explain that this single line loads the orchestrator instructions (TDD pipeline, delegation pattern, quality gates, etc.) and that removing it disables the orchestrator without uninstalling the plugin.
+4. If spec sync is enabled (Step 6a), also add this mandatory instruction after the import:
 
-### 6. Install Playwright (Optional)
+   ```
+   **MANDATORY: Every commit that changes source code MUST run spec sync before completing. This is non-negotiable. Plan for it at the start of every task and execute it as the final step before the commit is created. See the spechub orchestrator instructions for details.**
+   ```
+
+5. Show the user what was added and where. Explain that this single line loads the orchestrator instructions (TDD pipeline, delegation pattern, quality gates, etc.) and that removing it disables the orchestrator without uninstalling the plugin.
+
+### 6. Workflow Configuration
+
+Ask the user about workflow preferences:
+
+#### 6a. Spec Sync
+
+"Enable automatic spec sync on commit? This keeps living specs in sync with code changes automatically. (Recommended)"
+
+Options: "Yes, enable it", "No, skip"
+
+If yes: set `workflow.spec_sync: true` in project.yaml.
+
+#### 6b. Default Workflow Tier
+
+"What's the minimum workflow tier for this project?"
+
+| Tier | What it does | Good for |
+|------|-------------|----------|
+| **patch** (lightest) | Just implement, spec sync at commit | Small projects, scripts |
+| **feature** (default) | Tasks + TDD pipeline | Most projects |
+| **project** | Design + tasks + TDD | Complex projects |
+| **initiative** | Full proposal → design → tasks → archive | Large systems |
+
+Default to `feature` if the user doesn't pick.
+
+#### 6c. TDD Strictness
+
+"Require strict TDD (test-first) for feature tier and above? (Recommended)"
+
+Options: "Yes, strict TDD", "No, relaxed"
+
+#### 6d. Orchestrator Strictness
+
+"Require the orchestrator to delegate all code work to subagents? (Recommended for larger projects)"
+
+Options: "Yes, strict orchestrator", "No, allow direct code work"
+
+### 7. Install Playwright (Optional)
 
 If the project has a frontend (detected in Step 2), ask the user:
 
@@ -102,14 +145,14 @@ If yes:
    - Generate `verify-helpers.js` with project-specific `DEV_URL`
    - Generate `VERIFICATION-KNOWLEDGE.md` empty template
    - Generate TypeScript helper stubs (navigation, components, assertions, screenshots)
-4. Set `frontend.helpers_dir` in `openspec/project.yaml`
+4. Set `frontend.helpers_dir` in `spechub/project.yaml`
 5. Note in the report that Playwright and helper library are configured
 
 If no:
 - Frontend visual verification will FAIL when UI files change (there is no LOW CONFIDENCE mode)
 - The user can install later with `npx playwright install` and run `/spechub:playwright-helpers`
 
-### 7. Set Up Test Baseline
+### 8. Set Up Test Baseline
 
 Ask the user: "Set up test baseline? This tracks minimum test count to prevent test deletion."
 
@@ -117,11 +160,14 @@ If yes:
 1. Run the test collect command
 2. Write the count to `.test-baseline`
 
-### 8. Report
+### 9. Report
 
-- Path to `openspec/project.yaml`
+- Path to `spechub/project.yaml`
 - Profile used
 - Commands configured
+- Workflow tier: default tier, auto-select enabled/disabled
+- Whether spec sync is enabled
+- Whether TDD is strict
 - Whether frontend visual verification is enabled
 - CLAUDE.md import added (path shown)
 - Next steps: run `/spechub:bootstrap` to generate initial living specs, or start building with `/spechub:propose`
@@ -131,6 +177,15 @@ If yes:
 ```yaml
 # Generated by /spechub:init
 profile: python  # or node-typescript, fullstack-python, etc.
+
+workflow:
+  default_tier: feature          # minimum tier for all work (patch/feature/project/initiative)
+  auto_select: true              # let orchestrator pick above minimum
+  spec_sync: true                # mandatory spec sync at commit time
+  tdd:
+    strict: true                 # require TDD pipeline for feature+
+    orchestrator_strict: true    # orchestrator delegates all code work
+  frontend_verification: true    # require Phase 4 when frontend files change
 
 commands:
   test: "pytest tests/ --tb=short -x"
@@ -161,7 +216,4 @@ frontend:
     test: "npm test"
     dev: "npm run dev"
   framework: "react"
-
-orchestrator:
-  strict: true  # Set to false to allow direct code work
 ```

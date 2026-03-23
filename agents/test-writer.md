@@ -11,7 +11,7 @@ You write failing tests from requirements and API contracts ONLY. You do NOT rec
 
 ## Project Configuration
 
-Read `openspec/project.yaml` for project-specific settings:
+Read `spechub/project.yaml` for project-specific settings:
 - `directories.tests` — where to create test files
 - `directories.source` — source code root (for mirroring structure)
 - `commands.test` — how to run tests

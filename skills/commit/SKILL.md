@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Create git commit(s) with proper pre-commit hook handling, MECE commit messages, safe staging, and automatic living spec updates. Invoke via /commit.
+description: Create git commit(s) with proper pre-commit hook handling, MECE commit messages, safe staging, and mandatory living spec sync. Invoke via /commit.
 argument-hint: "[scope: 'all', or describe which changes]"
 disable-model-invocation: true
 ---
@@ -42,22 +42,26 @@ For each planned commit:
 - Keep first line under 72 characters
 - Add body for complex changes
 
-## Step 4: Spec Sync (Automatic)
+## Step 4: Spec Sync (MANDATORY)
 
-**After drafting the commit message but BEFORE creating the commit:**
+**This step is non-negotiable.** After drafting the commit message but BEFORE creating the commit, spec sync runs automatically.
 
-1. Read `openspec/domain-map.yaml` (if exists)
+Read `spechub/project.yaml` – if `workflow.spec_sync` is `true` (or not explicitly `false`), run spec sync:
+
+1. Read `spechub/domain-map.yaml` (if exists)
 2. Map staged files to spec domains
-3. For each affected domain where `openspec/specs/[domain]/spec.md` exists:
+3. For each affected domain where `spechub/specs/[domain]/spec.md` exists:
    - Analyze what the staged changes add, modify, or remove
    - Generate lightweight ADDED/MODIFIED/REMOVED entries
    - Update the domain's spec.md
 4. Stage any updated spec files
 5. Include spec updates in the commit
+6. Flag unmapped source files and prompt user to map them
 
-**Skip spec sync when:**
+**Skip spec sync ONLY when:**
 
-- No `openspec/domain-map.yaml` exists
+- `workflow.spec_sync` is explicitly `false` in project.yaml
+- No `spechub/domain-map.yaml` exists
 - Changed files don't match any domain
 - Changes are docs/config only (no behavioral changes)
 - No spec.md exists for affected domains (don't create from scratch here)
@@ -89,3 +93,4 @@ If commit fails due to pre-commit hooks:
 - NEVER use `git add -A` or `git add .` — stage specific files
 - Always create NEW commits after hook failures
 - Prefer specific file staging over broad patterns
+- Spec sync is MANDATORY – do not skip it unless explicitly disabled in project.yaml

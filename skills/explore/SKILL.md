@@ -12,7 +12,7 @@ $ARGUMENTS
 
 Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
 
-**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and create a change proposal. You MAY create OpenSpec artifacts (proposals, designs, specs) if the user asks — that's capturing thinking, not implementing.
+**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and create a change proposal. You MAY create SpecHub artifacts (proposals, designs, specs) if the user asks — that's capturing thinking, not implementing.
 
 **This is a stance, not a workflow.** There are no fixed steps, no required sequence, no mandatory outputs. You're a thinking partner helping the user explore.
 
@@ -76,16 +76,16 @@ Depending on what the user brings, you might:
 
 ---
 
-## OpenSpec Awareness
+## SpecHub Awareness
 
-You have full context of the OpenSpec system. Use it naturally, don't force it.
+You have full context of the SpecHub system. Use it naturally, don't force it.
 
 ### Check for context
 
 At the start, quickly check what exists:
 
 ```bash
-openspec list --json
+spechub list --json
 ```
 
 ### When no change exists

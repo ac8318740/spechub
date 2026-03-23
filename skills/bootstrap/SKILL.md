@@ -1,6 +1,6 @@
 ---
 name: bootstrap
-description: Multi-pass AI crawl to generate initial living specs from the existing codebase. Use when openspec/specs/ domains need their initial spec.md files bootstrapped from code.
+description: Multi-pass AI crawl to generate initial living specs from the existing codebase. Use when spechub/specs/ domains need their initial spec.md files bootstrapped from code.
 argument-hint: "[domain-names (optional)]"
 disable-model-invocation: true
 ---
@@ -15,9 +15,9 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Purpose
 
-Bootstrap cumulative living specs in `openspec/specs/` by crawling the existing codebase with multiple independent AI passes, then merging and validating the results.
+Bootstrap cumulative living specs in `spechub/specs/` by crawling the existing codebase with multiple independent AI passes, then merging and validating the results.
 
-**IMPORTANT**: This is a one-time bootstrapping operation. Only run when `openspec/specs/` domains have no `spec.md` files yet.
+**IMPORTANT**: This is a one-time bootstrapping operation. Only run when `spechub/specs/` domains have no `spec.md` files yet.
 
 ## Your Role: ORCHESTRATOR ONLY
 
@@ -33,9 +33,9 @@ Your job is to:
 
 ## Pre-flight Check
 
-1. Read `openspec/domain-map.yaml` to get the list of domains and their file path mappings.
+1. Read `spechub/domain-map.yaml` to get the list of domains and their file path mappings.
 2. If `$ARGUMENTS` specifies domain names, filter to only those domains.
-3. Check if any `openspec/specs/*/spec.md` files already exist:
+3. Check if any `spechub/specs/*/spec.md` files already exist:
    - If specs exist: WARN the user and ask for confirmation before overwriting.
    - If no specs exist: Proceed automatically.
 
@@ -94,7 +94,7 @@ Launch a single subagent to apply validated corrections from Phase 3.
 
 ## Phase 5: Human Review (Pass 9)
 
-Present summary to user. Ask: "Review the specs in `openspec/specs/`. Want to edit any domain before finalizing?"
+Present summary to user. Ask: "Review the specs in `spechub/specs/`. Want to edit any domain before finalizing?"
 
 ## Phase 6: Finalization (Pass 10)
 

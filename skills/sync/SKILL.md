@@ -1,6 +1,6 @@
 ---
 name: sync
-description: Update living specs in openspec/specs/ from recent code changes. Called automatically by /commit for retroactive spec updates. Can also be invoked manually.
+description: Update living specs in spechub/specs/ from recent code changes. Called automatically by /commit for retroactive spec updates. Can also be invoked manually.
 argument-hint: "[file-paths or 'staged']"
 ---
 
@@ -14,7 +14,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Purpose
 
-Analyze code changes and update the cumulative living specs in `openspec/specs/` to reflect what changed. This is the "fast path" mechanism that keeps specs current even when the full spec workflow is skipped.
+Analyze code changes and update the cumulative living specs in `spechub/specs/` to reflect what changed. This is the "fast path" mechanism that keeps specs current even when the full spec workflow is skipped.
 
 ## Step 1: Determine Change Scope
 
@@ -26,7 +26,7 @@ Extract from diff: files added/modified/deleted, functions/classes changed.
 
 ## Step 2: Map Changes to Domains
 
-1. Read `openspec/domain-map.yaml`
+1. Read `spechub/domain-map.yaml`
 2. Match changed files against domain path patterns
 3. Group changes by domain
 4. Skip files outside all domains (tests, config, docs)
@@ -37,7 +37,7 @@ If no domains affected: report "No spec-relevant changes" and exit.
 
 For each affected domain:
 
-1. Read `openspec/specs/[domain]/spec.md` (if exists)
+1. Read `spechub/specs/[domain]/spec.md` (if exists)
 2. Analyze changes:
    - New functions/endpoints/components -> ADDED requirements
    - Modified signatures or behavior -> MODIFIED requirements
