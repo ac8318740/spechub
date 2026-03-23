@@ -39,22 +39,20 @@ The summary should look like:
 ```
 Here are the proposed defaults for your project:
 
-1. Profile:      Node/TypeScript
-2. Directories:  src/ (source), tests/ (tests)
-3. Commands:     npm test, npm run build, eslint, tsc, prettier
-4. Frontend:     directory: ./, dev: localhost:3000, React
-5. Workflow tier: feature (tasks + TDD pipeline)
-6. TDD:          strict (test-first)
-7. Orchestrator: strict (delegates to subagents)
-8. Spec sync:    enabled (auto-update specs on commit)
-9. Playwright:   install for frontend verification
+1. Profile & paths:  Node/TypeScript, src/, tests/
+2. Commands:         npm test, npm run build, eslint, tsc, prettier
+3. Frontend:         directory: ./, dev: localhost:3000, React, Playwright
+4. Workflow:         feature tier, strict TDD, strict orchestrator, spec sync on
 ```
 
 **AskUserQuestion:** "Which sections do you want to customize? Everything else keeps the defaults shown above."
 
-Options should include each section as a selectable option, plus:
+Provide exactly these 5 options (no more, no fewer):
 - "All good – use all defaults" (recommended)
-- Each numbered section as an option (e.g., "1. Profile", "2. Directories", etc.)
+- "Profile & paths" – language/framework, source dir, test dir
+- "Commands" – test, build, lint, typecheck, format
+- "Frontend" – directory, dev server, framework, Playwright
+- "Workflow" – tier, TDD strictness, orchestrator mode, spec sync
 
 **STOP HERE. Wait for the user's answer.**
 
