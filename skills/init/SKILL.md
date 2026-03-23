@@ -1,6 +1,6 @@
 ---
 name: init
-description: Initialize SpecHub in a project. Walks through project setup step by step – language, commands, directories, workflow preferences. Run this first in any new project.
+description: Initialize SpecHub in a project. Detects project type, proposes smart defaults, lets you customize specific sections. Run this first in any new project.
 disable-model-invocation: true
 ---
 
@@ -10,88 +10,95 @@ disable-model-invocation: true
 $ARGUMENTS
 ```
 
-## CRITICAL INSTRUCTION
-
-**This is a multi-turn interactive setup. You MUST ask ONE question at a time and STOP to wait for the user's answer before proceeding to the next question. Do NOT present the full config. Do NOT batch questions. Do NOT skip ahead. Each step below is a separate conversation turn.**
-
-**FORBIDDEN: Generating a complete project.yaml and asking "looks good?" That defeats the purpose of this skill. If you do this, you have failed.**
-
 ## How This Works
 
-1. Detect what you can from the project files
-2. Ask question 1 → STOP → wait for answer
-3. Ask question 2 → STOP → wait for answer
-4. Continue until all questions are answered
+1. Detect project type and propose defaults
+2. Show the user a summary of all defaults
+3. Ask which sections to customize (multi-select)
+4. Walk through ONLY the selected sections one at a time
 5. Write the config and report
 
-## Question Sequence
+## Step 1: Detect and Propose Defaults
 
-### Q1: Language and Framework
+Scan the project root for indicators:
 
-Scan the project root for: `pyproject.toml`, `setup.py`, `requirements.txt` (Python), `package.json` with TypeScript (Node/TS), `go.mod` (Go), `Cargo.toml` (Rust). If `$ARGUMENTS` specifies a profile, use that.
+- `pyproject.toml` or `setup.py` or `requirements.txt` → Python
+- `package.json` with TypeScript → Node/TypeScript
+- Both Python AND frontend `package.json` → Fullstack Python
+- `go.mod` → Go, `Cargo.toml` → Rust
+- Empty project → infer from `$ARGUMENTS` or ask
 
-Use **AskUserQuestion**: "What language/framework is this project?"
+Read the matching profile from the plugin's `profiles/` directory. Detect tooling (test runner, linter, formatter, framework). Build the full proposed config from defaults.
 
-Provide options based on detection. If empty project, list common choices. Include a recommended option.
+## Step 2: Present Defaults and Ask What to Customize
 
-**STOP HERE. Wait for the user's answer. Do not proceed to Q2 until you have it.**
+Show a clean summary of ALL proposed defaults, then use **AskUserQuestion** to ask which sections to customize.
 
-After the user answers, read the matching profile from the plugin's `profiles/` directory.
+The summary should look like:
 
-### Q2: Source and Test Directories
+```
+Here are the proposed defaults for your project:
 
-Use **AskUserQuestion**: "Where should source code and tests live?"
+1. Profile:      Node/TypeScript
+2. Directories:  src/ (source), tests/ (tests)
+3. Commands:     npm test, npm run build, eslint, tsc, prettier
+4. Frontend:     directory: ./, dev: localhost:3000, React
+5. Workflow tier: feature (tasks + TDD pipeline)
+6. TDD:          strict (test-first)
+7. Orchestrator: strict (delegates to subagents)
+8. Spec sync:    enabled (auto-update specs on commit)
+9. Playwright:   install for frontend verification
+```
 
-Show the profile defaults (e.g., `src/` and `tests/`). Options: "Use defaults", "Let me specify".
+**AskUserQuestion:** "Which sections do you want to customize? Everything else keeps the defaults shown above."
 
-**STOP HERE. Wait for the user's answer.**
-
-### Q3: Commands
-
-Based on the profile and any detected tooling, propose the commands.
-
-Use **AskUserQuestion**: "Here are the proposed build/test/lint commands. Adjust any?"
-
-Show as a clean list:
-- Test: (proposed)
-- Build: (proposed)
-- Lint: (proposed)
-- Typecheck: (proposed)
-- Format: (proposed)
-
-Options: "Use these", "Let me adjust"
-
-**STOP HERE. Wait for the user's answer.**
-
-### Q4: Frontend (skip if not applicable)
-
-If the language/framework implies a frontend (Next.js, React, Vue, etc.) or a frontend directory was detected:
-
-Use **AskUserQuestion**: "Frontend settings – confirm or adjust?"
-
-Show:
-- Directory: (detected or default)
-- Dev server URL: http://localhost:3000
-- Framework: (detected)
-- Dev command: (proposed)
-
-Options: "Use these", "Let me adjust"
+Options should include each section as a selectable option, plus:
+- "All good – use all defaults" (recommended)
+- Each numbered section as an option (e.g., "1. Profile", "2. Directories", etc.)
 
 **STOP HERE. Wait for the user's answer.**
 
-Skip this question entirely for backend-only projects.
+## Step 3: Customize Selected Sections
 
-### Q5: Virtual Environment (Python only, skip otherwise)
+For each section the user selected, ask ONE question at a time using **AskUserQuestion**. Skip sections the user didn't select – those keep defaults.
 
-Use **AskUserQuestion**: "Virtual environment activation command?"
+**CRITICAL: Ask one question per turn. STOP and wait for the answer before asking the next question.**
 
-Options: "`source .venv/bin/activate`" (recommended), "Different path", "No venv"
+### If "Profile" selected:
 
-**STOP HERE. Wait for the user's answer.**
+**AskUserQuestion:** "What language/framework?"
 
-### Q6: Default Workflow Tier
+Options: Python, Node/TypeScript, Fullstack Python, Go, Rust, Other
 
-Use **AskUserQuestion**: "What's the minimum workflow tier?"
+**STOP. Wait for answer.** Then re-read the matching profile.
+
+### If "Directories" selected:
+
+**AskUserQuestion:** "Source and test directories?"
+
+Show current defaults. Options: "Use defaults", "Let me specify"
+
+**STOP. Wait for answer.**
+
+### If "Commands" selected:
+
+**AskUserQuestion:** "Adjust any commands?"
+
+Show the proposed commands as a list (test, build, lint, typecheck, format). Options: "Use these", "Let me adjust"
+
+**STOP. Wait for answer.**
+
+### If "Frontend" selected:
+
+**AskUserQuestion:** "Frontend settings?"
+
+Show: directory, dev server URL, framework, dev command. Options: "Use these", "Let me adjust"
+
+**STOP. Wait for answer.**
+
+### If "Workflow tier" selected:
+
+**AskUserQuestion:** "Minimum workflow tier?"
 
 | Tier | What it does | Good for |
 |------|-------------|----------|
@@ -100,72 +107,77 @@ Use **AskUserQuestion**: "What's the minimum workflow tier?"
 | **project** | Design + tasks + TDD | Complex projects |
 | **initiative** | Full proposal → design → tasks → archive | Large systems |
 
-Recommend "feature" as default.
+**STOP. Wait for answer.**
 
-**STOP HERE. Wait for the user's answer.**
+### If "TDD" selected:
 
-### Q7: TDD Strictness
+**AskUserQuestion:** "TDD strictness?"
 
-Use **AskUserQuestion**: "Require test-first TDD for feature-tier work and above?"
+Options: "Strict – test-first" (recommended), "Relaxed"
 
-Options: "Yes, strict TDD" (recommended), "No, relaxed"
+**STOP. Wait for answer.**
 
-**STOP HERE. Wait for the user's answer.**
+### If "Orchestrator" selected:
 
-### Q8: Orchestrator Mode
+**AskUserQuestion:** "Orchestrator mode?"
 
-Use **AskUserQuestion**: "Should the orchestrator delegate all code work to subagents?"
+Options: "Strict – delegates all code work" (recommended), "Relaxed – can code directly"
 
-Options: "Yes, strict" (recommended for larger projects), "No, allow direct code work"
+**STOP. Wait for answer.**
 
-**STOP HERE. Wait for the user's answer.**
+### If "Spec sync" selected:
 
-### Q9: Spec Sync
-
-Use **AskUserQuestion**: "Enable automatic spec sync on commit?"
+**AskUserQuestion:** "Enable spec sync on commit?"
 
 Options: "Yes" (recommended), "No"
 
-**STOP HERE. Wait for the user's answer.**
+**STOP. Wait for answer.**
 
-### Q10: Frontend Verification (skip if no frontend)
+### If "Playwright" selected (only if frontend configured):
 
-Use **AskUserQuestion**: "Enable Playwright-based frontend verification?"
+**AskUserQuestion:** "Install Playwright for frontend verification?"
 
-Options: "Yes, install Playwright", "No, skip for now"
+Options: "Yes", "No, skip for now"
 
-**STOP HERE. Wait for the user's answer.**
+**STOP. Wait for answer.**
 
-## After All Questions
+### Python venv (ask automatically for Python projects, no selection needed):
+
+**AskUserQuestion:** "Virtual environment activation command?"
+
+Options: "`source .venv/bin/activate`", "Different path", "No venv"
+
+**STOP. Wait for answer.**
+
+## Step 4: Write Everything
 
 ### Write Configuration
 
 1. Create `spechub/` directory if it doesn't exist
-2. Assemble `spechub/project.yaml` from all answers
+2. Assemble `spechub/project.yaml` from defaults + customizations
 3. Run `spechub init` if not already initialized
 
 ### Add SpecHub to CLAUDE.md
 
 1. Determine the absolute path to the spechub plugin's CLAUDE.md
-2. Check if project CLAUDE.md exists at root:
-   - Exists: prepend `@import` if not already present
-   - Doesn't exist: create it with the import
-3. Import line: `@<absolute-path-to-spechub-plugin>/CLAUDE.md`
-4. If spec sync enabled, add mandatory instruction:
+2. If project CLAUDE.md exists: prepend `@import` if not already present
+3. If it doesn't exist: create it with the import line
+4. Import: `@<absolute-path-to-spechub-plugin>/CLAUDE.md`
+5. If spec sync enabled, add:
    ```
    **MANDATORY: Every commit that changes source code MUST run spec sync before completing. This is non-negotiable. Plan for it at the start of every task and execute it as the final step before the commit is created. See the spechub orchestrator instructions for details.**
    ```
 
-### Install Playwright (if enabled in Q10)
+### Install Playwright (if enabled)
 
-1. Run `npm init playwright@latest`
-2. Install chromium: `npx playwright install chromium`
+1. `npm init playwright@latest`
+2. `npx playwright install chromium`
 3. Scaffold helpers via `/spechub:playwright-helpers`
 4. Set `frontend.helpers_dir` in project.yaml
 
 ### Test Baseline (if tests exist)
 
-Use **AskUserQuestion**: "Set up test baseline to prevent test deletion?"
+**AskUserQuestion:** "Set up test baseline?"
 
 Options: "Yes", "No"
 
