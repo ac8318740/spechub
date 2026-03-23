@@ -54,39 +54,15 @@ When running commands, check for `venv.activate` and prefix commands accordingly
 
 Read `spechub/project.yaml` for the `workflow` section. Four tiers, each including everything from the tiers below it:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                       WORKFLOW TIERS                             │
-├───────────┬────────────┬──────────────┬──────────────────────────┤
-│  PATCH    │  FEATURE   │  PROJECT     │  INITIATIVE              │
-│           │            │              │                          │
-│  Just     │  Tasks +   │  Design +    │  Proposal + Design +     │
-│  do it    │  TDD       │  Tasks +     │  Tasks + TDD + Archive   │
-│           │  pipeline  │  TDD         │                          │
-├───────────┼────────────┼──────────────┼──────────────────────────┤
-│ Planning  │  none      │  tasks.md    │  design.md               │ proposal.md
-│ artifacts │            │              │  tasks.md                │ design.md
-│           │            │              │                          │ tasks.md
-├───────────┼────────────┼──────────────┼──────────────────────────┤
-│ TDD       │  ✗         │  ✓           │  ✓                       │ ✓
-│ pipeline  │            │  test→exec   │  test→exec→check         │ test→exec→check
-│           │            │  →check      │  →verify                 │ →verify
-├───────────┼────────────┼──────────────┼──────────────────────────┤
-│ Frontend  │  ✗         │  ✓           │  ✓                       │ ✓
-│ verifier  │            │  (if config) │  (if configured)         │ (if configured)
-├───────────┼────────────┼──────────────┼──────────────────────────┤
-│ Spec      │  at commit │  at commit   │  at commit               │ at archive
-│ sync      │            │              │                          │ + at commit
-├───────────┼────────────┼──────────────┼──────────────────────────┤
-│ Invoke    │  (auto)    │  /feature    │  /project                │ /initiative
-│           │  or /patch │              │                          │
-├───────────┼────────────┼──────────────┼──────────────────────────┤
-│ Example   │ "fix typo" │ "add login   │ "refactor auth to       │ "build payments
-│ use case  │ "change    │  button"     │  use JWT"               │  system from
-│           │  color"    │ "new API     │ "add search with        │  scratch"
-│           │            │  endpoint"   │  filters"               │
-└───────────┴────────────┴──────────────┴──────────────────────────┘
-```
+|                | PATCH | FEATURE | PROJECT | INITIATIVE |
+|----------------|-------|---------|---------|------------|
+| **Summary** | Just do it | Tasks + TDD pipeline | Design + Tasks + TDD | Proposal + Design + Tasks + TDD + Archive |
+| **Planning artifacts** | none | tasks.md | design.md, tasks.md | proposal.md, design.md, tasks.md |
+| **TDD pipeline** | ✗ | test → exec → check | test → exec → check → verify | test → exec → check → verify |
+| **Frontend verifier** | ✗ | ✓ (if configured) | ✓ (if configured) | ✓ (if configured) |
+| **Spec sync** | at commit | at commit | at commit | at archive + at commit |
+| **Invoke** | (auto) or `/patch` | `/feature` | `/project` | `/initiative` |
+| **Example** | fix typo, change color | add login button, new API endpoint | refactor auth to use JWT | build payments system from scratch |
 
 ### Tier Selection
 
