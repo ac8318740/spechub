@@ -46,20 +46,37 @@ Frontend:     directory: ./, dev: localhost:3000, React
 Workflow:     feature tier, strict TDD, strict orchestrator, spec sync on
 ```
 
-Then call **AskUserQuestion** with these two questions simultaneously:
+Then call AskUserQuestion with EXACTLY this structure (two questions, both multiSelect). Copy this structure precisely:
 
-**Question 1** (header: "Setup", multiSelect: true): "Customize project setup? Select items to change, or none to keep defaults."
-Options (exactly 3):
-- "Profile & paths" – change language/framework, source dir, test dir
-- "Commands" – adjust test, build, lint, typecheck, format commands
-- "Frontend" – change directory, dev server, framework, Playwright
+```json
+{
+  "questions": [
+    {
+      "question": "Customize project setup? Select items to change, or skip to keep defaults.",
+      "header": "Setup",
+      "multiSelect": true,
+      "options": [
+        {"label": "Profile & paths", "description": "Change language/framework, source dir, test dir"},
+        {"label": "Commands", "description": "Adjust test, build, lint, typecheck, format commands"},
+        {"label": "Frontend", "description": "Change directory, dev server, framework, Playwright"}
+      ]
+    },
+    {
+      "question": "Customize workflow? Select items to change, or skip to keep defaults.",
+      "header": "Workflow",
+      "multiSelect": true,
+      "options": [
+        {"label": "Workflow tier", "description": "Change minimum tier (patch/feature/project/initiative)"},
+        {"label": "TDD strictness", "description": "Switch from strict (test-first) to relaxed"},
+        {"label": "Orchestrator", "description": "Allow direct code work instead of subagent delegation"},
+        {"label": "Spec sync", "description": "Disable automatic spec sync on commit"}
+      ]
+    }
+  ]
+}
+```
 
-**Question 2** (header: "Workflow", multiSelect: true): "Customize workflow? Select items to change, or none to keep defaults."
-Options (exactly 4):
-- "Workflow tier" – change minimum tier (patch/feature/project/initiative)
-- "TDD strictness" – change from strict to relaxed
-- "Orchestrator" – allow direct code work instead of delegation
-- "Spec sync" – disable automatic spec sync on commit
+**You MUST pass both questions in a single AskUserQuestion call. Do NOT use a single question. Do NOT merge them.**
 
 If the user selects nothing in both questions, proceed with all defaults.
 
