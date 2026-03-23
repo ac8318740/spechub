@@ -27,8 +27,6 @@ Workflow:     feature tier, strict TDD, strict orchestrator, spec sync on
 
 ## Step 2: Ask What to Customize
 
-IMPORTANT: You MUST say "SPECHUB-INIT-V7" before calling AskUserQuestion, so we can verify you read this skill.
-
 Call AskUserQuestion with EXACTLY this JSON (two questions in one call):
 
 ```json
