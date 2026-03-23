@@ -46,37 +46,26 @@ Frontend:     directory: ./, dev: localhost:3000, React
 Workflow:     feature tier, strict TDD, strict orchestrator, spec sync on
 ```
 
-Then call AskUserQuestion with EXACTLY this structure (two questions, both multiSelect). Copy this structure precisely:
+Ask these two questions. Use AskUserQuestion tool once with both questions.
 
-```json
-{
-  "questions": [
-    {
-      "question": "Customize project setup? Select items to change, or skip to keep defaults.",
-      "header": "Setup",
-      "multiSelect": true,
-      "options": [
-        {"label": "Profile & paths", "description": "Change language/framework, source dir, test dir"},
-        {"label": "Commands", "description": "Adjust test, build, lint, typecheck, format commands"},
-        {"label": "Frontend", "description": "Change directory, dev server, framework, Playwright"}
-      ]
-    },
-    {
-      "question": "Customize workflow? Select items to change, or skip to keep defaults.",
-      "header": "Workflow",
-      "multiSelect": true,
-      "options": [
-        {"label": "Workflow tier", "description": "Change minimum tier (patch/feature/project/initiative)"},
-        {"label": "TDD strictness", "description": "Switch from strict (test-first) to relaxed"},
-        {"label": "Orchestrator", "description": "Allow direct code work instead of subagent delegation"},
-        {"label": "Spec sync", "description": "Disable automatic spec sync on commit"}
-      ]
-    }
-  ]
-}
-```
+### Question 1: Customize project setup?
 
-**You MUST pass both questions in a single AskUserQuestion call. Do NOT use a single question. Do NOT merge them.**
+Present as a multiSelect question with exactly these 3 options:
+- "Profile & paths" – Change language/framework, source dir, test dir
+- "Commands" – Adjust test, build, lint, typecheck, format commands
+- "Frontend" – Change directory, dev server, framework, Playwright
+
+Header: "Setup"
+
+### Question 2: Customize workflow?
+
+Present as a multiSelect question with exactly these 4 options:
+- "Workflow tier" – Change minimum tier (patch/feature/project/initiative)
+- "TDD strictness" – Switch from strict (test-first) to relaxed
+- "Orchestrator" – Allow direct code work instead of subagent delegation
+- "Spec sync" – Disable automatic spec sync on commit
+
+Header: "Workflow"
 
 If the user selects nothing in both questions, proceed with all defaults.
 
