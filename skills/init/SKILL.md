@@ -45,14 +45,15 @@ Here are the proposed defaults for your project:
 4. Workflow:         feature tier, strict TDD, strict orchestrator, spec sync on
 ```
 
-**AskUserQuestion:** "Which sections do you want to customize? Everything else keeps the defaults shown above."
+**AskUserQuestion** with `multiSelect: true`: "Which sections do you want to customize? Select none to use all defaults."
 
-Provide exactly these 5 options (no more, no fewer):
-- "All good – use all defaults" (recommended)
+Provide exactly these 4 options (the tool supports 2–4 options max):
 - "Profile & paths" – language/framework, source dir, test dir
 - "Commands" – test, build, lint, typecheck, format
 - "Frontend" – directory, dev server, framework, Playwright
 - "Workflow" – tier, TDD strictness, orchestrator mode, spec sync
+
+If the user selects nothing (or types "use defaults"), proceed with all defaults.
 
 **STOP HERE. Wait for the user's answer.**
 
