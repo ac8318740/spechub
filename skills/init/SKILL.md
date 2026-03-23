@@ -1,7 +1,7 @@
 ---
 name: init
 description: Initialize SpecHub in a project. Detects project type, proposes smart defaults, lets you customize specific sections. Run this first in any new project.
-disable-model-invocation: true
+allowed-tools: AskUserQuestion, Read, Write, Edit, Bash, Glob, Grep
 ---
 
 ## User Input
@@ -46,28 +46,21 @@ Frontend:     directory: ./, dev: localhost:3000, React
 Workflow:     feature tier, strict TDD, strict orchestrator, spec sync on
 ```
 
-Ask these two questions. Use AskUserQuestion tool once with both questions.
+Use AskUserQuestion with multiple questions in one call:
 
-### Question 1: Customize project setup?
+**Question 1:**
+- question: "Customize project setup? Select items to change, or skip to keep defaults."
+- header: "Setup"
+- multiSelect: true
+- options: Profile & paths, Commands, Frontend
 
-Present as a multiSelect question with exactly these 3 options:
-- "Profile & paths" – Change language/framework, source dir, test dir
-- "Commands" – Adjust test, build, lint, typecheck, format commands
-- "Frontend" – Change directory, dev server, framework, Playwright
+**Question 2:**
+- question: "Customize workflow? Select items to change, or skip to keep defaults."
+- header: "Workflow"
+- multiSelect: true
+- options: Workflow tier, TDD strictness, Orchestrator mode, Spec sync
 
-Header: "Setup"
-
-### Question 2: Customize workflow?
-
-Present as a multiSelect question with exactly these 4 options:
-- "Workflow tier" – Change minimum tier (patch/feature/project/initiative)
-- "TDD strictness" – Switch from strict (test-first) to relaxed
-- "Orchestrator" – Allow direct code work instead of subagent delegation
-- "Spec sync" – Disable automatic spec sync on commit
-
-Header: "Workflow"
-
-If the user selects nothing in both questions, proceed with all defaults.
+Process all answers together. If the user selects nothing in both questions, proceed with all defaults.
 
 **STOP HERE. Wait for the user's answer.**
 
