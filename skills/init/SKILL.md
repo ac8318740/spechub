@@ -22,7 +22,7 @@ Profile:      [detected]
 Directories:  src/, tests/
 Commands:     [from profile]
 Frontend:     [if applicable]
-Workflow:     feature tier, strict TDD, strict orchestrator, spec sync on
+Workflow:     feature tier, thorough clarification, strict TDD, strict orchestrator, spec sync on
 ```
 
 ## Step 2: Ask What to Customize
@@ -48,6 +48,7 @@ Call AskUserQuestion with EXACTLY this JSON (two questions in one call):
       "multiSelect": true,
       "options": [
         {"label": "Workflow tier", "description": "Change minimum tier (patch/feature/project/initiative)"},
+        {"label": "Clarification", "description": "How much to ask before drafting proposals, designs, and tasks"},
         {"label": "TDD strictness", "description": "Switch from strict (test-first) to relaxed"},
         {"label": "Orchestrator", "description": "Allow direct code work instead of subagent delegation"},
         {"label": "Spec sync", "description": "Disable automatic spec sync on commit"}
@@ -67,6 +68,7 @@ For each selected item, ask one follow-up question at a time via AskUserQuestion
 - **Commands**: Show proposed commands, ask to adjust
 - **Frontend**: Show frontend settings, ask to adjust
 - **Workflow tier**: Ask patch/feature/project/initiative
+- **Clarification**: Ask 3 questions (one per phase) using AskUserQuestion with up to 4 questions per call. Each question asks the default clarification level for that phase (propose, design, tasks). Options: `none` (never ask), `critical` (only scope/architecture-changing), `thorough` (recommended – ask about anything ambiguous), `exhaustive` (ask about everything). Users can override per-run with flags like `--exhaustive`.
 - **TDD strictness**: Ask strict vs relaxed
 - **Orchestrator**: Ask strict vs relaxed
 - **Spec sync**: Ask enabled vs disabled
@@ -89,6 +91,7 @@ Profile:      [profile]
 Source:       [source dir]
 Tests:        [tests dir]
 Workflow:     [tier] (auto-select on)
+Clarify:      propose=[level], design=[level], tasks=[level]
 TDD:          [strict/relaxed]
 Orchestrator: [strict/relaxed]
 Spec sync:    [enabled/disabled]
@@ -108,6 +111,10 @@ workflow:
   default_tier: feature
   auto_select: true
   spec_sync: true
+  clarification:
+    propose: thorough    # none | critical | thorough | exhaustive
+    design: thorough
+    tasks: thorough
   tdd:
     strict: true
     orchestrator_strict: true

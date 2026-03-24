@@ -18,6 +18,21 @@ A **proposal.md** file — a feature specification describing WHAT users need an
 
 **Output**: `spechub/changes/<name>/proposal.md`
 
+## Clarification Level
+
+This skill supports a `--none`, `--critical`, `--thorough`, or `--exhaustive` flag to override the configured clarification level. Parse `$ARGUMENTS` for these flags (remove the flag from the remaining arguments).
+
+If no flag is provided, read the default from `spechub/project.yaml` at `workflow.clarification.propose`. If not set, default to `thorough`.
+
+**Levels**:
+
+| Level | Bar to ask a question |
+|-------|----------------------|
+| `none` | Never ask. Make informed guesses, use [NEEDS CLARIFICATION] markers. |
+| `critical` | Only ask if the answer would fundamentally change scope or architecture. |
+| `thorough` | Ask if the answer would meaningfully affect proposal quality. Anything ambiguous or with multiple valid interpretations. |
+| `exhaustive` | Ask about anything not explicitly stated. Deep discovery – leave nothing to assumption. |
+
 ## Steps
 
 ### 1. Explore the Codebase
@@ -30,7 +45,20 @@ A **proposal.md** file — a feature specification describing WHAT users need an
 - **Domain mapping**: Using `spechub/domain-map.yaml`, identify which domains this feature spans.
 - **Spec correction**: If any living spec FR contradicts actual code, fix it per the Spec Correction Protocol.
 
-### 2. Scaffold the Change
+### 2. Clarify Before Drafting
+
+**Skip this step if clarification level is `none`.**
+
+Based on exploration findings and the user's request, identify questions about requirements, user needs, and scope boundaries where the answer would materially improve the proposal. Apply the configured clarification level to decide what meets the bar.
+
+Present questions using the **AskUserQuestion tool** – batch related questions together (up to 4 per call). For each question:
+
+- Provide 2–4 concrete options with your recommended choice first
+- Include a short description explaining why each option matters
+
+After answers come back, assess whether more questions are needed at the current level. Continue until you're confident the remaining ambiguity is below the configured bar, then proceed to drafting.
+
+### 3. Scaffold the Change
 
 Generate a kebab-case short name from the feature description, then:
 
@@ -46,9 +74,9 @@ spechub instructions proposal --change "<name>" --json
 
 Parse `template`, `instruction`, `outputPath`. The `context` and `rules` fields are constraints for you — do NOT copy them into the output.
 
-### 3. Draft the Proposal
+### 4. Draft the Proposal
 
-Using the template and exploration findings, draft the full proposal content containing:
+Using the template, exploration findings, and clarification answers, draft the full proposal content containing:
 
 - **User Stories** (P1/P2/P3 prioritized) with Given/When/Then acceptance scenarios
 - **Functional Requirements** (FR-NNN, each testable)
@@ -59,9 +87,9 @@ Using the template and exploration findings, draft the full proposal content con
 
 Ground the requirements in reality using exploration findings — reference real integration points, note existing capabilities to preserve.
 
-For unclear aspects, make informed guesses. Only use [NEEDS CLARIFICATION] markers (max 3) for decisions that significantly impact scope or UX.
+For aspects not covered during clarification, make informed guesses. Only use [NEEDS CLARIFICATION] markers (max 3) for decisions that significantly impact scope or UX and were not addressed in the clarification step.
 
-### 4. Present the Draft to the User
+### 5. Present the Draft to the User
 
 **Print the full draft proposal as markdown in chat.** The user reviews it right here in the conversation — no need to open a file.
 
@@ -71,7 +99,7 @@ Options: "Write it", "Revise (I'll give feedback)"
 
 If the user wants revisions, incorporate their feedback and present the updated draft again. Repeat until approved.
 
-### 5. Write and Report
+### 6. Write and Report
 
 Once approved:
 

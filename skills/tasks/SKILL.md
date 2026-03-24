@@ -20,6 +20,21 @@ A **tasks.md** file — a dependency-ordered checklist of implementation tasks r
 
 **Prerequisite**: A proposal.md must exist. design.md is optional but recommended.
 
+## Clarification Level
+
+This skill supports a `--none`, `--critical`, `--thorough`, or `--exhaustive` flag to override the configured clarification level. Parse `$ARGUMENTS` for these flags (remove the flag from the remaining arguments).
+
+If no flag is provided, read the default from `spechub/project.yaml` at `workflow.clarification.tasks`. If not set, default to `thorough`.
+
+**Levels**:
+
+| Level | Bar to ask a question |
+|-------|----------------------|
+| `none` | Never ask. Decide all task breakdown choices yourself. |
+| `critical` | Only ask if the answer would fundamentally change task structure or dependencies. |
+| `thorough` | Ask if the answer would meaningfully affect task planning. Ambiguous priorities, unclear MVP scope, or multiple valid orderings. |
+| `exhaustive` | Ask about every planning decision. Priorities, parallelism, scope cuts, phasing – leave nothing assumed. |
+
 ## Steps
 
 ### 1. Locate the Active Change
@@ -42,7 +57,22 @@ Read proposal.md and design.md (if exists) from `spechub/changes/<name>/`, then 
 
 **Explore 3 — Integration Wiring**: Identify every integration point that needs wiring — route registration, component imports, service injection, config/env additions, database migrations. Check living specs for contradictions with actual code (fix per Spec Correction Protocol).
 
-### 3. Draft the Tasks
+### 3. Clarify Before Drafting
+
+**Skip this step if clarification level is `none`.**
+
+Based on exploration findings, the proposal, and the design (if exists), identify questions about priorities, constraints, and planning preferences where the answer would materially improve the task breakdown. Apply the configured clarification level to decide what meets the bar.
+
+Examples: MVP scope boundaries, which user stories to tackle first, parallelism preferences, testing strategy, deployment phasing, features to defer.
+
+Present questions using the **AskUserQuestion tool** – batch related questions together (up to 4 per call). For each question:
+
+- Provide 2–4 concrete options with your recommended choice first
+- Include a short description explaining the trade-offs
+
+After answers come back, assess whether more questions are needed at the current level. Continue until you're confident the remaining ambiguity is below the configured bar, then proceed to drafting.
+
+### 4. Draft the Tasks
 
 Get the task template:
 
@@ -62,7 +92,7 @@ Draft the full tasks.md content organized by user story:
 
 Every task must follow the checklist format (see Task Generation Rules below).
 
-### 4. Present the Draft to the User
+### 5. Present the Draft to the User
 
 **Print the full draft tasks.md as markdown in chat.** The user reviews it here — no need to open a file.
 
@@ -72,7 +102,7 @@ Options: "Write it", "Revise (I'll give feedback)"
 
 If the user wants revisions, incorporate feedback and present again. Repeat until approved.
 
-### 5. Write and Report
+### 6. Write and Report
 
 Once approved:
 

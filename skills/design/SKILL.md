@@ -20,6 +20,21 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 **Prerequisite**: A proposal.md must exist. Run `/propose` first.
 
+## Clarification Level
+
+This skill supports a `--none`, `--critical`, `--thorough`, or `--exhaustive` flag to override the configured clarification level. Parse `$ARGUMENTS` for these flags (remove the flag from the remaining arguments).
+
+If no flag is provided, read the default from `spechub/project.yaml` at `workflow.clarification.design`. If not set, default to `thorough`.
+
+**Levels**:
+
+| Level | Bar to ask a question |
+|-------|----------------------|
+| `none` | Never ask. Decide all technical choices yourself. |
+| `critical` | Only ask if the answer would fundamentally change the architecture. |
+| `thorough` | Ask if the answer would meaningfully affect the design. Ambiguous technical choices or multiple valid patterns. |
+| `exhaustive` | Ask about every non-trivial technical decision. Leave no assumption unchecked. |
+
 ## Steps
 
 ### 1. Locate the Active Change
@@ -42,7 +57,22 @@ Read `spechub/changes/<name>/proposal.md` and `spechub/constitution.md` (if exis
 
 **Explore 3 — Tests & Integration Surface**: Map existing test patterns, fixtures, and utilities in the affected area. Identify integration wiring points (route registration, component imports, config/env). Check living specs for contradictions with actual code (fix per Spec Correction Protocol).
 
-### 3. Draft the Design
+### 3. Clarify Before Drafting
+
+**Skip this step if clarification level is `none`.**
+
+Based on exploration findings and the proposal, identify questions about technical preferences, constraints, and patterns where the answer would materially improve the design. Apply the configured clarification level to decide what meets the bar.
+
+Examples: framework/library choices, database technology, auth approach, API style (REST vs GraphQL), deployment targets, performance constraints, patterns to follow or avoid.
+
+Present questions using the **AskUserQuestion tool** – batch related questions together (up to 4 per call). For each question:
+
+- Provide 2–4 concrete options with your recommended choice first
+- Include a short description explaining the trade-offs
+
+After answers come back, assess whether more questions are needed at the current level. Continue until you're confident the remaining ambiguity is below the configured bar, then proceed to drafting.
+
+### 4. Draft the Design
 
 Get the design template:
 
@@ -62,7 +92,7 @@ Draft the full design content containing:
 - **API Contracts** (endpoints, request/response shapes)
 - **Integration Plan** (how this wires into existing systems)
 
-### 4. Present the Draft to the User
+### 5. Present the Draft to the User
 
 **Print the full draft design as markdown in chat.** The user reviews it here — no need to open a file.
 
@@ -72,7 +102,7 @@ Options: "Write it", "Revise (I'll give feedback)"
 
 If the user wants revisions, incorporate feedback and present again. Repeat until approved.
 
-### 5. Write and Report
+### 6. Write and Report
 
 Once approved:
 
