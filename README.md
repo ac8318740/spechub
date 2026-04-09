@@ -10,7 +10,7 @@ Every rule exists because something went wrong without it. Built over months of 
 
 ## Workflow Tiers
 
-Four tiers, each including everything from the tiers below it. The orchestrator auto-selects the right tier based on complexity, or you can force one explicitly.
+Four tiers, each including everything from the tiers below it. The orchestrator auto-selects the right tier based on complexity.
 
 |                | PATCH | FEATURE | PROJECT | INITIATIVE |
 |----------------|-------|---------|---------|------------|
@@ -18,7 +18,6 @@ Four tiers, each including everything from the tiers below it. The orchestrator 
 | **Planning artifacts** | none | tasks.md | design.md, tasks.md | proposal.md, design.md, tasks.md |
 | **TDD pipeline** | ✗ | test → exec → check | test → exec → check → verify | test → exec → check → verify |
 | **Spec sync** | at commit | at commit | at commit | at archive + at commit |
-| **Invoke** | (auto) or `/patch` | `/feature` | `/project` | `/initiative` |
 | **Example** | fix typo, change color | add login button, new API endpoint | refactor auth to use JWT | build payments system from scratch |
 
 ## Features
@@ -53,16 +52,16 @@ This detects your project type, generates `spechub/project.yaml` with workflow s
 
 ## Skills
 
-### Tier Entry Points
+### Implementation
 
-| Command | Tier | Description |
-|---------|------|-------------|
-| `/patch` or simple request | PATCH | Just do it – spec sync at commit |
-| `/feature` | FEATURE | Tasks + TDD pipeline |
-| `/project` | PROJECT | Design + tasks + TDD |
-| `/initiative` | INITIATIVE | Full proposal → design → tasks → archive |
+| Skill | Description |
+|-------|-------------|
+| `/spechub:implement-quick` | Quick path for small, clear-scope changes – 3-explorer analysis then implement |
+| `/spechub:implement` | Execute tasks from an active change via the TDD pipeline |
 
-### Spec Workflow (Initiative Tier)
+For larger work, chain the planning skills below first, then run `/spechub:implement`.
+
+### Planning (Project and Initiative Tiers)
 
 | Skill | Description |
 |-------|-------------|
@@ -70,7 +69,6 @@ This detects your project type, generates `spechub/project.yaml` with workflow s
 | `/spechub:clarify` | Resolve ambiguities in the proposal |
 | `/spechub:design` | Generate implementation design |
 | `/spechub:tasks` | Generate dependency-ordered task list |
-| `/spechub:implement` | Execute tasks via TDD pipeline |
 | `/spechub:archive` | Archive change, update living specs |
 
 ### Operations
@@ -89,7 +87,6 @@ This detects your project type, generates `spechub/project.yaml` with workflow s
 | `/spechub:bootstrap` | Generate initial living specs from code |
 | `/spechub:verify` | Cross-artifact consistency analysis |
 | `/spechub:explore` | Thinking partner mode (read-only) |
-| `/spechub:implement-quick` | Quick implementation with deep analysis |
 | `/spechub:test-conventions` | Test placement rules and naming conventions |
 | `/spechub:code-review` | Linus Torvalds code philosophy for reviews |
 | `/spechub:playwright-helpers` | Scaffold Playwright test helper library |
@@ -113,7 +110,7 @@ This detects your project type, generates `spechub/project.yaml` with workflow s
 
 - **TDD is structural, not aspirational.** Test-writer can't see the implementation plan. Executor can't touch test files. Tests stay independent of the code they verify.
 - **Specs converge toward reality.** Every commit updates the living specs via spec sync. Agents fix inaccuracies on sight. Specs track what is implemented, never what's planned.
-- **Right-sized workflow.** A typo fix doesn't need a proposal. A new payment system does. The orchestrator picks the right tier, or you force one explicitly.
+- **Right-sized workflow.** A typo fix doesn't need a proposal. A new payment system does. The orchestrator picks the right tier automatically.
 - **Planning outweighs coding.** Three parallel explorers run before any code is written. Mock audits, mutation checks, regression suites, integration wiring.
 - **Strict defaults, easy to relax.** Use `/spechub:config` to adjust TDD strictness, orchestrator mode, or default tier.
 
