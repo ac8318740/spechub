@@ -32,8 +32,8 @@ The full pipeline always ends with the TDD pipeline (test-writer → task-execut
 
 ## Features
 
-- **Modular workflow tiers** – Right-sized process for every task, from patch to initiative
-- **Commit-time spec sync** – Living specs auto-update on every commit, regardless of tier
+- **Right-sized workflows** – Quick path for small changes, full pipeline for features and larger work
+- **Commit-time spec sync** – Living specs auto-update on every commit
 - **Four-phase TDD pipeline** – test-writer → task-executor → task-checker → frontend-verifier
 - **Orchestrator pattern** – Claude coordinates specialized agents rather than doing everything itself
 - **Quality gates** – Mock skepticism, test baseline enforcement, regression checking, TDD isolation audits
@@ -71,7 +71,7 @@ This detects your project type, generates `spechub/project.yaml` with workflow s
 
 For larger work, chain the planning skills below first, then run `/spechub:implement`.
 
-### Planning (Project and Initiative Tiers)
+### Planning
 
 | Skill | Description |
 |-------|-------------|
@@ -79,13 +79,13 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:clarify` | Resolve ambiguities in the proposal |
 | `/spechub:design` | Generate implementation design |
 | `/spechub:tasks` | Generate dependency-ordered task list |
-| `/spechub:archive` | Archive change, update living specs |
 
 ### Operations
 
 | Skill | Description |
 |-------|-------------|
 | `/spechub:commit` | Git commit with mandatory spec sync |
+| `/spechub:archive` | Archive completed change, update living specs |
 | `/spechub:config` | View/modify workflow settings |
 | `/spechub:sync` | Update specs from code changes |
 
@@ -97,6 +97,8 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:bootstrap` | Generate initial living specs from code |
 | `/spechub:verify` | Cross-artifact consistency analysis |
 | `/spechub:explore` | Thinking partner mode (read-only) |
+| `/spechub:quick-fix` | Structured bug fix workflow with root cause analysis |
+| `/spechub:pre-commit-review` | Deep quality review of all changes since last commit |
 | `/spechub:test-conventions` | Test placement rules and naming conventions |
 | `/spechub:code-review` | Linus Torvalds code philosophy for reviews |
 | `/spechub:playwright-helpers` | Scaffold Playwright test helper library |
@@ -120,7 +122,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 
 - **TDD is structural, not aspirational.** Test-writer can't see the implementation plan. Executor can't touch test files. Tests stay independent of the code they verify.
 - **Specs converge toward reality.** Every commit updates the living specs via spec sync. Agents fix inaccuracies on sight. Specs track what is implemented, never what's planned.
-- **Right-sized workflow.** A typo fix doesn't need a proposal. A new payment system does. The orchestrator picks the right tier automatically.
+- **Right-sized workflow.** A typo fix doesn't need a proposal. A new payment system does. The orchestrator picks the right path automatically.
 - **Planning outweighs coding.** Three parallel explorers run before any code is written. Mock audits, mutation checks, regression suites, integration wiring.
 - **Strict defaults, easy to relax.** Use `/spechub:config` to adjust TDD strictness, orchestrator mode, or default tier.
 
