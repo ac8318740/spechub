@@ -1,6 +1,6 @@
 # SpecHub
 
-A Claude Code plugin for spec-driven TDD development with modular workflow tiers.
+A Claude Code plugin for spec-driven TDD development.
 
 ## Overview
 
@@ -8,17 +8,27 @@ SpecHub provides right-sized workflows for any task – from a one-line fix to a
 
 Every rule exists because something went wrong without it. Built over months of actual product development with Claude Code.
 
-## Workflow Tiers
+## Workflows
 
-Four tiers, each including everything from the tiers below it. The orchestrator auto-selects the right tier based on complexity.
+Two paths. The orchestrator picks based on complexity, or you can steer it.
 
-|                | PATCH | FEATURE | PROJECT | INITIATIVE |
-|----------------|-------|---------|---------|------------|
-| **Summary** | Just do it | Tasks + TDD pipeline | Design + Tasks + TDD | Proposal + Design + Tasks + TDD + Archive |
-| **Planning artifacts** | none | tasks.md | design.md, tasks.md | proposal.md, design.md, tasks.md |
-| **TDD pipeline** | ✗ | test → exec → check | test → exec → check → verify | test → exec → check → verify |
-| **Spec sync** | at commit | at commit | at commit | at archive + at commit |
-| **Example** | fix typo, change color | add login button, new API endpoint | refactor auth to use JWT | build payments system from scratch |
+**Quick** – small, clear-scope changes (bug fixes, typos, config tweaks):
+
+```
+/spechub:implement-quick
+```
+
+**Full pipeline** – features, refactors, and larger work:
+
+```
+/spechub:propose → /spechub:design → /spechub:tasks → /spechub:implement → /spechub:archive
+```
+
+Two optional adjustments:
+- Add `/spechub:clarify` between propose and design when requirements are ambiguous
+- Skip `/spechub:design` for simple features – `/spechub:tasks` can run right after propose
+
+The full pipeline always ends with the TDD pipeline (test-writer → task-executor → task-checker) and `/spechub:archive` to update living specs. Frontend-verifier also runs when `frontend` is configured in `project.yaml`.
 
 ## Features
 
