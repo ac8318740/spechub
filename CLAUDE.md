@@ -271,12 +271,14 @@ The frontend-verifier agent:
 
 ### Browser Setup
 
-Use `/spechub:browser-helpers` to scaffold the browser verification infrastructure. This creates:
+Use `/spechub:init` or `/spechub:config check` to set up browser verification infrastructure. This creates:
 
 - **agent-browser.json** – CDP connection config in the project root
 - **VERIFICATION-KNOWLEDGE.md** – Evolving knowledge base of element patterns, gotchas, and proven verification sequences
 
-See the `browser-helpers` skill for the full setup guide and `agent-browser` command reference.
+The browser environment (remote, headless, or local) is stored in `frontend.browser.mode` in project.yaml.
+
+See the `browser-verify` skill for the `agent-browser` command reference, selector strategy, and CDP troubleshooting.
 
 ---
 

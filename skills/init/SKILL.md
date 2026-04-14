@@ -109,7 +109,32 @@ Write `agent-browser.json` in the project root:
 
 ### 5c. Create verification knowledge base
 
-Create `<helpers_dir>/VERIFICATION-KNOWLEDGE.md` with the empty template (see browser-helpers skill for the template).
+Create `<helpers_dir>/VERIFICATION-KNOWLEDGE.md`:
+
+```markdown
+# Verification Knowledge Base
+
+Evolving reference for browser-based verification. Updated by the frontend-verifier agent after each run.
+
+## URL Patterns
+
+<!-- Add URL patterns and routing rules here -->
+
+## Element Patterns
+
+<!-- Add stable element identifiers discovered during testing.
+     Prefer data-testid attributes – they survive refactors.
+     Record the accessible name/role from agent-browser snapshots. -->
+
+## Gotchas & Lessons Learned
+
+<!-- Add issues and workarounds discovered during testing -->
+
+## Proven Verification Sequences
+
+<!-- Add step sequences that work reliably.
+     Example: "To verify login: open /login, snapshot, fill @username, fill @password, click @submit, wait 2s, snapshot again, check for dashboard heading" -->
+```
 
 ### 5d. Browser environment setup
 

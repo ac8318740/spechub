@@ -1,13 +1,15 @@
 ---
-name: browser-helpers
-description: Set up browser verification infrastructure for a project. Ensures agent-browser CLI is available, configures CDP connection, scaffolds verification knowledge base. Invoke when setting up frontend verification or when a project needs browser testing for the first time.
+name: browser-verify
+description: How to interact with a browser for frontend verification using agent-browser CLI and CDP. ALWAYS use when UI or frontend files are modified and workflow.frontend_verification is true in spechub/project.yaml. Also use before running agent-browser commands, when element refs go stale, when CDP connection fails, or when verifying UI behavior. Covers all commands (snapshot, screenshot, click, fill, type), element ref strategy, DOM staleness rules, selector priority, and remote/headless/local environment troubleshooting.
 ---
 
 # Browser Helpers
 
 ## Purpose
 
-Set up and maintain browser verification infrastructure using `agent-browser` CLI and Chrome DevTools Protocol (CDP). A simpler, environment-agnostic approach – no test framework library to maintain.
+Operational reference for browser-based verification using `agent-browser` CLI and Chrome DevTools Protocol (CDP). Covers commands, selector strategy, environment setup, and troubleshooting.
+
+For initial setup (installing agent-browser, creating config files, scaffolding knowledge base), use `/spechub:init` or `/spechub:config check`.
 
 ## Project Configuration
 
@@ -18,89 +20,6 @@ Read `spechub/project.yaml` for:
 - `frontend.helpers_dir` – path to verification knowledge (default: `<frontend.directory>/tests/helpers/`)
 - `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
 - `frontend.browser.cdp_port` – CDP port (default: 9555)
-
-## What Gets Scaffolded
-
-The helper infrastructure is minimal – no JavaScript library to maintain:
-
-```
-<helpers_dir>/
-└── VERIFICATION-KNOWLEDGE.md  # Evolving knowledge base (gotchas, patterns, selectors)
-
-<project-root>/
-└── agent-browser.json          # CDP connection config
-```
-
-That's it. The `agent-browser` CLI handles browser interaction directly. No facade modules, no TypeScript helpers, no assertion libraries.
-
-## Setup
-
-### 1. Check agent-browser is installed
-
-```bash
-which agent-browser
-```
-
-If not found:
-
-```bash
-npm install -g agent-browser
-```
-
-### 2. Create project config
-
-Create `agent-browser.json` in the project root:
-
-```json
-{
-  "cdp": "9555"
-}
-```
-
-This tells agent-browser which CDP port to connect to. With this file in place, you don't need `--cdp 9555` on every command.
-
-### 3. Verify browser connectivity
-
-```bash
-curl -s --max-time 3 http://localhost:9555/json/version
-```
-
-Three possible states:
-
-| Result | Meaning | Action |
-|--------|---------|--------|
-| JSON response | Remote browser connected (SSH tunnel) | Ready – using user's real browser |
-| Connection refused | No browser available | Launch headless Chromium locally |
-| Timeout | Tunnel exists but Chrome not running | Ask user to launch Chrome on their machine |
-
-### 4. Create verification knowledge base
-
-Create `<helpers_dir>/VERIFICATION-KNOWLEDGE.md`:
-
-```markdown
-# Verification Knowledge Base
-
-Evolving reference for browser-based verification. Updated by the frontend-verifier agent after each run.
-
-## URL Patterns
-
-<!-- Add URL patterns and routing rules here -->
-
-## Element Patterns
-
-<!-- Add stable element identifiers discovered during testing.
-     Prefer data-testid attributes – they survive refactors.
-     Record the accessible name/role from agent-browser snapshots. -->
-
-## Gotchas & Lessons Learned
-
-<!-- Add issues and workarounds discovered during testing -->
-
-## Proven Verification Sequences
-
-<!-- Add step sequences that work reliably.
-     Example: "To verify login: open /login, snapshot, fill @username, fill @password, click @submit, wait 2s, snapshot again, check for dashboard heading" -->
-```
 
 ## Browser Environments
 
@@ -219,7 +138,8 @@ The snapshot gives you accessible names and roles automatically. Use these to fi
 
 ## Integration Points
 
-- **frontend-verifier agent** uses agent-browser directly for Phase 4 verification
+- **frontend-verifier agent** uses agent-browser for Phase 4 verification – this skill is its reference
 - **task-checker agent** delegates to frontend-verifier when frontend files changed
-- **/spechub:init** scaffolds agent-browser.json and knowledge base when frontend is configured
+- **/spechub:init** handles initial setup (install, config, knowledge base scaffolding)
+- **/spechub:config check** audits browser infrastructure and walks through fixes
 - **/spechub:quick-fix** uses agent-browser for visual verification of bug fixes

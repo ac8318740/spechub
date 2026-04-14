@@ -101,7 +101,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:pre-commit-review` | Deep quality review of all changes since last commit |
 | `/spechub:test-conventions` | Test placement rules and naming conventions |
 | `/spechub:code-review` | Linus Torvalds code philosophy for reviews |
-| `/spechub:browser-helpers` | Set up browser verification infrastructure (agent-browser + CDP) |
+| `/spechub:browser-verify` | agent-browser command reference, CDP troubleshooting, and selector strategy |
 
 ## Agents
 
