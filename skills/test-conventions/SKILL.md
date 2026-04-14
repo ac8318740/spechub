@@ -34,14 +34,14 @@ Colocated with source. Example: `src/hooks/useAuth.ts` → `src/hooks/__tests__/
 - Components: `.test.tsx`, pure functions: `.test.ts`
 - Run with `frontend.commands.test` from project.yaml
 
-## Layer 3: E2E Tests (Playwright)
+## Layer 3: E2E Tests (Browser)
 
 One file per feature or user flow. Example: `tests/login-flow.spec.ts`.
 
 - Auth setup: save auth state to a storage file, reuse across tests
 - Credentials: use environment variables (gitignored `.env.test`)
 - Agent/async tests: use generous timeouts, take screenshots at key steps
-- Run with `npx playwright test --project=chromium`
+- Run with `agent-browser` CLI or the project's configured E2E test command
 
 ## Naming Conventions
 
@@ -50,10 +50,10 @@ One file per feature or user flow. Example: `tests/login-flow.spec.ts`.
 | Python test file | `test_<module>.py` | `test_sessions.py` |
 | Python test function | `test_<behavior>` | `test_expired_token_returns_401` |
 | JS/TS test file | `<Name>.test.ts(x)` | `useAuth.test.ts` |
-| Playwright spec | `<feature>.spec.ts` | `login-flow.spec.ts` |
+| E2E spec | `<feature>.spec.ts` | `login-flow.spec.ts` |
 
 ## Gitignored Artifacts (never commit)
 
-- Playwright state directories, test results, reports
+- Browser test artifacts, test results, reports
 - Coverage output
 - Test environment files (`.env.test`)

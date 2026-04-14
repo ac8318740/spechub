@@ -37,7 +37,7 @@ The full pipeline always ends with the TDD pipeline (test-writer → task-execut
 - **Four-phase TDD pipeline** – test-writer → task-executor → task-checker → frontend-verifier
 - **Orchestrator pattern** – Claude coordinates specialized agents rather than doing everything itself
 - **Quality gates** – Mock skepticism, test baseline enforcement, regression checking, TDD isolation audits
-- **Frontend visual verification** – Playwright-based UI verification when a frontend is present
+- **Frontend visual verification** – Browser-based UI verification via agent-browser CLI
 - **Project configuration** – Per-project workflow settings via `spechub/project.yaml`
 
 ## Prerequisites
@@ -101,7 +101,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:pre-commit-review` | Deep quality review of all changes since last commit |
 | `/spechub:test-conventions` | Test placement rules and naming conventions |
 | `/spechub:code-review` | Linus Torvalds code philosophy for reviews |
-| `/spechub:playwright-helpers` | Scaffold Playwright test helper library |
+| `/spechub:browser-helpers` | Set up browser verification infrastructure (agent-browser + CDP) |
 
 ## Agents
 
@@ -110,7 +110,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `test-writer` | TDD Phase 1 – writes failing tests from requirements only |
 | `task-executor` | TDD Phase 2 – makes tests pass, cannot modify tests |
 | `task-checker` | TDD Phase 3 – verifies everything (mock audit, regression, TDD isolation) |
-| `frontend-verifier` | TDD Phase 4 – real browser verification with Playwright (when frontend configured) |
+| `frontend-verifier` | TDD Phase 4 – real browser verification via agent-browser CLI (when frontend configured) |
 
 ## Language Profiles
 

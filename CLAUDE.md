@@ -74,7 +74,7 @@ No TDD pipeline. No planning artifacts. Implement directly.
 
 **Automatic (default)**: When `workflow.auto_select` is `true`, select the path based on request complexity. Tell the user which path you picked and why.
 
-**Project minimum**: `workflow.default_tier` sets the floor. If set to `feature` or above, all requests use the full pipeline regardless of complexity.
+**Manual override**: When `workflow.auto_select` is `false`, all requests use the full pipeline regardless of complexity.
 
 **Quick path criteria**: Bug fixes, typos, config tweaks, small isolated changes with clear and unambiguous scope.
 
@@ -122,8 +122,8 @@ DELEGATE to task-checker subagent
 
 ```
 DELEGATE to frontend-verifier subagent
-|- Launches real browser via Playwright CLI
-|- Generates targeted test script using the project's helper library
+|- Connects to browser via CDP (remote tunnel or local headless Chromium)
+|- Uses agent-browser CLI to navigate, snapshot, and interact
 |- Takes before/after screenshots as evidence
 |- Reviews screenshots and reports PASS/FAIL
 '- Updates verification knowledge base with new patterns
@@ -263,21 +263,20 @@ The frontend-verifier agent:
 1. Reads the project's verification knowledge base (`<helpers_dir>/VERIFICATION-KNOWLEDGE.md`)
 2. Checks what frontend files changed
 3. Starts the dev server if it's not running
-4. Generates a targeted Playwright script using the project's helper library
-5. Executes the script in a real browser
+4. Connects to a browser via CDP (remote tunnel or local headless Chromium)
+5. Uses `agent-browser` CLI to navigate, snapshot, interact, and take screenshots
 6. Reviews before/after screenshots
 7. Reports PASS or FAIL with evidence
 8. Updates the knowledge base with new patterns
 
-### Helper Library
+### Browser Setup
 
-Each project with frontend verification has a modular helper library at `<frontend.helpers_dir>`. Use `/spechub:playwright-helpers` to scaffold or extend it. The library provides:
+Use `/spechub:browser-helpers` to scaffold the browser verification infrastructure. This creates:
 
-- **verify-helpers.js** – Plain JS facade for generated verification scripts
-- **TypeScript helpers** – Domain-specific modules (navigation, components, assertions, screenshots)
-- **VERIFICATION-KNOWLEDGE.md** – Evolving knowledge base of selectors, gotchas, and proven patterns
+- **agent-browser.json** – CDP connection config in the project root
+- **VERIFICATION-KNOWLEDGE.md** – Evolving knowledge base of element patterns, gotchas, and proven verification sequences
 
-See the `playwright-helpers` skill for the full structure and scaffolding guide.
+See the `browser-helpers` skill for the full setup guide and `agent-browser` command reference.
 
 ---
 

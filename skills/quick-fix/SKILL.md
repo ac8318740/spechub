@@ -101,7 +101,7 @@ Run build verification using commands from `spechub/project.yaml`:
 
 **STOP — if frontend files were modified, you MUST visually verify before proceeding to Step 7.**
 
-If the project has a frontend verification agent or Playwright helpers configured, use them. Otherwise, take a browser screenshot and think through:
+If the project has a frontend verification agent or browser verification configured, use them. Otherwise, take a browser screenshot and think through:
 
 1. **Expected vs actual** — What should the change look like? Does the screenshot match?
 2. **Gaps** — Is anything missing, wrong, or showing the wrong data/labels/formatting?

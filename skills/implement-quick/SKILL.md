@@ -128,7 +128,7 @@ Run the full build verification suite from project.yaml. ALL must pass.
 If any frontend files changed:
 
 1. Check dev server using `frontend.dev_server_check`
-2. Running -> Playwright MCP: navigate, snapshot, verify rendering
+2. Running -> agent-browser: navigate, snapshot, verify rendering
 3. Not running -> report LOW CONFIDENCE
 
 ### 10. Completion
