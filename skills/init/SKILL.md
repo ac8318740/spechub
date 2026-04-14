@@ -111,16 +111,66 @@ Write `agent-browser.json` in the project root:
 
 Create `<helpers_dir>/VERIFICATION-KNOWLEDGE.md` with the empty template (see browser-helpers skill for the template).
 
-### 5d. Check browser connectivity
+### 5d. Browser environment setup
+
+Ask the user which browser environment they'll use via AskUserQuestion:
+
+```json
+{
+  "question": "How will you connect a browser for frontend verification?",
+  "options": [
+    {"label": "Remote browser (SSH tunnel)", "description": "Best experience – connect to Chrome on your desktop/laptop via SSH tunnel. Choose this if you develop on a remote VM."},
+    {"label": "Headless (automatic)", "description": "The frontend-verifier launches headless Chromium when needed. No setup required. Choose this for CI or if you don't need to see the browser."},
+    {"label": "Local with display", "description": "Launch a visible browser on this machine. Choose this for desktop Linux, macOS, or WSL with display access."},
+    {"label": "Skip for now", "description": "I'll set this up later via /spechub:config set frontend.browser.mode"}
+  ]
+}
+```
+
+Store the choice in `project.yaml` under `frontend.browser.mode` (`remote`, `headless`, or `local`).
+
+**If "Remote browser" selected**, walk through setup:
+
+```
+To connect your browser via SSH tunnel:
+
+1. On the machine with the browser, launch Chrome with remote debugging:
+
+   chrome --remote-debugging-port=9555 --user-data-dir=/tmp/chrome-debug --remote-allow-origins=*
+
+   On Windows:
+   "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9555 --user-data-dir="%TEMP%\chrome-debug" --remote-allow-origins=*
+
+2. Start an SSH reverse tunnel from the browser machine to this dev machine:
+
+   ssh -N -R 9555:127.0.0.1:9555 <user>@<dev-machine-ip>
+
+3. Verify from this machine:
+
+   curl -s http://localhost:9555/json/version
+```
+
+Show these gotchas after the steps:
+
+- `--remote-allow-origins=*` is required – without it, Chrome rejects tunnelled CDP connections
+- The tunnel must use `127.0.0.1`, not `localhost` – Chrome binds to IPv4 only, and some systems resolve `localhost` to IPv6
+- VS Code/Cursor may auto-forward port 9555 and interfere – check the IDE's forwarded ports panel and remove it if so
+- If Chrome was closed but background processes remain, the port won't bind – kill all Chrome processes first
+
+Then verify connectivity:
 
 ```bash
 curl -s --max-time 3 http://localhost:9555/json/version
 ```
 
-Report the result but don't block on it – the browser doesn't need to be connected during init. Just tell the user:
-
 - **JSON response**: "Browser connected – you're ready for frontend verification."
-- **Connection refused**: "No browser detected. The frontend-verifier will launch headless Chromium automatically when needed. For a better experience with your real browser, see `/spechub:config check` for setup instructions."
+- **Connection refused**: "No browser detected yet. That's fine – connect when you're ready to verify. Run `/spechub:config check` to test connectivity later."
+
+**If "Headless" selected**: No setup needed. Tell the user: "The frontend-verifier will launch headless Chromium automatically when needed."
+
+**If "Local with display" selected**: Check for a Chromium binary and note that the frontend-verifier will launch it when needed.
+
+**If "Skip"**: Leave `frontend.browser` unset. Tell the user to run `/spechub:config set frontend.browser.mode <mode>` later.
 
 ## Step 6: Report
 
@@ -182,4 +232,7 @@ frontend:
     test: "npm test"
     dev: "npm run dev"
   framework: "react"
+  browser:
+    mode: "headless"           # remote | headless | local
+    cdp_port: 9555
 ```

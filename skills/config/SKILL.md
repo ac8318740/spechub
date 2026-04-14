@@ -39,7 +39,8 @@ Frontend:
   Dev server:    http://localhost:3000
   Framework:     react
   Verification:  enabled
-  Browser:       agent-browser installed, CDP on 9555
+  Browser:       remote (SSH tunnel) | headless (auto) | local (display) | not configured
+  CDP port:      9555
 
 Full config: spechub/project.yaml
 ```
@@ -108,22 +109,37 @@ Report status and offer guidance:
 }
 ```
 
-If "Remote browser" selected, show the setup instructions from the browser-debug reference:
+If "Remote browser" selected, set `frontend.browser.mode: remote` in project.yaml and walk through setup:
 
 ```
 To connect your browser via SSH tunnel:
 
-1. On your local machine, launch Chrome with:
-   chrome --remote-debugging-port=9555 --user-data-dir=<path> --remote-allow-origins=*
+1. On the machine with the browser, launch Chrome with remote debugging:
 
-2. Start an SSH reverse tunnel:
-   ssh -N -R 9555:127.0.0.1:9555 <user>@<vm-ip>
+   chrome --remote-debugging-port=9555 --user-data-dir=/tmp/chrome-debug --remote-allow-origins=*
 
-3. Verify from this VM:
+   On Windows:
+   "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9555 --user-data-dir="%TEMP%\chrome-debug" --remote-allow-origins=*
+
+2. Start an SSH reverse tunnel from the browser machine to this dev machine:
+
+   ssh -N -R 9555:127.0.0.1:9555 <user>@<dev-machine-ip>
+
+3. Verify from this machine:
+
    curl -s http://localhost:9555/json/version
-
-For a one-click setup on Windows, see the browser-debug skill.
 ```
+
+**Common gotchas** (show these after the setup steps):
+
+- `--remote-allow-origins=*` is required – without it, Chrome rejects tunnelled CDP connections
+- The tunnel must use `127.0.0.1`, not `localhost` – Chrome binds to IPv4 only, and some systems resolve `localhost` to IPv6
+- VS Code/Cursor may auto-forward port 9555 and interfere – check the IDE's forwarded ports panel and remove it if so
+- If Chrome was closed but background processes remain, the port won't bind – kill all Chrome processes first
+
+If "Headless" selected, set `frontend.browser.mode: headless` in project.yaml. No further setup needed – the frontend-verifier launches Chromium automatically.
+
+If "Skip for now" selected, leave `frontend.browser.mode` unset.
 
 #### 5. Verification knowledge base (if frontend configured)
 
@@ -151,7 +167,7 @@ If none found: "No Chromium/Chrome binary found. The frontend-verifier needs one
 ✓ project.yaml exists
 ✓ agent-browser installed
 ✓ agent-browser.json configured
-✓ Browser: connected (remote) | available (headless) | not configured
+✓ Browser: connected (remote) | available (headless) | available (local) | not configured
 ✓ Verification knowledge base exists
 ✓ Chromium binary available
 
@@ -172,6 +188,8 @@ Modify a setting. Supported keys:
 | `workflow.clarification.propose` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for proposals |
 | `workflow.clarification.design` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for designs |
 | `workflow.clarification.tasks` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for tasks |
+| `frontend.browser.mode` | `remote`, `headless`, `local` | Browser environment for verification |
+| `frontend.browser.cdp_port` | number | CDP port (default: 9555) |
 
 Examples:
 - `/spechub:config set workflow.auto_select false`
@@ -220,5 +238,6 @@ After any modification:
 
 - Boolean values accept: `true`/`false`, `on`/`off`, `yes`/`no` (normalize to `true`/`false`)
 - Clarification levels must be one of: `none`, `critical`, `thorough`, `exhaustive`
+- Browser mode must be one of: `remote`, `headless`, `local`
 - If `workflow` section doesn't exist in project.yaml, create it with defaults before applying changes
 - Never modify non-workflow sections of project.yaml (use init for that)

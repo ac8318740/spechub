@@ -16,6 +16,8 @@ Read `spechub/project.yaml` for:
 - `frontend.directory` – frontend source directory
 - `frontend.dev_server_url` – dev server URL
 - `frontend.helpers_dir` – path to verification knowledge (default: `<frontend.directory>/tests/helpers/`)
+- `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
+- `frontend.browser.cdp_port` – CDP port (default: 9555)
 
 ## What Gets Scaffolded
 
@@ -106,9 +108,47 @@ agent-browser works the same way regardless of where the browser lives. The only
 
 ### Remote browser (SSH tunnel)
 
-Best experience – you interact with the user's real browser on their machine.
+Best experience – you interact with the user's real browser on their machine. Set `frontend.browser.mode: remote` in project.yaml.
 
-**Setup**: The user launches Chrome with `--remote-debugging-port=9555` and runs an SSH reverse tunnel. See the browser-debug skill for full setup instructions.
+#### Setup
+
+1. **On the machine with the browser** (e.g., Windows, macOS desktop), launch Chrome with remote debugging:
+
+   ```bash
+   chrome --remote-debugging-port=9555 --user-data-dir=/tmp/chrome-debug --remote-allow-origins=*
+   ```
+
+   On Windows, use the full path or a shortcut:
+   ```
+   "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9555 --user-data-dir="%TEMP%\chrome-debug" --remote-allow-origins=*
+   ```
+
+2. **Start an SSH reverse tunnel** from the browser machine to the dev machine:
+
+   ```bash
+   ssh -N -R 9555:127.0.0.1:9555 <user>@<dev-machine-ip>
+   ```
+
+3. **Verify** from the dev machine:
+
+   ```bash
+   curl -s http://localhost:9555/json/version
+   ```
+
+#### Common gotchas
+
+**`--remote-allow-origins=*` is required.** Without it, Chrome rejects CDP connections from tunnelled clients. This flag is safe – it only affects the debug protocol, not web content.
+
+**Chrome binds to `127.0.0.1`, not `localhost`.** The SSH tunnel must target `127.0.0.1:9555` on both sides. Some systems resolve `localhost` to `::1` (IPv6), which won't match Chrome's binding. The tunnel command above uses the correct address.
+
+**IDE port-forwarding can steal the port.** VS Code and Cursor auto-detect listening ports and forward them. If the tunnel connects but `curl` gets no response, check your IDE's forwarded ports panel – if it grabbed port 9555, remove the forwarding. The SSH tunnel handles the connection; IDE forwarding interferes with it.
+
+**Chrome background processes block the port.** If Chrome was closed but background processes remain, `--remote-debugging-port` silently fails to bind. Fix:
+
+- Windows: Task Manager → End all Chrome processes, or `taskkill /F /IM chrome.exe`
+- Linux/macOS: `pkill -f chrome` or `lsof -ti:9555 | xargs kill`
+
+Then relaunch Chrome with the debug flags.
 
 **Detection**: `curl localhost:9555/json/version` returns JSON.
 

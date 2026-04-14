@@ -22,6 +22,8 @@ Read `spechub/project.yaml` for frontend settings:
 - `frontend.dev_server_check` – command to check if server is running
 - `frontend.helpers_dir` – path to verification knowledge (default: `<frontend.directory>/tests/helpers/`)
 - `frontend.commands.dev` – command to start the dev server
+- `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
+- `frontend.browser.cdp_port` – CDP port (default: 9555)
 
 If `frontend` is not configured, report SKIP and exit.
 
@@ -76,30 +78,64 @@ exit 1
 
 ## Step 3: Ensure Browser Connection
 
-Check if a browser is reachable via CDP:
+Read `frontend.browser.mode` from project.yaml to determine the connection strategy. Use `frontend.browser.cdp_port` (default: 9555) for the CDP port.
+
+First, check if a browser is already reachable:
 
 ```bash
-curl -s --max-time 3 http://localhost:9555/json/version
+curl -s --max-time 3 http://localhost:<cdp_port>/json/version
 ```
 
 **If connected** (JSON response): A browser is available. Proceed to Step 4.
 
-**If connection refused or timeout**: No browser available. Launch headless Chromium on this machine:
+**If connection refused or timeout**, act based on the configured mode:
+
+### Mode: `remote`
+
+The user has a browser on another machine connected via SSH tunnel. Do NOT launch headless Chromium – that would mask the tunnel problem.
+
+Report FAIL with targeted troubleshooting:
+
+```
+No remote browser detected on CDP port <cdp_port>. Check:
+
+1. Is Chrome running with --remote-debugging-port=<cdp_port> --remote-allow-origins=* on the remote machine?
+2. Is the SSH reverse tunnel active? (ssh -N -R <cdp_port>:127.0.0.1:<cdp_port> <user>@<this-machine>)
+3. Is your IDE (VS Code/Cursor) auto-forwarding port <cdp_port>? Check forwarded ports and remove it if so.
+4. Are leftover Chrome processes blocking the port? Kill them and relaunch.
+```
+
+### Mode: `headless` (or unset)
+
+Launch headless Chromium locally:
 
 ```bash
-chromium --headless --no-sandbox --remote-debugging-port=9555 --disable-gpu --user-data-dir=/tmp/chromium-verify &
+chromium --headless --no-sandbox --remote-debugging-port=<cdp_port> --disable-gpu --user-data-dir=/tmp/chromium-verify &
 CHROME_PID=$!
 echo "Launched headless Chromium (PID: $CHROME_PID)"
 sleep 2
-# Verify it started
-curl -s --max-time 3 http://localhost:9555/json/version
+curl -s --max-time 3 http://localhost:<cdp_port>/json/version
 ```
 
 If `chromium` is not found, try `chromium-browser`, `google-chrome`, or `google-chrome-stable`. If none are available, report FAIL with instructions to install Chromium.
 
-Track whether you launched the browser so you can clean it up in Step 8.
+### Mode: `local`
 
-**Note**: If the user has a remote browser connected via SSH tunnel (e.g., Windows Chrome), that takes priority – you'll connect to their real browser and see exactly what they see.
+Launch Chromium with a visible window:
+
+```bash
+chromium --no-sandbox --remote-debugging-port=<cdp_port> --user-data-dir=/tmp/chromium-verify &
+CHROME_PID=$!
+echo "Launched Chromium (PID: $CHROME_PID)"
+sleep 2
+curl -s --max-time 3 http://localhost:<cdp_port>/json/version
+```
+
+Same binary fallback as headless mode. Omit `--headless` so the user can see the browser.
+
+---
+
+Track whether you launched the browser so you can clean it up in Step 8.
 
 ## Step 4: Verify with agent-browser
 
