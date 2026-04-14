@@ -45,6 +45,46 @@ Frontend:
 Full config: spechub/project.yaml
 ```
 
+#### Prompt for incomplete config
+
+After displaying the config, scan for missing or incomplete settings. If any gaps are found, use AskUserQuestion to offer to fix them. Collect all gaps into a single prompt.
+
+**Gaps to detect** (check in order, skip items that don't apply):
+
+1. **frontend configured but `workflow.frontend_verification` is not `true`** – verification is available but not enabled
+2. **frontend configured but `frontend.browser.mode` is not set** – browser environment unknown
+3. **frontend configured but `frontend.browser.cdp_port` is not set** – using default 9555 but not explicit
+4. **`agent-browser.json` missing** (if frontend configured) – `cat agent-browser.json`
+5. **agent-browser CLI not installed** (if frontend configured) – `which agent-browser`
+6. **No `frontend.helpers_dir`** (if frontend configured) – verification knowledge base location not set
+
+If gaps are found, show a single AskUserQuestion:
+
+```json
+{
+  "question": "Some config is incomplete. Want to set these up now?",
+  "multiSelect": true,
+  "options": [
+    {"label": "Enable frontend verification", "description": "Set workflow.frontend_verification to true"},
+    {"label": "Set browser mode", "description": "Choose remote (SSH tunnel), headless (auto), or local (display)"},
+    {"label": "Set CDP port", "description": "Confirm or change the CDP port (default: 9555)"},
+    {"label": "Create agent-browser.json", "description": "CDP config file for agent-browser CLI"},
+    {"label": "Install agent-browser", "description": "npm install -g agent-browser"},
+    {"label": "Skip", "description": "Leave config as-is"}
+  ]
+}
+```
+
+Only include options for the gaps that actually exist. If no gaps, don't prompt – just show the config.
+
+For each selected item, apply the fix:
+
+- **Enable frontend verification**: set `workflow.frontend_verification: true` in project.yaml
+- **Set browser mode**: ask a follow-up AskUserQuestion with remote/headless/local options (same as the `check` command's browser connectivity section). Store in project.yaml and walk through setup if remote is chosen.
+- **Set CDP port**: ask for the port number, default 9555. Store in project.yaml and update `agent-browser.json` if it exists.
+- **Create agent-browser.json**: write `{"cdp": "<cdp_port>"}` to project root
+- **Install agent-browser**: run `npm install -g agent-browser`
+
 ### `check`
 
 Audit the project for missing infrastructure and offer to fix each issue. Run these checks in order:
@@ -222,7 +262,7 @@ Read `spechub/project.yaml`. If it doesn't exist, tell the user to run `/spechub
 
 ### 2. Execute Command
 
-- **show**: Display formatted config summary
+- **show**: Display formatted config summary, then prompt to fix any gaps
 - **check**: Run health checks, offer fixes interactively
 - **set**: Parse the key path, validate the value, update the YAML, write it back
 - **reset**: Replace the `workflow` section with defaults, preserve all other sections
@@ -240,4 +280,4 @@ After any modification:
 - Clarification levels must be one of: `none`, `critical`, `thorough`, `exhaustive`
 - Browser mode must be one of: `remote`, `headless`, `local`
 - If `workflow` section doesn't exist in project.yaml, create it with defaults before applying changes
-- Never modify non-workflow sections of project.yaml (use init for that)
+- The `set` command only modifies workflow and frontend.browser sections. For other sections, use init
