@@ -154,7 +154,21 @@ Ask the user which browser environment they'll use via AskUserQuestion:
 
 Store the choice in `project.yaml` under `frontend.browser.mode` (`remote`, `headless`, or `local`).
 
-**If "Remote browser" selected**, walk through setup:
+**If "Remote browser" selected**, ask about fallback behavior:
+
+```json
+{
+  "question": "When the remote browser isn't connected, what should the frontend-verifier do?",
+  "options": [
+    {"label": "Fall back to headless", "description": "Launch headless Chromium automatically. Verification still runs, just without your real browser."},
+    {"label": "Fail", "description": "Report FAIL so you know the tunnel is down. Choose this if headless results aren't useful for your app."}
+  ]
+}
+```
+
+If "Fall back to headless", set `frontend.browser.fallback: headless`. If "Fail", set `frontend.browser.fallback: none`.
+
+Then walk through remote setup:
 
 ```
 To connect your browser via SSH tunnel:
@@ -259,5 +273,6 @@ frontend:
   framework: "react"
   browser:
     mode: "headless"           # remote | headless | local
+    fallback: "headless"       # fallback when primary mode unavailable (e.g., remote tunnel is down)
     cdp_port: 9555
 ```

@@ -23,6 +23,7 @@ Read `spechub/project.yaml` for frontend settings:
 - `frontend.helpers_dir` – path to verification knowledge (default: `<frontend.directory>/tests/helpers/`)
 - `frontend.commands.dev` – command to start the dev server
 - `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
+- `frontend.browser.fallback` – what to do when primary mode unavailable: `headless` or `none`
 - `frontend.browser.cdp_port` – CDP port (default: 9555)
 
 If `frontend` is not configured, report SKIP and exit.
@@ -92,18 +93,24 @@ curl -s --max-time 3 http://localhost:<cdp_port>/json/version
 
 ### Mode: `remote`
 
-The user has a browser on another machine connected via SSH tunnel. Do NOT launch headless Chromium – that would mask the tunnel problem.
+The user has a browser on another machine connected via SSH tunnel.
 
-Report FAIL with targeted troubleshooting:
+Check `frontend.browser.fallback`:
+
+**If fallback is `headless`** (or unset): Log a warning that the remote browser is unavailable, then launch headless Chromium as if mode were `headless`. Verification still runs – just without the user's real browser.
 
 ```
-No remote browser detected on CDP port <cdp_port>. Check:
-
+Remote browser not detected on CDP port <cdp_port>. Falling back to headless Chromium.
+Troubleshooting (for next time):
 1. Is Chrome running with --remote-debugging-port=<cdp_port> --remote-allow-origins=* on the remote machine?
 2. Is the SSH reverse tunnel active? (ssh -N -R <cdp_port>:127.0.0.1:<cdp_port> <user>@<this-machine>)
 3. Is your IDE (VS Code/Cursor) auto-forwarding port <cdp_port>? Check forwarded ports and remove it if so.
 4. Are leftover Chrome processes blocking the port? Kill them and relaunch.
 ```
+
+Then launch headless Chromium (same as the headless mode section below).
+
+**If fallback is `none`**: Report FAIL with the same troubleshooting steps above. Do not launch headless.
 
 ### Mode: `headless` (or unset)
 

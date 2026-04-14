@@ -19,6 +19,7 @@ Read `spechub/project.yaml` for:
 - `frontend.dev_server_url` – dev server URL
 - `frontend.helpers_dir` – path to verification knowledge (default: `<frontend.directory>/tests/helpers/`)
 - `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
+- `frontend.browser.fallback` – what to do when primary mode unavailable: `headless` (launch Chromium) or `none` (fail)
 - `frontend.browser.cdp_port` – CDP port (default: 9555)
 
 ## Browser Environments
@@ -28,6 +29,8 @@ agent-browser works the same way regardless of where the browser lives. The only
 ### Remote browser (SSH tunnel)
 
 Best experience – you interact with the user's real browser on their machine. Set `frontend.browser.mode: remote` in project.yaml.
+
+If the tunnel is down, the frontend-verifier checks `frontend.browser.fallback`. With `fallback: headless` (recommended), it launches headless Chromium so verification still runs. With `fallback: none`, it fails and reports troubleshooting steps.
 
 #### Setup
 

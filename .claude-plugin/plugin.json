@@ -1,7 +1,7 @@
 {
   "name": "spechub",
   "description": "Spec-driven TDD workflow with modular tiers, commit-time spec sync, strict orchestrator pattern, and four-phase implementation pipeline (test-writer, task-executor, task-checker, frontend-verifier).",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "author": {
     "name": "ac8318740"
   },

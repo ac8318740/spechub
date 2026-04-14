@@ -80,7 +80,7 @@ Only include options for the gaps that actually exist. If no gaps, don't prompt 
 For each selected item, apply the fix:
 
 - **Enable frontend verification**: set `workflow.frontend_verification: true` in project.yaml
-- **Set browser mode**: ask a follow-up AskUserQuestion with remote/headless/local options (same as the `check` command's browser connectivity section). Store in project.yaml and walk through setup if remote is chosen.
+- **Set browser mode**: ask a follow-up AskUserQuestion with remote/headless/local options (same as the `check` command's browser connectivity section). Store in project.yaml and walk through setup if remote is chosen. If remote, also ask about fallback behavior (headless or none).
 - **Set CDP port**: ask for the port number, default 9555. Store in project.yaml and update `agent-browser.json` if it exists.
 - **Create agent-browser.json**: write `{"cdp": "<cdp_port>"}` to project root
 - **Install agent-browser**: run `npm install -g agent-browser`
@@ -229,6 +229,7 @@ Modify a setting. Supported keys:
 | `workflow.clarification.design` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for designs |
 | `workflow.clarification.tasks` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for tasks |
 | `frontend.browser.mode` | `remote`, `headless`, `local` | Browser environment for verification |
+| `frontend.browser.fallback` | `headless`, `none` | What to do when primary mode unavailable |
 | `frontend.browser.cdp_port` | number | CDP port (default: 9555) |
 
 Examples:
@@ -279,5 +280,6 @@ After any modification:
 - Boolean values accept: `true`/`false`, `on`/`off`, `yes`/`no` (normalize to `true`/`false`)
 - Clarification levels must be one of: `none`, `critical`, `thorough`, `exhaustive`
 - Browser mode must be one of: `remote`, `headless`, `local`
+- Browser fallback must be one of: `headless`, `none`
 - If `workflow` section doesn't exist in project.yaml, create it with defaults before applying changes
 - The `set` command only modifies workflow and frontend.browser sections. For other sections, use init
