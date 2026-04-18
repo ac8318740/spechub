@@ -24,7 +24,7 @@ Read `spechub/project.yaml` for frontend settings:
 - `frontend.commands.dev` – command to start the dev server
 - `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
 - `frontend.browser.fallback` – what to do when primary mode unavailable: `headless` or `none`
-- `frontend.browser.cdp_port` – CDP port (default: 9555)
+- `frontend.browser.cdp_port` – CDP port. Default `19988` for `mode: remote` (Playwriter bridge), `9555` for `headless`/`local`.
 
 If `frontend` is not configured, report SKIP and exit.
 
@@ -79,7 +79,7 @@ exit 1
 
 ## Step 3: Ensure Browser Connection
 
-Read `frontend.browser.mode` from project.yaml to determine the connection strategy. Use `frontend.browser.cdp_port` (default: 9555) for the CDP port.
+Read `frontend.browser.mode` from project.yaml to determine the connection strategy. Use `frontend.browser.cdp_port` for the CDP port (default `19988` for `mode: remote`, `9555` for `headless`/`local`).
 
 First, check if a browser is already reachable:
 
@@ -93,19 +93,19 @@ curl -s --max-time 3 http://localhost:<cdp_port>/json/version
 
 ### Mode: `remote`
 
-The user has a browser on another machine connected via SSH tunnel.
+The user has a browser on another machine connected via the Playwriter bridge (relay on the browser machine, reverse-tunnelled to this machine on port 19988).
 
 Check `frontend.browser.fallback`:
 
-**If fallback is `headless`** (or unset): Log a warning that the remote browser is unavailable, then launch headless Chromium as if mode were `headless`. Verification still runs – just without the user's real browser.
+**If fallback is `headless`** (or unset): Log a warning that the bridge is unavailable, then launch headless Chromium as if mode were `headless`. Verification still runs – just without the user's real browser.
 
 ```
-Remote browser not detected on CDP port <cdp_port>. Falling back to headless Chromium.
+Remote bridge not detected on CDP port <cdp_port>. Falling back to headless Chromium.
 Troubleshooting (for next time):
-1. Is Chrome running with --remote-debugging-port=<cdp_port> --remote-allow-origins=* on the remote machine?
-2. Is the SSH reverse tunnel active? (ssh -N -R <cdp_port>:127.0.0.1:<cdp_port> <user>@<this-machine>)
-3. Is your IDE (VS Code/Cursor) auto-forwarding port <cdp_port>? Check forwarded ports and remove it if so.
-4. Are leftover Chrome processes blocking the port? Kill them and relaunch.
+1. Is `playwriter serve --host 127.0.0.1` running on the browser machine?
+2. Is the SSH reverse tunnel active? (ssh -N -R 19988:127.0.0.1:19988 <user>@<this-machine>)
+3. In Chrome, is the Playwriter extension installed in the active profile, and has the icon been clicked on the target tab?
+4. If port 19988 is stuck on the browser machine, restart the relay with `playwriter serve --host 127.0.0.1 --replace`.
 ```
 
 Then launch headless Chromium (same as the headless mode section below).
@@ -267,8 +267,8 @@ Do NOT kill the browser if you connected to an existing one (remote tunnel or us
 - Status: running
 
 ### Browser
-- Type: remote (SSH tunnel) | local headless (launched by verifier)
-- CDP: localhost:9555
+- Type: remote (Playwriter bridge) | local headless (launched by verifier)
+- CDP: localhost:<cdp_port>
 
 ### Verification Results
 - Screenshots: X taken, all reviewed

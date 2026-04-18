@@ -39,8 +39,8 @@ Frontend:
   Dev server:    http://localhost:3000
   Framework:     react
   Verification:  enabled
-  Browser:       remote (SSH tunnel) | headless (auto) | local (display) | not configured
-  CDP port:      9555
+  Browser:       remote (Playwriter bridge) | headless (auto) | local (display) | not configured
+  CDP port:      <from project.yaml, default 19988 for remote, 9555 otherwise>
 
 Full config: spechub/project.yaml
 ```
@@ -53,7 +53,7 @@ After displaying the config, scan for missing or incomplete settings. If any gap
 
 1. **frontend configured but `workflow.frontend_verification` is not `true`** – verification is available but not enabled
 2. **frontend configured but `frontend.browser.mode` is not set** – browser environment unknown
-3. **frontend configured but `frontend.browser.cdp_port` is not set** – using default 9555 but not explicit
+3. **frontend configured but `frontend.browser.cdp_port` is not set** – default `19988` applies for `mode: remote`, `9555` for `headless`/`local`, but not explicit
 4. **`agent-browser.json` missing** (if frontend configured) – `cat agent-browser.json`
 5. **agent-browser CLI not installed** (if frontend configured) – `which agent-browser`
 6. **No `frontend.helpers_dir`** (if frontend configured) – verification knowledge base location not set
@@ -67,7 +67,7 @@ If gaps are found, show a single AskUserQuestion:
   "options": [
     {"label": "Enable frontend verification", "description": "Set workflow.frontend_verification to true"},
     {"label": "Set browser mode", "description": "Choose remote (SSH tunnel), headless (auto), or local (display)"},
-    {"label": "Set CDP port", "description": "Confirm or change the CDP port (default: 9555)"},
+    {"label": "Set CDP port", "description": "Confirm or change the CDP port (default: 19988 for remote, 9555 otherwise)"},
     {"label": "Create agent-browser.json", "description": "CDP config file for agent-browser CLI"},
     {"label": "Install agent-browser", "description": "npm install -g agent-browser"},
     {"label": "Skip", "description": "Leave config as-is"}
@@ -81,8 +81,8 @@ For each selected item, apply the fix:
 
 - **Enable frontend verification**: set `workflow.frontend_verification: true` in project.yaml
 - **Set browser mode**: ask a follow-up AskUserQuestion with remote/headless/local options (same as the `check` command's browser connectivity section). Store in project.yaml and walk through setup if remote is chosen. If remote, also ask about fallback behavior (headless or none).
-- **Set CDP port**: ask for the port number, default 9555. Store in project.yaml and update `agent-browser.json` if it exists.
-- **Create agent-browser.json**: write `{"cdp": "<cdp_port>"}` to project root
+- **Set CDP port**: ask for the port number. Default is `19988` when `frontend.browser.mode` is `remote`, otherwise `9555`. Store in project.yaml and update `agent-browser.json` if it exists.
+- **Create agent-browser.json**: write `{"cdp": "<cdp_port>"}` to project root, using `frontend.browser.cdp_port` from project.yaml
 - **Install agent-browser**: run `npm install -g agent-browser`
 
 ### `check`
@@ -122,60 +122,66 @@ If missing, offer to create it:
 
 ```
 No agent-browser.json found in project root. This tells agent-browser which CDP port to use.
-Create it now? ({"cdp": "9555"})
+Create it now? ({"cdp": "<frontend.browser.cdp_port from project.yaml>"})
 ```
 
-If user agrees, write the file.
+If user agrees, write the file. Use `frontend.browser.cdp_port` from project.yaml; if unset, default to `19988` when `frontend.browser.mode` is `remote`, otherwise `9555`.
 
 #### 4. Browser connectivity (if frontend configured)
 
+Read `frontend.browser.cdp_port` from project.yaml (with the mode-aware default above) and use it as `<cdp_port>`:
+
 ```bash
-curl -s --max-time 3 http://localhost:9555/json/version
+curl -s --max-time 3 http://localhost:<cdp_port>/json/version
 ```
 
 Report status and offer guidance:
 
-- **JSON response**: "Browser connected via CDP on port 9555."
+- **JSON response**: "Browser connected via CDP on port `<cdp_port>`."
 - **Connection refused**: Offer two options via AskUserQuestion:
 
 ```json
 {
-  "question": "No browser detected on CDP port 9555. How do you want to handle frontend verification?",
+  "question": "No browser detected on the configured CDP port. How do you want to handle frontend verification?",
   "options": [
     {"label": "Headless (automatic)", "description": "The frontend-verifier will launch headless Chromium when needed. No setup required."},
-    {"label": "Remote browser (SSH tunnel)", "description": "Connect to Chrome on another machine via SSH tunnel. Best experience – uses your real browser."},
+    {"label": "Remote browser (Playwriter bridge)", "description": "Drive Chrome on another machine via the Playwriter extension over SSH. Best experience – uses your real browser."},
     {"label": "Skip for now", "description": "I'll set this up later."}
   ]
 }
 ```
 
-If "Remote browser" selected, set `frontend.browser.mode: remote` in project.yaml and walk through setup:
+If "Remote browser" selected, set `frontend.browser.mode: remote` and `frontend.browser.cdp_port: 19988` in project.yaml (update `agent-browser.json` to match), then walk through setup. Remote mode uses the Playwriter bridge – Chrome on the browser machine is driven via the Playwriter extension's `chrome.debugger` API. No CDP listener is opened on Chrome itself.
 
 ```
-To connect your browser via SSH tunnel:
+To connect your browser via the Playwriter bridge:
 
-1. On the machine with the browser, launch Chrome with remote debugging:
+1. On the browser machine, install Node 18+ and Playwriter:
 
-   chrome --remote-debugging-port=9555 --user-data-dir=/tmp/chrome-debug --remote-allow-origins=*
+   npm install -g playwriter
 
-   On Windows:
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9555 --user-data-dir="%TEMP%\chrome-debug" --remote-allow-origins=*
+2. In Chrome on the browser machine (preferably a dedicated profile), install the Playwriter extension and pin it:
 
-2. Start an SSH reverse tunnel from the browser machine to this dev machine:
+   https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe
 
-   ssh -N -R 9555:127.0.0.1:9555 <user>@<dev-machine-ip>
+3. Run two long-running processes on the browser machine:
 
-3. Verify from this machine:
+   Relay:         playwriter serve --host 127.0.0.1
+   Reverse tunnel: ssh -N -R 19988:127.0.0.1:19988 <user>@<dev-machine>
 
-   curl -s http://localhost:9555/json/version
+4. In Chrome, click the Playwriter toolbar icon on each tab you want automated.
+
+5. Verify from this (dev) machine:
+
+   curl -s http://localhost:19988/json/version
 ```
 
 **Common gotchas** (show these after the setup steps):
 
-- `--remote-allow-origins=*` is required – without it, Chrome rejects tunnelled CDP connections
-- The tunnel must use `127.0.0.1`, not `localhost` – Chrome binds to IPv4 only, and some systems resolve `localhost` to IPv6
-- VS Code/Cursor may auto-forward port 9555 and interfere – check the IDE's forwarded ports panel and remove it if so
-- If Chrome was closed but background processes remain, the port won't bind – kill all Chrome processes first
+- Port `19988` is hardcoded by Playwriter – it is not configurable.
+- The relay must run on the same host as Chrome. The Playwriter extension hard-rejects any `/extension` client that is not `127.0.0.1`.
+- Each tab needs the extension icon clicked once. `chrome://` and `about:` pages cannot be attached.
+- If port 19988 is busy on the browser machine from a stale relay, run `playwriter serve --host 127.0.0.1 --replace` to kick the previous one.
 
 If "Headless" selected, set `frontend.browser.mode: headless` in project.yaml. No further setup needed – the frontend-verifier launches Chromium automatically.
 
@@ -230,7 +236,7 @@ Modify a setting. Supported keys:
 | `workflow.clarification.tasks` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for tasks |
 | `frontend.browser.mode` | `remote`, `headless`, `local` | Browser environment for verification |
 | `frontend.browser.fallback` | `headless`, `none` | What to do when primary mode unavailable |
-| `frontend.browser.cdp_port` | number | CDP port (default: 9555) |
+| `frontend.browser.cdp_port` | number | CDP port – default `19988` for `mode: remote`, `9555` for `headless`/`local` |
 
 Examples:
 - `/spechub:config set workflow.auto_select false`

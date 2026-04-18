@@ -20,59 +20,69 @@ Read `spechub/project.yaml` for:
 - `frontend.helpers_dir` – path to verification knowledge (default: `<frontend.directory>/tests/helpers/`)
 - `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
 - `frontend.browser.fallback` – what to do when primary mode unavailable: `headless` (launch Chromium) or `none` (fail)
-- `frontend.browser.cdp_port` – CDP port (default: 9555)
+- `frontend.browser.cdp_port` – CDP port. Default `19988` for `mode: remote` (Playwriter bridge), `9555` for `headless`/`local`.
 
 ## Browser Environments
 
 agent-browser works the same way regardless of where the browser lives. The only difference is how the CDP connection is established.
 
-### Remote browser (SSH tunnel)
+### Remote browser (Playwriter bridge)
 
-Best experience – you interact with the user's real browser on their machine. Set `frontend.browser.mode: remote` in project.yaml.
+Best experience – you interact with the user's real browser on their machine. Set `frontend.browser.mode: remote` and `frontend.browser.cdp_port: 19988` in project.yaml.
 
-If the tunnel is down, the frontend-verifier checks `frontend.browser.fallback`. With `fallback: headless` (recommended), it launches headless Chromium so verification still runs. With `fallback: none`, it fails and reports troubleshooting steps.
+Remote mode uses the Playwriter bridge: a relay runs on the browser machine and exposes a CDP-shaped endpoint; the Playwriter Chrome extension drives Chrome via the `chrome.debugger` API. No CDP listener is opened on Chrome itself. The dev machine reaches the relay through an SSH reverse tunnel.
+
+If the bridge is down, the frontend-verifier checks `frontend.browser.fallback`. With `fallback: headless` (recommended), it launches headless Chromium so verification still runs. With `fallback: none`, it fails and reports troubleshooting steps.
 
 #### Setup
 
-1. **On the machine with the browser** (e.g., Windows, macOS desktop), launch Chrome with remote debugging:
+1. **On the browser machine**, install Node 18+ and Playwriter:
 
    ```bash
-   chrome --remote-debugging-port=9555 --user-data-dir=/tmp/chrome-debug --remote-allow-origins=*
+   npm install -g playwriter
    ```
 
-   On Windows, use the full path or a shortcut:
+2. **In Chrome on the browser machine** (preferably a dedicated profile), install the Playwriter extension and pin it:
+
    ```
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9555 --user-data-dir="%TEMP%\chrome-debug" --remote-allow-origins=*
+   https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe
    ```
 
-2. **Start an SSH reverse tunnel** from the browser machine to the dev machine:
+3. **Run two long-running processes on the browser machine**:
 
    ```bash
-   ssh -N -R 9555:127.0.0.1:9555 <user>@<dev-machine-ip>
+   # Relay (listens on 127.0.0.1:19988 for the extension and for tunnelled CDP clients)
+   playwriter serve --host 127.0.0.1
+
+   # SSH reverse tunnel from the browser machine to the dev machine
+   ssh -N -R 19988:127.0.0.1:19988 <user>@<dev-machine>
    ```
 
-3. **Verify** from the dev machine:
+4. **Per-tab activation**: in Chrome, click the Playwriter toolbar icon on each tab you want automated.
+
+5. **Verify** from the dev machine:
 
    ```bash
-   curl -s http://localhost:9555/json/version
+   curl -s http://localhost:19988/json/version
    ```
 
 #### Common gotchas
 
-**`--remote-allow-origins=*` is required.** Without it, Chrome rejects CDP connections from tunnelled clients. This flag is safe – it only affects the debug protocol, not web content.
+**Port `19988` is hardcoded by Playwriter.** It is not configurable. The relay, the extension, and the tunnel all use the same port by design.
 
-**Chrome binds to `127.0.0.1`, not `localhost`.** The SSH tunnel must target `127.0.0.1:9555` on both sides. Some systems resolve `localhost` to `::1` (IPv6), which won't match Chrome's binding. The tunnel command above uses the correct address.
+**The relay must run on the same host as Chrome.** The Playwriter extension hard-rejects any `/extension` client that is not `127.0.0.1`. Do not try to run the relay on the dev machine – run it where Chrome runs, then tunnel to it.
 
-**IDE port-forwarding can steal the port.** VS Code and Cursor auto-detect listening ports and forward them. If the tunnel connects but `curl` gets no response, check your IDE's forwarded ports panel – if it grabbed port 9555, remove the forwarding. The SSH tunnel handles the connection; IDE forwarding interferes with it.
+**Each tab needs the extension icon clicked once.** Playwriter attaches per-tab. `chrome://` and `about:` pages cannot be attached – use normal web URLs.
 
-**Chrome background processes block the port.** If Chrome was closed but background processes remain, `--remote-debugging-port` silently fails to bind. Fix:
+**Stale relay blocks the port.** If `playwriter serve` fails because port 19988 is already bound on the browser machine, run:
 
-- Windows: Task Manager → End all Chrome processes, or `taskkill /F /IM chrome.exe`
-- Linux/macOS: `pkill -f chrome` or `lsof -ti:9555 | xargs kill`
+```bash
+playwriter serve --host 127.0.0.1 --replace
+```
 
-Then relaunch Chrome with the debug flags.
+to kick the previous relay.
 
-**Detection**: `curl localhost:9555/json/version` returns JSON.
+**Detection**: `curl localhost:19988/json/version` returns Playwriter-flavored JSON (the bridge mimics a CDP `/json/version` payload).
 
 ### Local headless (no display)
 

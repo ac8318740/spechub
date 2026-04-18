@@ -97,17 +97,7 @@ If not found:
 npm install -g agent-browser
 ```
 
-### 5b. Create agent-browser.json
-
-Write `agent-browser.json` in the project root:
-
-```json
-{
-  "cdp": "9555"
-}
-```
-
-### 5c. Create verification knowledge base
+### 5b. Create verification knowledge base
 
 Create `<helpers_dir>/VERIFICATION-KNOWLEDGE.md`:
 
@@ -136,7 +126,7 @@ Evolving reference for browser-based verification. Updated by the frontend-verif
      Example: "To verify login: open /login, snapshot, fill @username, fill @password, click @submit, wait 2s, snapshot again, check for dashboard heading" -->
 ```
 
-### 5d. Browser environment setup
+### 5c. Browser environment setup
 
 Ask the user which browser environment they'll use via AskUserQuestion:
 
@@ -144,7 +134,7 @@ Ask the user which browser environment they'll use via AskUserQuestion:
 {
   "question": "How will you connect a browser for frontend verification?",
   "options": [
-    {"label": "Remote browser (SSH tunnel)", "description": "Best experience – connect to Chrome on your desktop/laptop via SSH tunnel. Choose this if you develop on a remote VM."},
+    {"label": "Remote browser (Playwriter bridge)", "description": "Best experience – drive Chrome on your desktop/laptop via the Playwriter extension over SSH. Choose this if you develop on a remote VM."},
     {"label": "Headless (automatic)", "description": "The frontend-verifier launches headless Chromium when needed. No setup required. Choose this for CI or if you don't need to see the browser."},
     {"label": "Local with display", "description": "Launch a visible browser on this machine. Choose this for desktop Linux, macOS, or WSL with display access."},
     {"label": "Skip for now", "description": "I'll set this up later via /spechub:config set frontend.browser.mode"}
@@ -152,7 +142,15 @@ Ask the user which browser environment they'll use via AskUserQuestion:
 }
 ```
 
-Store the choice in `project.yaml` under `frontend.browser.mode` (`remote`, `headless`, or `local`).
+Store the choice in `project.yaml` under `frontend.browser.mode` (`remote`, `headless`, or `local`). Also store `frontend.browser.cdp_port`: `19988` for `remote`, `9555` for `headless`/`local`.
+
+After the mode is chosen, write `agent-browser.json` in the project root with the matching port:
+
+```json
+{
+  "cdp": "<cdp_port>"
+}
+```
 
 **If "Remote browser" selected**, ask about fallback behavior:
 
@@ -161,55 +159,59 @@ Store the choice in `project.yaml` under `frontend.browser.mode` (`remote`, `hea
   "question": "When the remote browser isn't connected, what should the frontend-verifier do?",
   "options": [
     {"label": "Fall back to headless", "description": "Launch headless Chromium automatically. Verification still runs, just without your real browser."},
-    {"label": "Fail", "description": "Report FAIL so you know the tunnel is down. Choose this if headless results aren't useful for your app."}
+    {"label": "Fail", "description": "Report FAIL so you know the bridge is down. Choose this if headless results aren't useful for your app."}
   ]
 }
 ```
 
 If "Fall back to headless", set `frontend.browser.fallback: headless`. If "Fail", set `frontend.browser.fallback: none`.
 
-Then walk through remote setup:
+Then walk through remote setup. Remote mode uses the Playwriter bridge – Chrome on the browser machine is driven via the Playwriter extension's `chrome.debugger` API. No CDP listener is opened on Chrome itself.
 
 ```
-To connect your browser via SSH tunnel:
+To connect your browser via the Playwriter bridge:
 
-1. On the machine with the browser, launch Chrome with remote debugging:
+1. On the browser machine, install Node 18+ and Playwriter:
 
-   chrome --remote-debugging-port=9555 --user-data-dir=/tmp/chrome-debug --remote-allow-origins=*
+   npm install -g playwriter
 
-   On Windows:
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9555 --user-data-dir="%TEMP%\chrome-debug" --remote-allow-origins=*
+2. In Chrome on the browser machine (preferably a dedicated profile), install the Playwriter extension and pin it:
 
-2. Start an SSH reverse tunnel from the browser machine to this dev machine:
+   https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe
 
-   ssh -N -R 9555:127.0.0.1:9555 <user>@<dev-machine-ip>
+3. Run two long-running processes on the browser machine:
 
-3. Verify from this machine:
+   Relay:         playwriter serve --host 127.0.0.1
+   Reverse tunnel: ssh -N -R 19988:127.0.0.1:19988 <user>@<dev-machine>
 
-   curl -s http://localhost:9555/json/version
+4. In Chrome, click the Playwriter toolbar icon on each tab you want automated.
+
+5. Verify from this (dev) machine:
+
+   curl -s http://localhost:19988/json/version
 ```
 
 Show these gotchas after the steps:
 
-- `--remote-allow-origins=*` is required – without it, Chrome rejects tunnelled CDP connections
-- The tunnel must use `127.0.0.1`, not `localhost` – Chrome binds to IPv4 only, and some systems resolve `localhost` to IPv6
-- VS Code/Cursor may auto-forward port 9555 and interfere – check the IDE's forwarded ports panel and remove it if so
-- If Chrome was closed but background processes remain, the port won't bind – kill all Chrome processes first
+- Port `19988` is hardcoded by Playwriter – it is not configurable.
+- The relay must run on the same host as Chrome. The Playwriter extension hard-rejects any `/extension` client that is not `127.0.0.1`.
+- Each tab needs the extension icon clicked once. `chrome://` and `about:` pages cannot be attached.
+- If port 19988 is busy on the browser machine from a stale relay, run `playwriter serve --host 127.0.0.1 --replace` to kick the previous one.
 
 Then verify connectivity:
 
 ```bash
-curl -s --max-time 3 http://localhost:9555/json/version
+curl -s --max-time 3 http://localhost:19988/json/version
 ```
 
-- **JSON response**: "Browser connected – you're ready for frontend verification."
-- **Connection refused**: "No browser detected yet. That's fine – connect when you're ready to verify. Run `/spechub:config check` to test connectivity later."
+- **JSON response**: "Bridge connected – you're ready for frontend verification."
+- **Connection refused**: "No bridge detected yet. That's fine – connect when you're ready to verify. Run `/spechub:config check` to test connectivity later."
 
 **If "Headless" selected**: No setup needed. Tell the user: "The frontend-verifier will launch headless Chromium automatically when needed."
 
 **If "Local with display" selected**: Check for a Chromium binary and note that the frontend-verifier will launch it when needed.
 
-**If "Skip"**: Leave `frontend.browser` unset. Tell the user to run `/spechub:config set frontend.browser.mode <mode>` later.
+**If "Skip"**: Leave `frontend.browser` unset and skip writing `agent-browser.json`. Tell the user to run `/spechub:config set frontend.browser.mode <mode>` later.
 
 ## Step 6: Report
 
@@ -233,6 +235,8 @@ Next: describe what you want to build, or run /spechub:bootstrap for existing co
 ```
 
 ## project.yaml Schema
+
+Note: `frontend.browser.cdp_port` defaults to `19988` when `mode: remote` (Playwriter bridge) and `9555` otherwise.
 
 ```yaml
 profile: node-typescript
