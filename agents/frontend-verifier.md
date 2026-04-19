@@ -106,6 +106,8 @@ Troubleshooting (for next time):
 2. Is the SSH reverse tunnel active? (ssh -N -R 19988:127.0.0.1:19988 <user>@<this-machine>)
 3. In Chrome, is the Playwriter extension installed in the active profile, and has the icon been clicked on the target tab?
 4. If port 19988 is stuck on the browser machine, restart the relay with `playwriter serve --host 127.0.0.1 --replace`.
+
+For a persistent, zero-window Windows laptop setup (auto-reconnecting tasks, ssh-agent key persistence), see plugins/spechub/docs/playwriter-bridge-windows.md.
 ```
 
 Then launch headless Chromium (same as the headless mode section below).

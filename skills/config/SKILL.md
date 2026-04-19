@@ -183,6 +183,8 @@ To connect your browser via the Playwriter bridge:
 - Each tab needs the extension icon clicked once. `chrome://` and `about:` pages cannot be attached.
 - If port 19988 is busy on the browser machine from a stale relay, run `playwriter serve --host 127.0.0.1 --replace` to kick the previous one.
 
+For a persistent, zero-window Windows laptop setup – auto-reconnecting scheduled tasks, ssh-agent key persistence, one-time admin registration – see `plugins/spechub/docs/playwriter-bridge-windows.md`. It ships the three PowerShell scripts (`relay.ps1`, `tunnel.ps1`, `register-tasks.ps1`) under `plugins/spechub/assets/playwriter-bridge/`.
+
 If "Headless" selected, set `frontend.browser.mode: headless` in project.yaml. No further setup needed – the frontend-verifier launches Chromium automatically.
 
 If "Skip for now" selected, leave `frontend.browser.mode` unset.

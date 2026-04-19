@@ -84,6 +84,10 @@ to kick the previous relay.
 
 **Detection**: `curl localhost:19988/json/version` returns Playwriter-flavored JSON (the bridge mimics a CDP `/json/version` payload).
 
+#### Persistent Windows setup
+
+For a zero-window Windows laptop setup with auto-reconnecting scheduled tasks, ssh-agent key persistence, and multi-VM tunneling, see [`docs/playwriter-bridge-windows.md`](../../docs/playwriter-bridge-windows.md). The plugin ships ready-to-use PowerShell scripts under `plugins/spechub/assets/playwriter-bridge/`.
+
 ### Local headless (no display)
 
 Works on headless Linux VMs, CI, containers – anywhere without a GUI.
