@@ -3,10 +3,11 @@
 How to drive a real Chrome browser running on your Windows laptop from
 `agent-browser` (and any other CDP client) running on a remote Linux VM.
 
-This is the persistent, zero-window Windows setup: three scheduled tasks
-running at logon as LogonType `S4U`, ssh-agent holding your key across
-reboots, auto-reconnecting relay and tunnel. One-time admin to register the
-tasks; after that, log in and the bridge is up.
+This is the persistent Windows setup: three scheduled tasks running at
+logon as `LogonType Interactive`, ssh-agent holding your key across reboots,
+auto-reconnecting relay and tunnel. The scripts hide their own console
+windows at startup via an in-process `ShowWindow` call – expect a brief
+flash at logon, then nothing.
 
 ## Architecture
 
@@ -120,10 +121,7 @@ Copy the three scripts from this plugin into `%USERPROFILE%\playwriter-bridge\`:
 
 They live in the plugin at `plugins/spechub/assets/playwriter-bridge/`.
 
-### 6. Register the scheduled tasks (from elevated PowerShell, once)
-
-S4U task registration requires admin. Runtime does not – after registration,
-the tasks run as your normal user.
+### 6. Register the scheduled tasks
 
 ```powershell
 cd $env:USERPROFILE\playwriter-bridge
@@ -135,25 +133,43 @@ username on the VMs is not the same as your Windows username.
 
 The script:
 
-1. Checks it's elevated (fails fast with a clear message if not).
-2. Registers `Playwriter-Relay` plus one `Playwriter-Tunnel-VM<N>` per VM.
-3. Kicks them off immediately.
+1. Registers `Playwriter-Relay` plus one `Playwriter-Tunnel-VM<N>` per VM
+   under `LogonType Interactive` with `RunLevel Limited`.
+2. Kicks them off immediately.
+
+A fresh install works from a regular PowerShell. If you are replacing tasks
+that were previously registered from an elevated shell,
+`Register-ScheduledTask` will fail with "Access is denied" – re-run the
+script from an elevated PowerShell in that case.
 
 All three tasks run at user logon from now on, with a 5-second reconnect
 loop. Logs land in `%LOCALAPPDATA%\playwriter-bridge\`.
 
-### Why LogonType `S4U`
+### How console windows stay hidden
 
-S4U is a native Windows batch-logon type. The scheduled task runs as your
-user's SID, but without an interactive desktop session. That has three nice
-properties:
+`LogonType Interactive` is the task-scheduler logon type that actually
+works for a broad range of Windows accounts, including domain accounts
+that may not have line-of-sight to a domain controller at logon. It allocates
+a desktop session, which means the scheduled task does briefly get a
+console window.
 
-- No console window ever flashes at login – there is no desktop session for
-  `conhost` to attach to.
-- Your ssh-agent pipe (ACL'd to your SID) stays reachable, because the task
-  runs as you.
-- No password is stored. Alternatives like LogonType `Password` would work
-  but require saving your Windows password in the task.
+To suppress it, `relay.ps1` and `tunnel.ps1` each start with:
+
+```powershell
+Add-Type -Name W -Namespace C -MemberDefinition '
+[DllImport("Kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);'
+[C.W]::ShowWindow([C.W]::GetConsoleWindow(), 0) | Out-Null
+```
+
+This stays in the `powershell.exe` process (no separate scripting-engine
+spawn, no `conhost --headless`, no third-party window-hiding tool) and
+hides the console after a brief flash at start. Because the hide happens
+from inside the script, do not run `relay.ps1` or `tunnel.ps1` directly in
+an interactive shell – the window will vanish from under you.
+
+No password is stored anywhere. The tasks run as your user's SID, which
+keeps the ssh-agent named pipe (ACL'd to that SID) reachable.
 
 ## VM setup (once per VM)
 
@@ -209,10 +225,26 @@ agent-browser screenshot /tmp/ok.png
   Find the holding `sshd` PID and `kill` it. The tunnel reconnect loop will
   restore the forward within 5 seconds.
 
-- **`Register-ScheduledTask : Access is denied`** – you ran
-  `register-tasks.ps1` from a non-elevated PowerShell. S4U registration
-  requires admin. Right-click PowerShell → Run as Administrator, then retry.
-  (Runtime does not need admin.)
+- **`Register-ScheduledTask : Access is denied`** – the tasks already exist
+  and were registered from an elevated PowerShell. A non-admin shell cannot
+  replace them. Right-click PowerShell → Run as Administrator, then retry.
+  Fresh installs do not need admin.
+
+- **Console windows flash at logon and stay visible** – something is
+  running `relay.ps1` or `tunnel.ps1` without the `ShowWindow` prelude at
+  the top. Confirm the first four lines of each script match the shipped
+  version (they begin with `Add-Type -Name W -Namespace C`). If you ran
+  the scripts interactively to test, that's expected – the hide call
+  vanishes the window under the shell you started from.
+
+- **Tasks show `LastTaskResult: 267011` and `LastRunTime: 1999`** (epoch) –
+  the task is ready but never actually launched. Most common cause on a
+  domain-joined laptop is a task registered under `LogonType S4U` without
+  reachable Kerberos infrastructure at logon. The shipped
+  `register-tasks.ps1` uses `LogonType Interactive` specifically to avoid
+  this; if you see it, make sure the registered tasks are Interactive
+  (`Get-ScheduledTask Playwriter-* | Select-Object TaskName,
+  @{n='LogonType';e={$_.Principal.LogonType}}`) and re-register if not.
 
 - **Passphrase prompted at every boot** – the ssh-agent service is not set
   to start automatically. Check:
@@ -233,7 +265,8 @@ agent-browser screenshot /tmp/ok.png
   means an attacker who lands on the VM can drive the attached profile
   through the bridge – limit the blast radius by making that profile
   disposable.
-- **S4U runtime principal is a limited token.** The tasks cannot elevate.
+- **Scheduled tasks run with `RunLevel Limited`.** They cannot elevate, so
+  a compromised relay or tunnel process has only the normal user's rights.
 - **Optional token auth.** Playwriter supports `--token <secret>` on `serve`
   and a matching header on CDP clients. If you want belt-and-braces on top
   of localhost-only binding, enable it.
@@ -247,7 +280,7 @@ agent-browser screenshot /tmp/ok.png
 - **No piggybacking on your editor's SSH session.** Win32-OpenSSH does not
   implement `ControlMaster`, and the Git-for-Windows `ssh` that does
   implement it breaks when invoked through editors that pipe `cmd.exe`.
-  Dedicated S4U tunnels are independent of whether your editor is
-  connected.
+  Dedicated scheduled-task tunnels are independent of whether your editor
+  is connected.
 - **No relay on the VM.** The Playwriter extension hard-codes `localhost`.
   The relay must run next to Chrome.

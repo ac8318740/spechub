@@ -4,6 +4,14 @@
 # invoked by a scheduled task registered by register-tasks.ps1. Logs to
 # %LOCALAPPDATA%\playwriter-bridge\relay.log.
 
+# Hide the console window that the scheduled task allocates. Stays in-process
+# (no wscript/conhost spawn chain). Expect a brief flash at task start, then
+# nothing. Do not run this script interactively – the window will vanish.
+Add-Type -Name W -Namespace C -MemberDefinition '
+[DllImport("Kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);'
+[C.W]::ShowWindow([C.W]::GetConsoleWindow(), 0) | Out-Null
+
 $ErrorActionPreference = "Continue"
 
 $logDir = Join-Path $env:LOCALAPPDATA "playwriter-bridge"
