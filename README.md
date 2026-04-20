@@ -58,7 +58,11 @@ Then in your project:
 /spechub:init
 ```
 
-This detects your project type, generates `spechub/project.yaml` with workflow settings, and adds an `@import` line to your CLAUDE.md that activates the orchestrator.
+This detects your project type and generates `spechub/project.yaml` with workflow settings. SpecHub's orchestrator instructions are loaded automatically at session start whenever a spechub project is detected – your CLAUDE.md stays clean for project-specific content.
+
+## Upgrading
+
+Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.8.md) for how to remove the stale `@import` line from your project CLAUDE.md.
 
 ## Skills
 

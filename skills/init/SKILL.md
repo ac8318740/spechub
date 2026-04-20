@@ -78,8 +78,8 @@ For each selected item, ask one follow-up question at a time via AskUserQuestion
 
 1. Create `spechub/` directory
 2. Write `spechub/project.yaml` from defaults + customizations
-3. Add `@import` to project CLAUDE.md pointing to the plugin's CLAUDE.md
-4. If spec sync enabled, add mandatory spec sync instruction to CLAUDE.md
+3. Leave project CLAUDE.md alone – orchestrator instructions load automatically via the SessionStart hook
+4. If a project CLAUDE.md contains a legacy `@import .../plugins/cache/ac8318740-plugins/spechub/<version>/CLAUDE.md` line, remove it (stale reference from older SpecHub versions)
 
 ## Step 5: Set Up Browser Verification
 
@@ -231,7 +231,7 @@ Spec sync:    [enabled/disabled]
 Frontend:     [verified/not configured]
 Browser:      [agent-browser installed / not applicable]
 Config:       spechub/project.yaml
-CLAUDE.md:    import added
+CLAUDE.md:    untouched (orchestrator loads via SessionStart hook)
 
 Next: describe what you want to build, or run /spechub:bootstrap for existing code.
 ```
