@@ -8,9 +8,12 @@
 #   ...                       (one per VM in -VMs, auto-numbered)
 #
 # The tasks run as the current user, so the ssh-agent named pipe (SID-ACL'd
-# to the user) stays reachable and no password is ever stored. Console
-# windows are hidden by relay.ps1 and tunnel.ps1 via an in-process
-# ShowWindow call – expect a brief flash at logon, then nothing.
+# to the user) stays reachable and no password is ever stored. Each task
+# action invokes launcher.exe, which spawns PowerShell with
+# CREATE_NO_WINDOW – no console is ever allocated, so there is no flash.
+#
+# Run build-launcher.ps1 first to produce launcher.exe; this script refuses
+# to continue without it.
 #
 # Usage:
 #
@@ -55,6 +58,12 @@ foreach ($file in @("relay.ps1", "tunnel.ps1")) {
     }
 }
 
+$launcherExe = Join-Path $ScriptsDir "launcher.exe"
+if (-not (Test-Path $launcherExe)) {
+    Write-Error "Missing launcher: $launcherExe. Run build-launcher.ps1 from $ScriptsDir first to compile it from launcher-src.cs."
+    exit 1
+}
+
 $psExe = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
 
 $settings = New-ScheduledTaskSettingsSet `
@@ -76,14 +85,18 @@ function Register-BridgeTask {
         [string[]]$ExtraArgs = @()
     )
     $scriptPath = Join-Path $ScriptsDir $ScriptFile
-    $psArgs = @(
+    # launcher.exe spawns args[0] (PowerShell) with CREATE_NO_WINDOW. Its
+    # remaining args get joined and passed as PowerShell's Arguments. Any
+    # path with spaces must be pre-quoted here.
+    $launcherArgs = @(
+        "`"$psExe`"",
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-File", "`"$scriptPath`""
     ) + $ExtraArgs
-    $argString = $psArgs -join ' '
+    $argString = $launcherArgs -join ' '
 
-    $action = New-ScheduledTaskAction -Execute $psExe -Argument $argString
+    $action = New-ScheduledTaskAction -Execute $launcherExe -Argument $argString
 
     Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
     Register-ScheduledTask `

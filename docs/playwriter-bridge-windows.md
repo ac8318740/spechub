@@ -4,10 +4,10 @@ How to drive a real Chrome browser running on your Windows laptop from
 `agent-browser` (and any other CDP client) running on a remote Linux VM.
 
 This is the persistent Windows setup: three scheduled tasks running at
-logon as `LogonType Interactive`, ssh-agent holding your key across reboots,
-auto-reconnecting relay and tunnel. The scripts hide their own console
-windows at startup via an in-process `ShowWindow` call – expect a brief
-flash at logon, then nothing.
+logon as `LogonType Interactive`, ssh-agent holding your key across
+reboots, auto-reconnecting relay and tunnel. Each task runs through a tiny
+launcher.exe shim that spawns PowerShell with `CREATE_NO_WINDOW`, so no
+console window is ever allocated – nothing to flash at logon.
 
 ## Architecture
 
@@ -111,20 +111,33 @@ Windows OpenSSH persists the key DPAPI-encrypted in
 `HKLM\SOFTWARE\OpenSSH\Agent\Keys` so it survives reboots. You only do this
 once.
 
-### 5. Drop the bridge scripts in place
+### 5. Drop the bridge files in place
 
-Copy the three scripts from this plugin into `%USERPROFILE%\playwriter-bridge\`:
+Copy these five files from the plugin into `%USERPROFILE%\playwriter-bridge\`:
 
+- `launcher-src.cs`
+- `build-launcher.ps1`
 - `relay.ps1`
 - `tunnel.ps1`
 - `register-tasks.ps1`
 
 They live in the plugin at `plugins/spechub/assets/playwriter-bridge/`.
 
-### 6. Register the scheduled tasks
+### 6. Build launcher.exe (one-time)
 
 ```powershell
 cd $env:USERPROFILE\playwriter-bridge
+.\build-launcher.ps1
+```
+
+This compiles `launcher-src.cs` to `launcher.exe` in the same directory,
+using PowerShell's built-in `Add-Type`. No SDK install, no admin. The
+output must be a `WindowsApplication` (not a console application) – the
+shipped `build-launcher.ps1` sets that correctly.
+
+### 7. Register the scheduled tasks
+
+```powershell
 .\register-tasks.ps1 -VMs @("vm1.example.com", "vm2.internal")
 ```
 
@@ -133,9 +146,12 @@ username on the VMs is not the same as your Windows username.
 
 The script:
 
-1. Registers `Playwriter-Relay` plus one `Playwriter-Tunnel-VM<N>` per VM
-   under `LogonType Interactive` with `RunLevel Limited`.
-2. Kicks them off immediately.
+1. Verifies `launcher.exe` exists (fails fast if step 6 was skipped).
+2. Registers `Playwriter-Relay` plus one `Playwriter-Tunnel-VM<N>` per VM
+   under `LogonType Interactive` with `RunLevel Limited`. Each task's
+   action is `launcher.exe "<powershell>" -NoProfile -ExecutionPolicy
+   Bypass -File <script>`.
+3. Kicks them off immediately.
 
 A fresh install works from a regular PowerShell. If you are replacing tasks
 that were previously registered from an elevated shell,
@@ -149,24 +165,27 @@ loop. Logs land in `%LOCALAPPDATA%\playwriter-bridge\`.
 
 `LogonType Interactive` is the task-scheduler logon type that actually
 works for a broad range of Windows accounts, including domain accounts
-that may not have line-of-sight to a domain controller at logon. It allocates
-a desktop session, which means the scheduled task does briefly get a
-console window.
+that may not have line-of-sight to a domain controller at logon. It does,
+however, allocate a desktop session – so a PowerShell task registered
+directly against `powershell.exe` gets a visible console window at logon.
 
-To suppress it, `relay.ps1` and `tunnel.ps1` each start with:
+Two in-process tricks do not solve this on modern Windows:
 
-```powershell
-Add-Type -Name W -Namespace C -MemberDefinition '
-[DllImport("Kernel32.dll")] public static extern IntPtr GetConsoleWindow();
-[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);'
-[C.W]::ShowWindow([C.W]::GetConsoleWindow(), 0) | Out-Null
-```
+- `-WindowStyle Hidden` – unreliable; the window still appears on the
+  taskbar before it hides.
+- `Add-Type` + `ShowWindow(GetConsoleWindow(), SW_HIDE)` – works on
+  classic `conhost` but not on Windows 11 22H2+ where Windows Terminal is
+  the default terminal host. Under WT, `GetConsoleWindow()` returns a
+  ConPTY proxy handle and `ShowWindow` on that handle does nothing to the
+  actual WT window.
 
-This stays in the `powershell.exe` process (no separate scripting-engine
-spawn, no `conhost --headless`, no third-party window-hiding tool) and
-hides the console after a brief flash at start. Because the hide happens
-from inside the script, do not run `relay.ps1` or `tunnel.ps1` directly in
-an interactive shell – the window will vanish from under you.
+The fix is `launcher.exe`: a 40-line C# `WindowsApplication` shim that
+starts the child process with `CreateNoWindow = true`, so `CREATE_NO_WINDOW`
+propagates and no console is ever attached. Source lives at
+`launcher-src.cs`; compile it with `build-launcher.ps1`. The launcher is
+intentionally shipped as source, not a prebuilt binary – each user
+compiles their own so no unsigned third-party `.exe` is introduced onto
+the machine.
 
 No password is stored anywhere. The tasks run as your user's SID, which
 keeps the ssh-agent named pipe (ACL'd to that SID) reachable.
@@ -230,12 +249,21 @@ agent-browser screenshot /tmp/ok.png
   replace them. Right-click PowerShell → Run as Administrator, then retry.
   Fresh installs do not need admin.
 
-- **Console windows flash at logon and stay visible** – something is
-  running `relay.ps1` or `tunnel.ps1` without the `ShowWindow` prelude at
-  the top. Confirm the first four lines of each script match the shipped
-  version (they begin with `Add-Type -Name W -Namespace C`). If you ran
-  the scripts interactively to test, that's expected – the hide call
-  vanishes the window under the shell you started from.
+- **Console windows appear at logon and stay visible** – the scheduled
+  task action is pointing at `powershell.exe` directly instead of at
+  `launcher.exe`. Inspect one task:
+
+  ```powershell
+  (Get-ScheduledTask Playwriter-Relay).Actions | Format-List Execute, Arguments
+  ```
+
+  `Execute` should end in `launcher.exe`. If it ends in `powershell.exe`,
+  the tasks were registered before `launcher.exe` was in place – re-run
+  `build-launcher.ps1` then `register-tasks.ps1` (elevated if the tasks
+  already exist).
+
+- **`launcher.exe` is missing** – `register-tasks.ps1` fails fast with a
+  clear message pointing at `build-launcher.ps1`. Run that first.
 
 - **Tasks show `LastTaskResult: 267011` and `LastRunTime: 1999`** (epoch) –
   the task is ready but never actually launched. Most common cause on a

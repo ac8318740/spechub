@@ -17,13 +17,8 @@ param(
     [string]$User = $env:USERNAME
 )
 
-# Hide the console window that the scheduled task allocates. Stays in-process
-# (no wscript/conhost spawn chain). Expect a brief flash at task start, then
-# nothing. Do not run this script interactively – the window will vanish.
-Add-Type -Name W -Namespace C -MemberDefinition '
-[DllImport("Kernel32.dll")] public static extern IntPtr GetConsoleWindow();
-[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);'
-[C.W]::ShowWindow([C.W]::GetConsoleWindow(), 0) | Out-Null
+# Console hiding is handled by launcher.exe (spawns PowerShell with
+# CREATE_NO_WINDOW). Nothing to do here.
 
 $ErrorActionPreference = "Continue"
 
