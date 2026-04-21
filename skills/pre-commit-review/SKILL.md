@@ -1,16 +1,6 @@
 ---
 name: pre-commit-review
-description: >-
-  Deep code quality review of all changes since last commit. Checks for hardcodes, single-source-of-truth
-  violations, scalability issues, edge cases, and project convention drift using dynamic project awareness
-  (living specs, codebase search, surrounding code). Also flags adjacent code rot worth cleaning up.
-  Auto-invocable in two contexts:
-  (1) When the LLM is working AUTONOMOUSLY through a task list and is about to commit on its own
-      (e.g., user said "implement all tasks and commit", "work through these and push", "handle everything")
-      — use --auto-fix mode since the user is not present to interact.
-  (2) When the user manually invokes /commit and this skill has NOT already been run on the current changes
-      — invoke in INTERACTIVE mode (default, with AskUserQuestion) since the user is clearly present.
-  Manual invocation via /pre-commit-review also uses interactive mode by default.
+description: "Deep code quality review of all changes since last commit. Checks for hardcodes, single-source-of-truth violations, scalability issues, edge cases, and project convention drift using dynamic project awareness (living specs, codebase search, surrounding code). Also flags adjacent code rot worth cleaning up. Auto-invocable in two contexts – (1) when working autonomously through a task list and about to commit (e.g., user said \"implement all tasks and commit\"), use --auto-fix mode; (2) when the user manually invokes /commit and this skill has not already run on the current changes, use INTERACTIVE mode (default). Manual invocation via /pre-commit-review also uses interactive mode by default."
 argument-hint: "[--auto-fix] [scope description]"
 ---
 

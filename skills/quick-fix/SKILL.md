@@ -1,12 +1,6 @@
 ---
 name: quick-fix
-description: >-
-  Structured workflow for fixing bugs, issues, and broken behavior. Enforces
-  codebase exploration before touching code, root cause analysis, minimal change
-  principle, and full verification. Use when: (1) something is broken and needs
-  fixing, (2) behavior is wrong and needs correcting, (3) user reports a bug.
-  Lighter than a full debug investigation but more disciplined than ad-hoc fixes.
-  Not for new features — use the Implementation Discipline directly.
+description: "Structured workflow for fixing bugs, issues, and broken behavior. Enforces codebase exploration before touching code, root cause analysis, minimal change principle, and full verification. Use when (1) something is broken and needs fixing, (2) behavior is wrong and needs correcting, or (3) user reports a bug. Lighter than a full debug investigation but more disciplined than ad-hoc fixes. Not for new features – use the Implementation Discipline directly."
 argument-hint: "<description of what's broken>"
 ---
 
