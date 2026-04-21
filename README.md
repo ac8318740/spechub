@@ -60,6 +60,12 @@ Then in your project:
 
 This detects your project type and generates `spechub/project.yaml` with workflow settings. SpecHub's orchestrator instructions are loaded automatically at session start whenever a spechub project is detected – your CLAUDE.md stays clean for project-specific content.
 
+## CLI
+
+SpecHub ships a Node.js CLI for change management (`spechub new change`, `spechub status`, `spechub list`, `spechub archive`).
+
+On session start, the plugin symlinks the CLI to `~/.local/bin/spechub`. If that directory is on your `PATH`, run `spechub --help` to get started – the symlink refreshes automatically on plugin upgrades. If `~/.local/bin` isn't on your `PATH`, the hook prints a one-line reminder so you can add it.
+
 ## Upgrading
 
 Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.8.md) for how to remove the stale `@import` line from your project CLAUDE.md.
