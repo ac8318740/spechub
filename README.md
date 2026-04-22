@@ -66,6 +66,8 @@ SpecHub ships a Node.js CLI for change management (`spechub new change`, `spechu
 
 On session start, the plugin symlinks the CLI to `~/.local/bin/spechub`. If that directory is on your `PATH`, run `spechub --help` to get started – the symlink refreshes automatically on plugin upgrades. If `~/.local/bin` isn't on your `PATH`, the hook prints a one-line reminder so you can add it.
 
+If `spechub` doesn't run after install, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md). It's written so a Claude Code session can read it and apply the fix directly.
+
 ## Upgrading
 
 Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.8.md) for how to remove the stale `@import` line from your project CLAUDE.md.
