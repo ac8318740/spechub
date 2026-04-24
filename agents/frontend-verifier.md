@@ -81,15 +81,23 @@ exit 1
 
 Read `frontend.browser.mode` from project.yaml to determine the connection strategy. Use `frontend.browser.cdp_port` for the CDP port (default `19988` for `mode: remote`, `9555` for `headless`/`local`).
 
-First, check if a browser is already reachable:
+First, check if a browser is already reachable. Probe for ~24 s so the first two tunnel-reconnect tiers of the Playwriter bridge (`tunnel.ps1` backs off 5 → 10 → 20 → 40 → 80 → 120 s) can complete without a false fallback. Longer waits are left to the task scheduler, not to this probe:
 
 ```bash
-curl -s --max-time 3 http://localhost:<cdp_port>/json/version
+for i in 1 2 3 4 5 6 7 8; do
+  if curl -sf --max-time 3 http://localhost:<cdp_port>/json/version > /dev/null; then
+    echo "CDP reachable on attempt $i"
+    CDP_READY=1
+    break
+  fi
+  echo "CDP probe $i/8 failed, retrying..."
+  sleep 3
+done
 ```
 
-**If connected** (JSON response): A browser is available. Proceed to Step 4.
+**If `CDP_READY=1`** (JSON response received on any attempt): A browser is available. Proceed to Step 4.
 
-**If connection refused or timeout**, act based on the configured mode:
+**If all 8 attempts failed**, act based on the configured mode:
 
 ### Mode: `remote`
 
@@ -107,7 +115,7 @@ Troubleshooting (for next time):
 3. In Chrome, is the Playwriter extension installed in the active profile, and has the icon been clicked on the target tab?
 4. If port 19988 is stuck on the browser machine, restart the relay with `playwriter serve --host 127.0.0.1 --replace`.
 
-For a persistent, zero-window Windows laptop setup (auto-reconnecting tasks, ssh-agent key persistence), see plugins/spechub/docs/playwriter-bridge-windows.md.
+For a persistent cross-device setup (Windows laptop + Linux VM, auto-reconnecting scheduled tasks, ssh-agent key persistence, automated diagnosis via doctor.ps1), see plugins/spechub/skills/bridge/SKILL.md.
 ```
 
 Then launch headless Chromium (same as the headless mode section below).

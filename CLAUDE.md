@@ -332,3 +332,4 @@ See the `browser-verify` skill for the `agent-browser` command reference, select
 - **Agent Teams for parallel scopes** – 2+ independent scopes -> team; single scope -> subagents directly
 - **Living specs** – Always kept in sync via commit-time spec sync
 - **Right-sized workflow** – Quick path for small changes, full pipeline for features and larger work
+- **Cross-device setups** – When a task spans two devices (Playwriter bridge, remote tunnels, etc.), invoke the `bridge` skill first to establish the platform-detection + handoff convention, then proceed

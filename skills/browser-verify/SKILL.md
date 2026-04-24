@@ -84,9 +84,9 @@ to kick the previous relay.
 
 **Detection**: `curl localhost:19988/json/version` returns Playwriter-flavored JSON (the bridge mimics a CDP `/json/version` payload).
 
-#### Persistent Windows setup
+#### Persistent cross-device setup
 
-For a zero-window Windows laptop setup with auto-reconnecting scheduled tasks, ssh-agent key persistence, and multi-VM tunneling, see [`docs/playwriter-bridge-windows.md`](../../docs/playwriter-bridge-windows.md). The plugin ships ready-to-use PowerShell scripts under `plugins/spechub/assets/playwriter-bridge/`.
+For a durable Windows laptop → Linux VM setup with auto-reconnecting scheduled tasks, ssh-agent key persistence, multi-VM tunneling, automated diagnosis (`doctor.ps1`), canonical stop (`stop.ps1`), and VM-side port cleanup (`vm-free-port.sh`), use the `bridge` skill: [`../bridge/SKILL.md`](../bridge/SKILL.md). It routes to a Windows runbook or a Linux/VM runbook based on where you are, and defines the paste-ready handoff format for cross-device work. The scripts ship under `plugins/spechub/assets/playwriter-bridge/`.
 
 ### Local headless (no display)
 
