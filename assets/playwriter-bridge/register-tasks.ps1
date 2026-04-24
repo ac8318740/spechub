@@ -1,4 +1,4 @@
-# register-tasks.ps1 – Register Playwriter bridge scheduled tasks.
+﻿# register-tasks.ps1 – Register Playwriter bridge scheduled tasks.
 #
 # Creates three kinds of scheduled tasks, all at user logon, LogonType=Interactive:
 #
@@ -66,13 +66,17 @@ if (-not (Test-Path $launcherExe)) {
 
 $psExe = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
 
+# The scripts themselves own resilience (tunnel.ps1 has exponential backoff
+# and fatal-error classification; relay.ps1 loops internally). The scheduler
+# restart is a soft backstop for rare PowerShell-host crashes, not a retry
+# engine. Keep it small so it does not fight manual stops.
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -DontStopOnIdleEnd `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
-    -RestartCount 999 `
-    -RestartInterval (New-TimeSpan -Minutes 1)
+    -RestartCount 2 `
+    -RestartInterval (New-TimeSpan -Minutes 5)
 
 $userId = "$env:USERDOMAIN\$env:USERNAME"
 $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
@@ -98,15 +102,62 @@ function Register-BridgeTask {
 
     $action = New-ScheduledTaskAction -Execute $launcherExe -Argument $argString
 
-    Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
-    Register-ScheduledTask `
-        -TaskName $Name `
-        -Action $action `
-        -Trigger $trigger `
-        -Principal $principal `
-        -Settings $settings | Out-Null
+    # Explicit Unregister: do NOT silently swallow "Access is denied".
+    # Previous versions hid that error, then Register-ScheduledTask threw
+    # a non-terminating CIM "Cannot create a file when that file already
+    # exists" and the old task (possibly with stale settings) stayed put
+    # while the script falsely reported success.
+    $existing = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    if ($existing) {
+        try {
+            Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction Stop
+        } catch {
+            Write-Error ("Cannot replace task '{0}': {1}`n" -f $Name, $_.Exception.Message) -ErrorAction Continue
+            Write-Error "This task was probably registered from an elevated PowerShell. Re-run this script from an elevated PowerShell (Run as Administrator)." -ErrorAction Continue
+            throw "Unregister-ScheduledTask failed for $Name"
+        }
+    }
 
-    Write-Host "Registered: $Name"
+    try {
+        Register-ScheduledTask `
+            -TaskName $Name `
+            -Action $action `
+            -Trigger $trigger `
+            -Principal $principal `
+            -Settings $settings `
+            -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Error ("Register-ScheduledTask failed for '{0}': {1}" -f $Name, $_.Exception.Message) -ErrorAction Continue
+        throw
+    }
+
+    # Verify the new settings actually landed. Guards against a silent
+    # partial failure where the task exists but with old settings. We check
+    # every field whose property name is identical on the input
+    # ScheduledTaskSettings object and on the fetched task's Settings – the
+    # battery/idle switch-params invert to 'Disallow*'/'StopIf*' in the
+    # stored representation and aren't safely comparable by name, so they
+    # are left out. RestartCount, RestartInterval and ExecutionTimeLimit
+    # map 1:1 on both sides and are the fields most likely to silently
+    # reject.
+    $check = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    if (-not $check) {
+        throw "Post-register check: task '$Name' is missing."
+    }
+    $fieldsToCheck = @('RestartCount', 'RestartInterval', 'ExecutionTimeLimit')
+    $mismatches = @()
+    foreach ($key in $fieldsToCheck) {
+        $want = $settings.$key
+        $got = $check.Settings.$key
+        if ($got -ne $want) {
+            $mismatches += ("{0}: got '{1}', expected '{2}'" -f $key, $got, $want)
+        }
+    }
+    if ($mismatches.Count -gt 0) {
+        throw ("Post-register check: task '{0}' has stale settings ({1}). The register silently applied stale settings – re-run from an elevated PowerShell." -f $Name, ($mismatches -join '; '))
+    }
+
+    Write-Host ("Registered: {0} ({1} settings fields verified: {2})" -f $Name, $fieldsToCheck.Count, ($fieldsToCheck -join ', '))
 }
 
 Register-BridgeTask -Name "Playwriter-Relay" -ScriptFile "relay.ps1"

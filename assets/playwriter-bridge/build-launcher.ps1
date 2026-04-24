@@ -1,4 +1,4 @@
-# build-launcher.ps1 – one-shot: compile launcher-src.cs to launcher.exe.
+﻿# build-launcher.ps1 – one-shot: compile launcher-src.cs to launcher.exe.
 #
 # Run this once before register-tasks.ps1. The launcher.exe it produces is a
 # tiny WindowsApplication (no console allocated) that starts the child
@@ -21,7 +21,12 @@ if (-not (Test-Path $srcPath)) {
 }
 
 $src = Get-Content $srcPath -Raw
-Add-Type -TypeDefinition $src -OutputAssembly $outPath -OutputType WindowsApplication
+# System.Management is referenced so the launcher can walk the process tree
+# via WMI on shutdown. See launcher-src.cs for why.
+Add-Type -TypeDefinition $src `
+    -OutputAssembly $outPath `
+    -OutputType WindowsApplication `
+    -ReferencedAssemblies "System.Management"
 
 Write-Host "Built: $outPath"
 Get-Item $outPath | Select-Object Name, Length, LastWriteTime | Format-List

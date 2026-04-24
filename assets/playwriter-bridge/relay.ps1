@@ -1,4 +1,4 @@
-# relay.ps1 – Playwriter relay with auto-reconnect.
+﻿# relay.ps1 – Playwriter relay with auto-reconnect.
 #
 # Runs `playwriter serve --host 127.0.0.1 --replace` in a loop. Intended to
 # be invoked through launcher.exe by a scheduled task registered by
