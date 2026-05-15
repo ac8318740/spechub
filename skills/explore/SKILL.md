@@ -85,7 +85,7 @@ You have full context of the SpecHub system. Use it naturally, don't force it.
 At the start, quickly check what exists:
 
 ```bash
-spechub list --json
+~/.claude/spechub/bin/spechub list --json
 ```
 
 ### When no change exists

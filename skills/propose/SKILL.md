@@ -63,13 +63,13 @@ After answers come back, assess whether more questions are needed at the current
 Generate a kebab-case short name from the feature description, then:
 
 ```bash
-spechub new change "<name>"
+~/.claude/spechub/bin/spechub new change "<name>"
 ```
 
 Get the proposal template:
 
 ```bash
-spechub instructions proposal --change "<name>" --json
+~/.claude/spechub/bin/spechub instructions proposal --change "<name>" --json
 ```
 
 Parse `template`, `instruction`, `outputPath`. The `context` and `rules` fields are constraints for you — do NOT copy them into the output.
@@ -107,7 +107,7 @@ Once approved:
 2. Handle any [NEEDS CLARIFICATION] markers if the user wants to resolve them now
 3. Show status:
    ```bash
-   spechub status --change "<name>"
+   ~/.claude/spechub/bin/spechub status --change "<name>"
    ```
 4. Report: change name, proposal path, next step (`/clarify` or `/design`)
 
@@ -124,5 +124,5 @@ Once approved:
 
 - **DO NOT** produce architecture diagrams or component trees — that's `/design`
 - **DO NOT** list implementation phases or tasks — that's `/tasks`
-- **DO NOT** skip `spechub new change` — the change MUST be scaffolded
+- **DO NOT** skip `~/.claude/spechub/bin/spechub new change` — the change MUST be scaffolded
 - **DO NOT** write to disk before the user approves the draft

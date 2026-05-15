@@ -20,7 +20,7 @@ Archive a completed change's artifacts and update the cumulative living specs wi
 ## Step 1: Locate the Change
 
 1. If `$ARGUMENTS` provided: Use as change name
-2. If no arguments: Run `spechub list --json` to find active changes
+2. If no arguments: Run `~/.claude/spechub/bin/spechub list --json` to find active changes
 3. If only one active change, use it. If multiple, ask the user.
 4. Verify directory exists at `spechub/changes/<name>/`
 5. Read `spechub/changes/<name>/tasks.md` — if many tasks incomplete, WARN user and ask for confirmation
@@ -28,7 +28,7 @@ Archive a completed change's artifacts and update the cumulative living specs wi
 ## Step 2: Check Artifact Status
 
 ```bash
-spechub status --change "<name>" --json
+~/.claude/spechub/bin/spechub status --change "<name>" --json
 ```
 
 Parse to check if all artifacts are `done`. If any incomplete, warn and ask for confirmation.

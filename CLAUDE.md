@@ -29,6 +29,20 @@ If `spechub/project.yaml` has `workflow.tdd.orchestrator_strict: false`, you may
 
 ---
 
+## Invoking the SpecHub CLI
+
+Always invoke the bundled CLI by its invariant absolute path:
+
+```bash
+~/.claude/spechub/bin/spechub <subcommand>
+```
+
+This is a symlink the plugin's SessionStart hook maintains. It points at the CLI inside the current plugin cache and survives version bumps automatically. Do **not** invoke `spechub` as a bare command – that depends on the user's shell PATH and breaks in non-interactive subshells, fresh agent contexts, and CI environments.
+
+If `~/.claude/spechub/bin/spechub` is missing, the SessionStart hook did not run. Tell the user to restart Claude Code; if that fails, point them at `TROUBLESHOOTING.md` in the plugin root.
+
+---
+
 ## Project Configuration
 
 All project-specific commands and paths come from `spechub/project.yaml`. Read this file before running any build/test/lint commands. If it doesn't exist, prompt the user to run `/spechub:init`.
@@ -209,7 +223,7 @@ You (Team Lead / Orchestrator)
 - Domain-organized per `spechub/domain-map.yaml`
 - Format: Given/When/Then, FR-NNN requirements
 - Bootstrap from existing codebase: `/spechub:bootstrap`
-- Change management: SpecHub CLI (`spechub new change`, `spechub status`, `spechub list`)
+- Change management: SpecHub CLI (`~/.claude/spechub/bin/spechub new change`, `~/.claude/spechub/bin/spechub status`, `~/.claude/spechub/bin/spechub list`)
 
 ### Spec Correction Protocol (Fix It When You See It)
 

@@ -64,7 +64,9 @@ This detects your project type and generates `spechub/project.yaml` with workflo
 
 SpecHub ships a Node.js CLI for change management (`spechub new change`, `spechub status`, `spechub list`, `spechub archive`).
 
-On session start, the plugin symlinks the CLI to `~/.local/bin/spechub`. If that directory is on your `PATH`, run `spechub --help` to get started – the symlink refreshes automatically on plugin upgrades. If `~/.local/bin` isn't on your `PATH`, the hook prints a one-line reminder so you can add it.
+The plugin's skills and agents invoke the CLI through an invariant absolute path – `~/.claude/spechub/bin/spechub` – that the SessionStart hook maintains. This means agents don't depend on your shell `PATH` and the CLI keeps working across plugin version bumps, non-interactive subshells, and fresh agent contexts.
+
+For typing `spechub` at a terminal yourself, the hook also creates `~/.local/bin/spechub`. Add `~/.local/bin` to your `PATH` to use it; the hook prints a one-line reminder if it isn't already there. This second symlink is a convenience only – nothing in the plugin breaks if you don't set up `PATH`.
 
 If `spechub` doesn't run after install, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md). It's written so a Claude Code session can read it and apply the fix directly.
 

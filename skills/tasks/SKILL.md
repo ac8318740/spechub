@@ -42,7 +42,7 @@ If no flag is provided, read the default from `spechub/project.yaml` at `workflo
 If `$ARGUMENTS` specifies a change name, use it. Otherwise:
 
 ```bash
-spechub list --json
+~/.claude/spechub/bin/spechub list --json
 ```
 
 If only one active change, use it. If multiple, ask the user.
@@ -77,7 +77,7 @@ After answers come back, assess whether more questions are needed at the current
 Get the task template:
 
 ```bash
-spechub instructions tasks --change "<name>" --json
+~/.claude/spechub/bin/spechub instructions tasks --change "<name>" --json
 ```
 
 Parse `template`, `instruction`, `outputPath`.
@@ -109,7 +109,7 @@ Once approved:
 1. Write tasks.md to the `outputPath`
 2. Show status:
    ```bash
-   spechub status --change "<name>"
+   ~/.claude/spechub/bin/spechub status --change "<name>"
    ```
 3. Report: path to tasks.md, total task count, tasks per story, parallel opportunities, suggested MVP scope
 
@@ -117,7 +117,7 @@ Once approved:
 
 - **DO NOT** reference hypothetical file paths — every path must come from exploration
 - **DO NOT** write to disk before the user approves the draft
-- **DO NOT** skip the SpecHub CLI steps (`spechub instructions tasks`)
+- **DO NOT** skip the SpecHub CLI steps (`~/.claude/spechub/bin/spechub instructions tasks`)
 
 ## Task Generation Rules
 

@@ -21,7 +21,7 @@ Implements tasks from an active SpecHub change's `tasks.md`. Creates a feature b
 If `$ARGUMENTS` specifies a change name, use it. Otherwise:
 
 ```bash
-spechub list --json
+~/.claude/spechub/bin/spechub list --json
 ```
 
 If only one active change, use it. If multiple, ask the user.

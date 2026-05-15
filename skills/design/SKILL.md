@@ -42,7 +42,7 @@ If no flag is provided, read the default from `spechub/project.yaml` at `workflo
 If `$ARGUMENTS` specifies a change name, use it. Otherwise:
 
 ```bash
-spechub list --json
+~/.claude/spechub/bin/spechub list --json
 ```
 
 If only one active change, use it. If multiple, ask the user.
@@ -77,7 +77,7 @@ After answers come back, assess whether more questions are needed at the current
 Get the design template:
 
 ```bash
-spechub instructions design --change "<name>" --json
+~/.claude/spechub/bin/spechub instructions design --change "<name>" --json
 ```
 
 Parse `template`, `instruction`, `outputPath`.
@@ -110,7 +110,7 @@ Once approved:
 2. Write design.md to the `outputPath`
 3. Show status:
    ```bash
-   spechub status --change "<name>"
+   ~/.claude/spechub/bin/spechub status --change "<name>"
    ```
 4. Report: change name, design.md path, research.md path, next step (`/tasks`)
 
