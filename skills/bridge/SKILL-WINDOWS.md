@@ -187,6 +187,21 @@ Start-ScheduledTask Playwriter-Tunnel-VM1
 .\doctor.ps1
 ```
 
+### Updates (automatic)
+
+After initial setup you do not re-copy scripts by hand. The SpecHub
+SessionStart hook runs `sync.ps1` on each Claude Code launch: it diffs the
+deployed scripts in `%USERPROFILE%\playwriter-bridge\` against the plugin
+cache by content hash, copies any that changed, rebuilds `launcher.exe`
+when its source changed, and restarts only the affected tasks. So a plugin
+update reaches the running bridge on the next launch, with at most one
+brief reconnect per changed task.
+
+The whole SessionStart hook is a `bash` script, so `bash` must be on `PATH`
+(Git for Windows provides it) or the hook never runs – and with it, auto-sync
+never fires. If `bash` is not available, fall back to re-copying the changed
+files per the setup step and restarting the tasks.
+
 ### Per-tab activation
 
 In Chrome (Playwriter Dev profile), click the Playwriter toolbar icon on
@@ -197,18 +212,25 @@ each tab you want the VM to automate. Playwriter attaches per-tab.
 
 `tunnel.ps1` classifies ssh failures and reacts:
 
-- **Transient** (connection refused / timed out / unreachable / DNS) –
+- **Transient** (connection refused / timed out / unreachable / DNS /
+  TCP reset under a live session / Win32 connect "Unknown error") –
   exponential backoff 5 → 10 → 20 → 40 → 80 → 120 s cap. Resets when a
-  run lasts at least 30 s.
+  run lasts at least 30 s. A dropped long-lived session (laptop sleep,
+  wifi roam, VPN flap) lands here, so the tunnel reconnects on its own.
 - **Stuck remote port** (`remote port forwarding failed for listen port
-  19988`) – three consecutive hits write `tunnel-<host>.stuck`, log a
-  fatal line, and exit. Scheduler's `State` returns to `Ready`.
+  19988`) – the VM still holds the port via the dropped session's
+  orphaned forward channel. Retried at a 30 s cadence for ~10 min, long
+  enough to outlast the VM's `sshd` reap window, so the bridge self-heals
+  without a restart. Only if the port is still held after that does it
+  write `tunnel-<host>.stuck` and exit – the port is genuinely wedged
+  (a non-sshd holder, or keepalive disabled on the VM).
 - **Auth or host-key failure** – write marker, exit immediately. These
   need user action; retrying just floods the log.
 
-After any fatal exit, the Scheduler backstop retries twice 5 min apart.
-If the condition has not been fixed, the task lands in `Ready`, and
-`doctor.ps1` reports which host needs attention.
+A genuinely wedged port or an auth/host-key failure exits and lands the
+task in `Ready`; the Scheduler backstop retries twice 5 min apart, and
+`doctor.ps1` reports which host needs attention. Recoverable network
+drops never reach that point now – they self-heal inside the tunnel loop.
 
 ## How console windows stay hidden
 

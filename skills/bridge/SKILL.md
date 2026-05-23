@@ -72,8 +72,10 @@ Tell the user clearly which block goes where.
   single canonical stop (`stop.ps1`) and a single canonical diagnose
   (`doctor.ps1`). Reach for those before improvising.
 - Do not edit the scripts in place to "try something". Change them in
-  `plugins/spechub/assets/playwriter-bridge/` and reinstall into
-  `%USERPROFILE%\playwriter-bridge\` on the laptop.
+  `plugins/spechub/assets/playwriter-bridge/`. The SessionStart hook
+  redeploys changed scripts to `%USERPROFILE%\playwriter-bridge\` on the
+  laptop (and re-links `vm-free-port.sh` on the VM) on the next Claude
+  Code launch – see the Updates sections in the platform runbooks.
 
 ## File encoding rule
 
@@ -95,7 +97,12 @@ Under `plugins/spechub/assets/playwriter-bridge/`:
 - `register-tasks.ps1` – scheduled-task registration
 - `stop.ps1` – canonical stop
 - `doctor.ps1` – Windows automated diagnosis
+- `sync.ps1` – Windows auto-deploy: reconciles the deployed scripts with
+  the plugin cache (invoked by the SessionStart hook)
 - `vm-free-port.sh` – VM-side port cleanup with guardrails
 
-The scripts are installed by the user into `%USERPROFILE%\playwriter-bridge\`
-(Windows) and into whatever location they prefer (VM).
+The user installs the scripts once into `%USERPROFILE%\playwriter-bridge\`
+(Windows) during setup. After that the SessionStart hook keeps them current
+with the plugin cache automatically (`sync.ps1` on Windows, a symlink for
+`vm-free-port.sh` on the VM), so plugin updates reach the running bridge
+without a manual re-copy.

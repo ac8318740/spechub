@@ -28,27 +28,29 @@ troubleshoot="${plugin_root}/TROUBLESHOOTING.md"
 cli_wrapper="${plugin_root}/cli/bin/spechub.js"
 cli_dist="${plugin_root}/cli/dist/index.js"
 
-# Symlink a path at $1 to point at $cli_wrapper. Reports linked / updated / unchanged.
+# Symlink $link to point at $src. Reports linked / updated / unchanged.
+# Args: $1 = source target, $2 = link path, $3 = human label for the log message.
 # Echoes a one-line status to stderr when a change happens or a warning fires.
 link_cli() {
-  local link="$1"
-  local label="$2"
+  local src="$1"
+  local link="$2"
+  local label="$3"
   local dir
   dir=$(dirname "$link")
 
   if [ ! -e "$link" ] && [ ! -L "$link" ]; then
     mkdir -p "$dir" 2>/dev/null
-    if ln -s "$cli_wrapper" "$link" 2>/dev/null; then
-      echo "spechub: linked ${label} CLI at ${link} -> ${cli_wrapper}" >&2
+    if ln -s "$src" "$link" 2>/dev/null; then
+      echo "spechub: linked ${label} at ${link} -> ${src}" >&2
     else
       echo "spechub: failed to create symlink at ${link} – see ${troubleshoot} (section: command not found)." >&2
     fi
   elif [ -L "$link" ]; then
     local current
     current=$(readlink "$link")
-    if [ "$current" != "$cli_wrapper" ]; then
-      if ln -sfn "$cli_wrapper" "$link" 2>/dev/null; then
-        echo "spechub: updated ${label} CLI at ${link} -> ${cli_wrapper}" >&2
+    if [ "$current" != "$src" ]; then
+      if ln -sfn "$src" "$link" 2>/dev/null; then
+        echo "spechub: updated ${label} at ${link} -> ${src}" >&2
       else
         echo "spechub: failed to update stale symlink at ${link} (was: ${current}) – see ${troubleshoot} (section: stale cache)." >&2
       fi
@@ -64,11 +66,11 @@ if [ -n "$plugin_root" ] && [ -f "$cli_wrapper" ]; then
     echo "spechub: this should not happen for a published version – see ${troubleshoot} (section: ERR_MODULE_NOT_FOUND)." >&2
   else
     # Agent-facing invariant path. Skills/agents invoke this directly.
-    link_cli "${HOME}/.claude/spechub/bin/spechub" "agent"
+    link_cli "$cli_wrapper" "${HOME}/.claude/spechub/bin/spechub" "agent CLI"
 
     # Human-convenience path. Only useful when ~/.local/bin is on PATH.
     human_link="${HOME}/.local/bin/spechub"
-    link_cli "$human_link" "human"
+    link_cli "$cli_wrapper" "$human_link" "human CLI"
 
     if [ -L "$human_link" ]; then
       case ":${PATH}:" in
@@ -90,6 +92,36 @@ if [ -n "$plugin_root" ] && [ -f "$cli_wrapper" ]; then
       esac
     fi
   fi
+fi
+
+# --- Playwriter bridge: keep deployed scripts current with the plugin cache ---
+# The bridge runs as OS scheduled tasks (Windows) and an on-demand helper (VM)
+# that live outside the plugin, so a plugin update alone never reaches them.
+# Reconcile them here, the same way the CLI symlink above is reconciled. Both
+# branches no-op unless the bridge is actually present on this machine.
+if [ -n "$plugin_root" ]; then
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*)
+      # Windows: copy changed bridge scripts out of the cache and restart only
+      # the affected tasks. sync.ps1 self-gates on "bridge installed".
+      sync_ps1="${plugin_root}/assets/playwriter-bridge/sync.ps1"
+      if [ -f "$sync_ps1" ] && command -v powershell.exe >/dev/null 2>&1; then
+        win_root=$(cygpath -w "$plugin_root" 2>/dev/null || printf '%s' "$plugin_root")
+        win_sync=$(cygpath -w "$sync_ps1" 2>/dev/null || printf '%s' "$sync_ps1")
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$win_sync" -PluginRoot "$win_root" >&2 2>&1 || true
+      fi
+      ;;
+    Linux|Darwin)
+      # VM / macOS: vm-free-port.sh is invoked on demand, so a symlink to the
+      # cache copy keeps it current with no copy and no restart - mirrors the
+      # agent-facing CLI symlink. Skips silently if the helper is not shipped.
+      vmfp_src="${plugin_root}/assets/playwriter-bridge/vm-free-port.sh"
+      vmfp_link="${HOME}/.claude/spechub/bin/vm-free-port.sh"
+      if [ -f "$vmfp_src" ]; then
+        link_cli "$vmfp_src" "$vmfp_link" "vm-free-port.sh"
+      fi
+      ;;
+  esac
 fi
 
 if [ ! -f spechub/project.yaml ]; then

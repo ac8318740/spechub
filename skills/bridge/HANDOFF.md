@@ -35,7 +35,7 @@ tunnel-vm1.example.com.log shows "remote port forwarding failed for
 listen port 19988", meaning something on the VM already holds the port.
 
 Run on vm1.example.com:
-  bash vm-free-port.sh
+  bash ~/.claude/spechub/bin/vm-free-port.sh
 
 Expected result:
   ss -lnt 'sport = :19988' is empty, or vm-free-port.sh refuses and

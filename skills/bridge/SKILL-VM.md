@@ -59,56 +59,70 @@ ssh-keygen -l -f ~/.ssh/authorized_keys | tail
 and pasting the tail output back to the Windows agent as the handoff
 "Report back".
 
-### 4. Enable server-side keepalive (required in practice)
+### 4. Enable server-side keepalive (required for self-heal)
 
-Dead SSH client sessions are the dominant cause of stuck port 19988.
-Without these settings, abrupt Windows-side kills (laptop sleep, network
-drop, `Stop-Process -Force` on the tunnel) leave orphan `sshd` forward
-channels bound to the port, and the next tunnel attempt hits
-`remote port forwarding failed` indefinitely.
+When the laptop drops abruptly (sleep, network change, VPN flap), the
+half-open SSH session leaves an orphan `sshd` forward channel bound to
+port 19988. The VM only releases it once `sshd` reaps the dead client,
+which takes `ClientAliveInterval × ClientAliveCountMax` seconds. Until
+then the laptop's reconnect hits `remote port forwarding failed`.
 
-Verify the config is in place on this VM:
+The Windows `tunnel.ps1` retries a stuck port for ~10 min, so the bridge
+self-heals as long as the reap happens inside that window. Two cases
+still break it:
+
+- **Keepalive disabled** (`ClientAliveInterval 0`) – the orphan never
+  reaps, the port stays wedged, and the tunnel gives up after ~10 min.
+  Self-heal is impossible.
+- **Keepalive very loose** – recovery is slow. A default Azure / cloud
+  image ships `ClientAliveInterval 120` (≈360 s reap); the runbook value
+  of 30 (≈90 s) recovers about 4× faster.
+
+Check the *effective* value. This needs root – the drop-in files under
+`sshd_config.d/` are not world-readable, so a non-root `sshd -T` prints
+nothing useful:
 
 ```bash
-sshd -T 2>/dev/null | grep -E '^(clientaliveinterval|clientalivecountmax)'
+sudo sshd -T | grep -E '^(clientaliveinterval|clientalivecountmax)'
 ```
 
-Expected output:
+Want:
 
 ```
 clientaliveinterval 30
 clientalivecountmax 3
 ```
 
-If either is absent or zero, append to `/etc/ssh/sshd_config`:
-
-```
-ClientAliveInterval 30
-ClientAliveCountMax 3
-```
-
-Then reload:
+**Do not just append to `/etc/ssh/sshd_config`.** Cloud images set this
+in a drop-in (e.g. `/etc/ssh/sshd_config.d/50-cloudimg-settings.conf`),
+and sshd uses the *first* value it reads. The
+`Include /etc/ssh/sshd_config.d/*.conf` line sits near the top of the
+main config and globs in lexical order, so a later append loses to the
+existing `50-` drop-in. Win by adding a drop-in that sorts *before* it:
 
 ```bash
+printf 'ClientAliveInterval 30\nClientAliveCountMax 3\n' | \
+  sudo tee /etc/ssh/sshd_config.d/10-playwriter-keepalive.conf
 sudo systemctl reload ssh || sudo systemctl reload sshd
 ```
 
-Re-run the verify command above. Dead clients then get reaped in about
-90 s and the reverse-forward socket releases naturally.
+Re-run the `sudo sshd -T` check and confirm it now reports 30 / 3. If it
+still shows the loose value, the `Include` on this distro is ordered
+differently – edit the drop-in that set it instead of adding a new one.
 
-This is marked "required in practice" (not "recommended") because every
-time this VM has seen the stuck-port cycle, the root cause was a missing
-or unloaded keepalive. The Windows-side `tunnel.ps1` resilience cannot
-fix a port that the server-side `sshd` refuses to release.
+### 5. `vm-free-port.sh` is auto-linked
 
-### 5. Install `vm-free-port.sh`
+The SpecHub SessionStart hook links the helper to an invariant path on
+each Claude Code launch:
 
-Copy from `plugins/spechub/assets/playwriter-bridge/vm-free-port.sh` to a
-location on your `PATH` (or invoke it directly). Mark it executable:
-
-```bash
-chmod +x vm-free-port.sh
 ```
+~/.claude/spechub/bin/vm-free-port.sh -> <plugin cache>/assets/playwriter-bridge/vm-free-port.sh
+```
+
+Invoke it by that path. The symlink always points at the current plugin
+version, so the helper stays current with no manual copy. If you prefer a
+copy on your `PATH` instead, copy the file and `chmod +x` it – but then you
+own keeping it updated.
 
 The script has a guardrail: it refuses to kill the port holder if that
 holder is your own interactive SSH session. Scoped strictly to port
@@ -163,7 +177,7 @@ unreachable.
 Run:
 
 ```bash
-bash vm-free-port.sh
+bash ~/.claude/spechub/bin/vm-free-port.sh
 ```
 
 The script walks the situation and either clears the socket or refuses

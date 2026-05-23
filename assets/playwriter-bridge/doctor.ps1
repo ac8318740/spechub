@@ -181,7 +181,7 @@ on the VM already holds the port. Marker contents:
 $tail
 
 Run on ${h}:
-  bash vm-free-port.sh
+  bash ~/.claude/spechub/bin/vm-free-port.sh
 
 Expected result:
   ss -lnt 'sport = :19988' is empty, or vm-free-port.sh refuses and tells

@@ -11,12 +11,18 @@
 # success without the forward and the bridge would silently not work.
 #
 # Retry policy:
-# - Transient network errors (connection refused / timed out / no route) are
-#   retried with exponential backoff 5 → 10 → 20 → 40 → 80 → 120 s cap.
+# - Transient errors (connection refused / timed out / no route / TCP reset
+#   under a live session / Win32 connect "Unknown error") are retried with
+#   exponential backoff 5 → 10 → 20 → 40 → 80 → 120 s cap.
 # - Successful bind (process ran at least 30 s) resets the backoff.
-# - Three consecutive "remote port forwarding failed" results exit the
-#   script and write a stuck marker. A stuck remote port never clears
-#   itself; spinning is pure cost.
+# - "remote port forwarding failed" is recoverable: it clears once the VM's
+#   sshd reaps the orphaned forward channel left by the dropped session
+#   (ClientAliveInterval × ClientAliveCountMax – ~90 s on a VM configured per
+#   the runbook, up to ~360 s on a default/cloud-image VM). We retry it at a
+#   30 s cadence for ~10 min so the bridge self-heals from a network drop
+#   without a manual restart. Only after that window do we treat the port as
+#   genuinely wedged (a non-sshd holder, or keepalive disabled), write a
+#   stuck marker, and exit.
 # - "Permission denied" or "Host key verification failed" exit immediately
 #   with a marker. These require user action.
 #
@@ -50,9 +56,11 @@ New-Item -Path $logDir -ItemType Directory -Force | Out-Null
 $logFile = Join-Path $logDir "tunnel-$TargetHost.log"
 $markerFile = Join-Path $logDir "tunnel-$TargetHost.stuck"
 
-# Clear any previous stuck marker on start. The script only writes a new
-# one when it decides to exit.
-Remove-Item $markerFile -ErrorAction SilentlyContinue
+# The stuck marker is NOT cleared on start. The scheduler can restart this
+# task within its backstop window after an `exit 10`, so clearing on start
+# would let doctor.ps1 sample green during a still-wedged restart loop. The
+# marker now reflects "still needs attention until a real bind succeeds" – it
+# is cleared only after a successful bind (see the proof-of-life path below).
 
 function Write-Log {
     param(
@@ -105,7 +113,13 @@ function Classify-Output {
     if ($joined -match 'Host key verification failed') {
         return 'host-key'
     }
-    if ($joined -match 'Connection refused|Connection timed out|No route to host|Network is unreachable|Could not resolve hostname') {
+    # 'Connection reset' / 'client_loop: send disconnect' is OpenSSH's message
+    # when the TCP socket of a live session is reset under it (wifi roam, VPN
+    # flap, suspend/resume). 'port <n>: Unknown error' is Win32-OpenSSH's
+    # WSAEHOSTUNREACH/WSAENETUNREACH on connect. Both are recoverable network
+    # events – classify transient so they back off and reconnect rather than
+    # falling through to 'unknown'.
+    if ($joined -match 'Connection refused|Connection timed out|Connection reset|client_loop: send disconnect|No route to host|Network is unreachable|Could not resolve hostname|port \d+: Unknown error') {
         return 'transient'
     }
     return 'unknown'
@@ -123,6 +137,14 @@ $remote = "$User@$TargetHost"
 $backoff = @(5, 10, 20, 40, 80, 120)
 $backoffIndex = 0
 $stuckStreak = 0
+
+# Stuck-port retry budget. "remote port forwarding failed" clears once the VM
+# reaps the orphaned forward channel of the dropped session; we retry across
+# that window before giving up. 20 × 30 s ≈ 10 min outlasts both a tightened
+# (~90 s) and a default cloud-image (~360 s) reap window, so the bridge
+# self-heals without a manual restart. Past that, the port is genuinely wedged.
+$stuckRetrySeconds = 30
+$stuckMaxStreak = 20
 
 while ($true) {
     Rotate-Log
@@ -149,15 +171,19 @@ while ($true) {
     switch ($class) {
         'stuck-port' {
             $stuckStreak++
-            if ($stuckStreak -ge 3) {
-                Write-Log -State 'fatal' -ExitCode $code -Message "Stuck remote port (3 consecutive). Writing marker and exiting."
-                Write-Marker -Reason 'remote port forwarding failed – port 19988 already bound on VM' `
-                    -Remediation "Run vm-free-port.sh on $TargetHost, then retrigger this task from Task Scheduler."
+            if ($stuckStreak -ge $stuckMaxStreak) {
+                $mins = [int]($stuckMaxStreak * $stuckRetrySeconds / 60)
+                Write-Log -State 'fatal' -ExitCode $code -Message "Remote port still bound on $TargetHost after ~$mins min of retries. Writing marker and exiting."
+                Write-Marker -Reason "remote port forwarding failed – port 19988 still bound on VM after ~$mins min of retries (the VM's sshd has not reaped the orphaned forward channel)" `
+                    -Remediation "Run ~/.claude/spechub/bin/vm-free-port.sh on $TargetHost, then retrigger this task from Task Scheduler. If this recurs, tighten the VM's sshd ClientAliveInterval per the bridge SKILL-VM runbook so orphaned forwards reap faster."
                 exit 10
             }
-            # Short wait between stuck attempts; sshd cleanup might free
-            # the port in rare cases (e.g. ClientAlive just fired).
-            Start-Sleep -Seconds 10
+            # The port is held by the orphaned forward channel of the dropped
+            # session. Wait for the VM's sshd ClientAlive reaper to release it;
+            # the next attempt then binds. This is the bridge's self-heal path,
+            # so the wait is sized to outlast the reap window, not a token 10 s.
+            Write-Log -State 'stuck-retry' -ExitCode $code -Message "Port 19988 still held on $TargetHost (attempt $stuckStreak/$stuckMaxStreak); waiting ${stuckRetrySeconds}s for the VM to reap the orphaned forward."
+            Start-Sleep -Seconds $stuckRetrySeconds
             continue
         }
         'auth-denied' {
@@ -176,8 +202,16 @@ while ($true) {
             # Transient or unknown – apply backoff. Reset if the previous
             # run lasted at least 30 s (implies the forward was bound and
             # the session stayed up).
-            $stuckStreak = 0
-            if ($ranSeconds -ge 30) { $backoffIndex = 0 }
+            # A short transient blip must NOT zero the stuck-streak – only a
+            # successful bind does, so the give-up budget can't be starved by
+            # a single brief failure between stuck-port retries.
+            if ($ranSeconds -ge 30) {
+                $stuckStreak = 0
+                $backoffIndex = 0
+                # A real bind succeeded, so the bridge no longer needs
+                # attention – clear any stuck marker left by a prior wedged run.
+                Remove-Item $markerFile -ErrorAction SilentlyContinue
+            }
             $wait = $backoff[[Math]::Min($backoffIndex, $backoff.Length - 1)]
             Write-Log -State 'retry' -ExitCode $code -Message "Sleeping ${wait}s (class=$class, lasted $([int]$ranSeconds)s)"
             Start-Sleep -Seconds $wait
