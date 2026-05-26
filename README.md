@@ -102,6 +102,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:archive` | Archive completed change, update living specs |
 | `/spechub:config` | View/modify workflow settings |
 | `/spechub:sync` | Update specs from code changes |
+| `/spechub:handoff` | Checkpoint a long session so work survives compaction |
 
 ### Setup and Supporting
 
@@ -116,6 +117,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:test-conventions` | Test placement rules and naming conventions |
 | `/spechub:code-review` | Linus Torvalds code philosophy for reviews |
 | `/spechub:browser-verify` | agent-browser command reference, CDP troubleshooting, and selector strategy |
+| `/spechub:bridge` | Set up and operate the Playwriter cross-device browser bridge |
 
 ## Agents
 
