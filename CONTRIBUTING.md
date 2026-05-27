@@ -13,18 +13,27 @@ TROUBLESHOOTING.md           – downstream install diagnostics for Claude Code
 
 ## CLI build discipline
 
-The CLI ships **pre-built**: `cli/dist/` is committed alongside `cli/src/`. Claude Code marketplace plugins are clone-and-run – there is no install step that can build for downstream users.
+The CLI ships **pre-built and bundled**: `cli/dist/index.js` is a single self-contained file with every runtime dependency (commander, chalk, fast-glob, yaml, zod) inlined by esbuild. Claude Code marketplace plugins are clone-and-run – there is no `npm install` step downstream, so the bundle must work with no `node_modules/` next to it.
 
 After any change in `cli/src/`:
 
 ```
 cd cli
 npm install     # only needed when package.json changed
-npm run build
+npm run build   # rebuilds dist/index.js via esbuild (see build.mjs)
+npm run typecheck  # tsc --noEmit, catches type errors the bundler skips
 git add src/ dist/ package.json package-lock.json
 ```
 
 Both `src/` and `dist/` belong in the same commit. A stale `dist/` ships broken or misleading behavior to every downstream user until the next release.
+
+To verify the bundle survives a fresh install, park `node_modules/` and exercise the bin wrapper:
+
+```
+mv node_modules /tmp/nm-park && node bin/spechub.js --help; mv /tmp/nm-park node_modules
+```
+
+If the bundle is healthy, this prints the full subcommand list. If it throws `Dynamic require of "node:..."`, the esbuild banner in `build.mjs` regressed.
 
 ### Recommended pre-commit hook
 
@@ -42,7 +51,7 @@ if git diff --cached --name-only | grep -q '^cli/src/'; then
 fi
 ```
 
-This runs `tsc` only when `cli/src/` is part of the staged diff, then stages the regenerated `dist/`. If `tsc` fails, the commit aborts.
+This runs `npm run build` (esbuild) only when `cli/src/` is part of the staged diff, then stages the regenerated `dist/`. If the build fails, the commit aborts.
 
 ## Releasing
 

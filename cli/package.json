@@ -23,8 +23,9 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }
