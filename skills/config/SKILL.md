@@ -97,7 +97,29 @@ cat spechub/project.yaml
 
 If missing: "No project.yaml found. Run `/spechub:init` to set up."
 
-#### 2. agent-browser (if frontend configured)
+#### 2. domain-map.yaml exists
+
+```bash
+cat spechub/domain-map.yaml
+```
+
+Applies to every project, not just those with a frontend.
+
+If missing, spec sync is silently dead – `/spechub:commit`, `/spechub:archive`, `/spechub:bootstrap`, `/spechub:propose` and `/spechub:pre-commit-review` all read this file and skip when it is absent, so living specs never update. Projects initialized before SpecHub generated this file are the common case.
+
+Offer to build it:
+
+```
+No spechub/domain-map.yaml found. Without it, spec sync skips every commit
+and your living specs never update.
+Generate one now by exploring the codebase?
+```
+
+If the user agrees, run Step 5 of the `init` skill – explore `directories.source`, propose domains, confirm, write the file.
+
+If `spechub/specs/` already contains domain directories, propose those names first and map paths to them. Renaming a domain here orphans its existing `spec.md`.
+
+#### 3. agent-browser (if frontend configured)
 
 ```bash
 which agent-browser
@@ -112,7 +134,7 @@ Install it now? (npm install -g agent-browser)
 
 If user agrees, run `npm install -g agent-browser`.
 
-#### 3. agent-browser.json (if frontend configured)
+#### 4. agent-browser.json (if frontend configured)
 
 ```bash
 cat agent-browser.json
@@ -127,7 +149,7 @@ Create it now? ({"cdp": "<frontend.browser.cdp_port from project.yaml>"})
 
 If user agrees, write the file. Use `frontend.browser.cdp_port` from project.yaml; if unset, default to `19988` when `frontend.browser.mode` is `remote`, otherwise `9555`.
 
-#### 4. Browser connectivity (if frontend configured)
+#### 5. Browser connectivity (if frontend configured)
 
 Read `frontend.browser.cdp_port` from project.yaml (with the mode-aware default above) and use it as `<cdp_port>`:
 
@@ -189,7 +211,7 @@ If "Headless" selected, set `frontend.browser.mode: headless` in project.yaml. N
 
 If "Skip for now" selected, leave `frontend.browser.mode` unset.
 
-#### 5. Verification knowledge base (if frontend configured)
+#### 6. Verification knowledge base (if frontend configured)
 
 ```bash
 cat <helpers_dir>/VERIFICATION-KNOWLEDGE.md
@@ -197,7 +219,7 @@ cat <helpers_dir>/VERIFICATION-KNOWLEDGE.md
 
 If missing, offer to create it with the empty template.
 
-#### 6. Chromium available (if frontend configured and no remote browser)
+#### 7. Chromium available (if frontend configured and no remote browser)
 
 Check if headless Chromium can be launched:
 
@@ -207,12 +229,13 @@ which chromium || which chromium-browser || which google-chrome || which google-
 
 If none found: "No Chromium/Chrome binary found. The frontend-verifier needs one to run headless. Install with: `sudo apt install chromium-browser` (Ubuntu/Debian) or `sudo dnf install chromium` (Fedora)."
 
-#### 7. Summary
+#### 8. Summary
 
 ```
 ## Config Health Check
 
 ✓ project.yaml exists
+✓ domain-map.yaml exists ([n] domains) – spec sync active
 ✓ agent-browser installed
 ✓ agent-browser.json configured
 ✓ Browser: connected (remote) | available (headless) | available (local) | not configured

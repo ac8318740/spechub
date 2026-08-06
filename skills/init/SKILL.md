@@ -81,11 +81,51 @@ For each selected item, ask one follow-up question at a time via AskUserQuestion
 3. Leave project CLAUDE.md alone – orchestrator instructions load automatically via the SessionStart hook
 4. If a project CLAUDE.md contains a legacy `@import .../plugins/cache/ac8318740-plugins/spechub/<version>/CLAUDE.md` line, remove it (stale reference from older SpecHub versions)
 
-## Step 5: Set Up Browser Verification
+## Step 5: Generate the Domain Map
+
+`spechub/domain-map.yaml` maps source paths to spec domains. Spec sync, `/spechub:archive`, `/spechub:bootstrap`, `/spechub:propose` and `/spechub:pre-commit-review` all read it. Without it, every spec-sync path skips silently and living specs never update – so init must always produce one.
+
+### 5a. Propose domains
+
+Launch an **Explore subagent** over `directories.source` to propose domains. Ask it for the top-level functional areas – not one domain per directory, and not one domain for the whole tree. For each: a kebab-case name, the paths that belong to it, and a one-line description of what it owns.
+
+Guidance for the subagent:
+
+- Group by responsibility, not by layer. `auth`, `billing`, `search` – not `models`, `controllers`, `utils`.
+- Prefer directory prefixes over file lists. Paths are matched as prefixes.
+- Aim for 3 to 10 domains. Fewer means spec sync can't tell changes apart; more means every commit touches several.
+- Leave tests, config, build files and docs unmapped. Consumers skip anything outside all domains.
+
+### 5b. Confirm with the user
+
+Print the proposed map and use **AskUserQuestion** to confirm: "Use this domain map, or adjust it?"
+
+Options: "Use it", "Adjust (I'll give feedback)".
+
+If the codebase is empty or too small to have domains – a greenfield project – say so and write the starter form in 5c instead. Do not invent domains for code that does not exist yet.
+
+### 5c. Write it
+
+Write `spechub/domain-map.yaml`:
+
+```yaml
+# Domain Map: maps source paths to spec domains
+# Read by spec sync, /spechub:archive, /spechub:bootstrap, /spechub:propose
+
+domains:
+  <domain-name>:
+    paths:
+      - <path prefix>
+    description: <what this domain owns>
+```
+
+For a greenfield project, write the header plus a single commented example under `domains:` and tell the user to fill it in, or to run `/spechub:init` again once there is code to map.
+
+## Step 6: Set Up Browser Verification
 
 If the project has a frontend configured:
 
-### 5a. Install agent-browser
+### 6a. Install agent-browser
 
 ```bash
 which agent-browser
@@ -97,7 +137,7 @@ If not found:
 npm install -g agent-browser
 ```
 
-### 5b. Create verification knowledge base
+### 6b. Create verification knowledge base
 
 Create `<helpers_dir>/VERIFICATION-KNOWLEDGE.md`:
 
@@ -126,7 +166,7 @@ Evolving reference for browser-based verification. Updated by the frontend-verif
      Example: "To verify login: open /login, snapshot, fill @username, fill @password, click @submit, wait 2s, snapshot again, check for dashboard heading" -->
 ```
 
-### 5c. Browser environment setup
+### 6c. Browser environment setup
 
 Ask the user which browser environment they'll use via AskUserQuestion:
 
@@ -215,7 +255,7 @@ curl -s --max-time 3 http://localhost:19988/json/version
 
 **If "Skip"**: Leave `frontend.browser` unset and skip writing `agent-browser.json`. Tell the user to run `/spechub:config set frontend.browser.mode <mode>` later.
 
-## Step 6: Report
+## Step 7: Report
 
 ```
 ## SpecHub Initialized
@@ -231,6 +271,7 @@ Spec sync:    [enabled/disabled]
 Frontend:     [verified/not configured]
 Browser:      [agent-browser installed / not applicable]
 Config:       spechub/project.yaml
+Domain map:   spechub/domain-map.yaml ([n] domains / starter – fill in)
 CLAUDE.md:    untouched (orchestrator loads via SessionStart hook)
 
 Next: describe what you want to build, or run /spechub:bootstrap for existing code.
