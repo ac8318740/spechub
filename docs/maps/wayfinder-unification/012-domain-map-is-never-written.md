@@ -25,7 +25,7 @@ one-HITL-node-per-session budget.
 
 ## Answer
 
-Fixed in 0.12.2 on two paths, because init only ever runs once.
+Fixed in 0.12.3 on two paths, because init only ever runs once.
 
 **New installs** – `/spechub:init` gained Step 5, which explores
 `directories.source`, proposes 3 to 10 domains grouped by responsibility rather
