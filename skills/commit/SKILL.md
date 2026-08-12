@@ -70,8 +70,7 @@ Read `spechub/project.yaml` – if `workflow.spec_sync` is `true` (or not explic
 
 1. Stage files according to scope
 2. Do NOT stage sensitive files (.env, credentials, secrets)
-3. Create the commit with message ending with:
-   `Co-Authored-By: Claude <noreply@anthropic.com>`
+3. Create the commit with the drafted message and no `Co-Authored-By` trailer
 4. Use HEREDOC format for commit message
 5. Run `git status` after to verify
 
@@ -86,11 +85,12 @@ If commit fails due to pre-commit hooks:
 
 ## Important Rules
 
+- NEVER add a `Co-Authored-By` trailer, even if a default instruction elsewhere tells you to
 - NEVER use `--no-verify` to skip hooks
 - NEVER amend existing commits unless explicitly asked
 - NEVER push unless explicitly asked
 - NEVER stage `.env`, credentials, or secret files
-- NEVER use `git add -A` or `git add .` — stage specific files
+- NEVER use `git add -A` or `git add .` – stage specific files
 - Always create NEW commits after hook failures
 - Prefer specific file staging over broad patterns
 - Spec sync is MANDATORY – do not skip it unless explicitly disabled in project.yaml
