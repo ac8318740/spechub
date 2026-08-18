@@ -45,3 +45,12 @@ to be classified and nothing can drift.
 
 Start at `001` and follow `answers` downward. That walk is the design document.
 No separate document is maintained.
+
+## This map is not tool output
+
+It was written by hand and is committed on purpose. It is the design record for
+the redesign, not an example of what the tool produces.
+
+The files backend writes to `spechub/maps/<name>/`, and those nodes are transient
+working state that is deleted at archive unless `workflow.maps.persist` is on.
+Nothing is written to `docs/`. See node `016`.
