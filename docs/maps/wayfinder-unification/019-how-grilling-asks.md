@@ -27,30 +27,29 @@ rather than making an exception to it.
 option, put choices in a table. Grilling reuses it. A numbered round scans fine
 on the numbers alone.
 
-### `workflow.grilling.questions`, default `inline`
+### `workflow.grilling.questions`, default `tool`
 
 | Value    | Behaviour                                              |
 | -------- | ------------------------------------------------------ |
+| `tool`   | the host's question tool, one call per round            |
 | `inline` | questions as prose in the reply, recommendation bolded |
-| `tool`   | the host's question tool, one call per round           |
 
-Default `inline` for two reasons, both about capability rather than taste.
+Default `tool`. Selectable options are less work to answer than prose, and the
+round is legible at a glance.
 
-The question tool caps a call at four questions with two to four discrete options
-each. A frontier is however wide the settled prerequisites make it, so a round can
-exceed four, and a grilling question is often open rather than a choice among
-options. Inline has no cap and no shape requirement.
+### The cap is mechanical, not a preference
 
-Observed too: over one long design session the tool was offered repeatedly and the
-answer came back as prose that fitted none of the options roughly as often as it
-fitted one. Forcing a shape on an answer loses the part that did not fit.
+The question tool accepts at most four questions per call, each with two to four
+discrete options. A frontier is however wide the settled prerequisites make it,
+and a grilling question is often open rather than a choice among options.
 
-### When `tool` is set
-
-Use it, and fall back to inline for any round it cannot hold – more than four
+So `tool` falls back to inline for any round it cannot hold – more than four
 questions, or a question with no discrete options. Never split one round across
-two calls to fit the cap: a round is defined as the whole frontier, and splitting
-it silently reintroduces the ordering the frontier exists to prevent.
+two calls to fit the cap: a round is the whole frontier, and splitting it
+reintroduces the ordering the frontier exists to prevent.
+
+Whichever mode runs, an open answer must survive. When the reply fits none of the
+offered options, the answer is the reply, not the nearest option.
 
 ## Note
 

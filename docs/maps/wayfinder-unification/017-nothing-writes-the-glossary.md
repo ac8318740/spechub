@@ -1,5 +1,5 @@
 ---
-status: fog
+status: open
 mode: hitl
 kind: grilling
 answers: 006
@@ -21,10 +21,31 @@ skill that creates or sharpens them, and no equivalent of the upstream
 So the one-session path currently produces ADRs and nothing else, and the durable
 half of `grill-with-docs` is the half SpecHub cannot do.
 
-## What needs deciding
+## Settled: where it lives
 
-- Does the glossary belong in a `CONTEXT.md` at the repo root, inside
-  `spechub/specs/`, or as a domain-level file beside each `spec.md`?
+Two files, both created lazily, mirroring the upstream structure without its index.
+
+- `CONTEXT.md` at the repo root – cross-domain vocabulary only.
+- `spechub/specs/<domain>/CONTEXT.md` – domain terms, beside that domain's
+  `spec.md`.
+
+**No index file.** Upstream needs a `CONTEXT-MAP.md` to say where each context
+lives. SpecHub already has `domain-map.yaml`, which lists every domain and the
+paths it owns. An index would be a second place recording the same thing, and the
+two would drift. This deletes a concept rather than adding one.
+
+**Not co-located with code**, which is where upstream puts it. A domain owns a
+list of path prefixes, not one directory – a real map in use has a single domain
+owning four unrelated paths, including individual files in three different
+directories. There is no obvious directory to put its glossary in. The domain's
+spec directory is the only place a domain reliably has.
+
+**Glossary and nothing else.** No implementation details, not a spec, not a
+scratch pad. Borrowed from upstream and worth keeping: the moment it accepts
+implementation notes it becomes another document competing with the living specs.
+
+## Still open
+
 - Is it a skill of its own, or a second responsibility of the ADR skill? Both
   write durable prose from a settled decision.
 - Living specs are generated from code at commit time. A glossary is not derivable
