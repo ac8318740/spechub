@@ -47,5 +47,5 @@ mandates the opposite – every path must come from exploration – and that is 
 only because a task list is consumed within hours.
 
 So: nodes describe behaviour. File paths are resolved at claim time, not at
-creation time. This borrows the durability rule from Matt Pocock's agent briefs,
+creation time. This borrows the durability rule from the upstream agent briefs,
 where an item may sit in a ready queue for weeks while the codebase moves.

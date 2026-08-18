@@ -10,7 +10,7 @@ blocked-by: []
 
 ## Question
 
-Wayfinder's node kinds delegate to other skills. Which of Matt Pocock's set does
+Wayfinder's node kinds delegate to other skills. Which of the upstream set does
 SpecHub need, which does it already have under another name, and which would it
 be importing for no reason?
 
@@ -21,6 +21,13 @@ sequential loop, exactly one question at a time, a recommended answer with each,
 and a stop condition. It is welded to reducing ambiguity in `proposal.md`.
 Extract it as a model-invocable primitive any node can reach, then make the
 callers thin. Removes duplicated interview prose from four skills.
+
+**The same shape at two scales.** The upstream `grilling` skill maps decisions as
+a design tree, works it in rounds, and defines the frontier as every decision
+whose prerequisites are settled. That is this map's provenance tree and frontier,
+in conversation rather than on a tracker. One structure, and the only question is
+whether it has to outlive the session. This is the strongest support for
+progressive materialisation in node `007`.
 
 **An ADR skill.** One to three sentences in `docs/adr/NNNN-slug.md`, created
 lazily, offered only when the decision is hard to reverse **and** surprising
@@ -47,6 +54,20 @@ than to a file, and once the four tracker operations exist that is a backend for
 `/spechub:tasks`, not a new skill. Its own tracker handling also hard-codes two
 cases inline, so it is the less extensible of the two patterns on offer.
 
+**`grill-me` and `grill-with-docs` as skills.** Both are aliases. `grill-me` is
+one line that calls `grilling`. `grill-with-docs` is one line that calls
+`grilling` and `domain-modeling`. They exist because the upstream set has no
+single front door, so each combination needs its own trigger word.
+
+SpecHub settled on one front door in node `007`. Adding trigger-word aliases over
+`grilling` would put the band decision back on the user every time, which is the
+thing `007` rejected. Their behaviour is kept; their names are not.
+
+What `grill-with-docs` does earn is the pairing: grilling on its own sharpens
+thinking and leaves nothing behind. Grilling plus a glossary producer is what
+makes a one-session effort durable. That pairing is the one-session front door
+above, and it needs something that writes a glossary – see node `017`.
+
 ## Adopt the role of to-spec, not its implementation
 
 `to-spec` collapses a cleared map into something buildable. SpecHub needs that
@@ -67,7 +88,7 @@ whole effort in context.
 
 ## Borrowed separately
 
-Matt Pocock's invocation rule, which is more consistent than SpecHub's:
+The upstream invocation rule, which is more consistent than SpecHub's:
 **stage-advancing skills are user-invoked; technique skills are model-invoked.**
 The human decides when the work changes phase; the model decides which technique
 applies within a phase. SpecHub has eleven of nineteen skills carrying

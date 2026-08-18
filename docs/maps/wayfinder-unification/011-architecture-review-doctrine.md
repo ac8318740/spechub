@@ -10,7 +10,7 @@ blocked-by: []
 
 ## Question
 
-Matt Pocock's architecture review skill scans a codebase and proposes refactors,
+The upstream architecture review skill scans a codebase and proposes refactors,
 then grills through whichever the user picks. Worth adopting, on the condition
 that it not be opinionated about what the architecture should look like?
 

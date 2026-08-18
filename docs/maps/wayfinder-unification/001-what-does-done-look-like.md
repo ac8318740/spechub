@@ -11,7 +11,7 @@ blocked-by: []
 
 SpecHub only fits a narrow band of work. Below it, plan mode is enough. Above
 it, the three-document ladder is too much ceremony. What is the destination for
-folding Matt Pocock's Wayfinder ideas in, and how will we know we reached it?
+folding Wayfinder's ideas in, and how will we know we reached it?
 
 ## Answer
 
