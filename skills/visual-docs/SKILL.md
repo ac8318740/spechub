@@ -37,18 +37,24 @@ flowchart TD
 Every numbered section maps to an element of the lead diagram, and section headings
 reuse the diagram's node labels verbatim. This is mechanical, not stylistic:
 
-- A **process node** with no section means the doc is incomplete
+- A box showing something **happening**, with no section, means the doc is incomplete
 - A section covering no part of the diagram either belongs in another doc, or the
   diagram is missing something
-- Renaming a node renames its section, and the reverse
+- Renaming a box renames its section, and the reverse
 
 Three exemptions, and only these three:
 
-| Exempt                                            | Why                                              |
-| ------------------------------------------------- | ------------------------------------------------ |
-| **Terminals** – the incoming request, a datastore | inputs and outputs are not steps                 |
-| **One section over adjacent nodes**               | allowed when they are one action, and the section names both |
-| **Meta sections** – limits, what changes next     | about the document, not the system               |
+**Start and end boxes.** A box showing what comes in or what is left behind is not
+a step, so there is nothing to write a section about. In a workflow diagram, the
+incoming request and the final stored output are both this.
+
+**Two boxes, one command.** Sometimes two boxes are worth drawing separately
+because they are two ideas, but one command does both. Give them one section and
+name both in the heading, so the reader can tell it covers both.
+
+**Sections about the document.** A section on what this doc leaves out, or what is
+about to change, is housekeeping for the reader. It describes the document, not the
+system, so no box should exist for it.
 
 Anything else without a match is a defect in one of the two. Do not add a section
 to justify a node, or a node to justify a section.
