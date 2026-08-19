@@ -70,6 +70,10 @@ If `spechub` doesn't run after install, see [TROUBLESHOOTING.md](TROUBLESHOOTING
 
 Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.8.md) for how to remove the stale `@import` line from your project CLAUDE.md.
 
+## Running agents in parallel
+
+Working over SSH with several agents at once? [docs/terminal-workspace.md](docs/terminal-workspace.md) documents one complete setup: herdr for panes that survive disconnect and worktree-backed workspaces, gh-dash for pull request triage, and diffnav for reading diffs. Exact config, keys, and the traps worth knowing.
+
 ## Skills
 
 ### Implementation
