@@ -91,6 +91,9 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 
 | Skill | Description |
 |-------|-------------|
+| `/spechub:map` | Entry point for planned work – charts a map if none exists, works the frontier if one does |
+| `grilling` | Interview technique – asks the whole frontier per round, each question with a recommended answer (model-invoked) |
+| `record-context` | Writes durable records when a decision lands – an ADR, a glossary term, both, or neither (model-invoked) |
 | `/spechub:propose` | Create a feature proposal with user stories |
 | `/spechub:clarify` | Resolve ambiguities in the proposal |
 | `/spechub:design` | Generate implementation design |
