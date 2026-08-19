@@ -19,6 +19,7 @@ import {
   loadNodes,
   mapDir,
   updateNode,
+  walkTree,
 } from '../lib/nodes.js';
 
 function fail(message: string): never {
@@ -255,6 +256,58 @@ export function register(program: Command): void {
           return;
         }
         for (const node of ready) printNode(node);
+      } catch (err) {
+        fail((err as Error).message);
+      }
+    });
+
+  nodeCmd
+    .command('walk')
+    .description('Package the map: preorder provenance walk, pinned nodes and the root in full')
+    .requiredOption('--map <name>', 'map name')
+    .option('--full', 'emit every body, not only pinned nodes and the root')
+    .option('--json', 'output as JSON')
+    .action((opts: { map: string; full?: boolean; json?: boolean }) => {
+      const root = findProjectRoot();
+      requireProject(root);
+      try {
+        const entries = walkTree(loadNodes(root, opts.map));
+        const inFull = (node: MapNode, depth: number): boolean =>
+          Boolean(opts.full) || node.pinned || depth === 0;
+        if (opts.json) {
+          console.log(
+            JSON.stringify(
+              entries.map(({ node, depth }) => ({
+                ...toJson(node),
+                depth,
+                ...(inFull(node, depth) ? { body: node.body } : {}),
+              })),
+              null,
+              2
+            )
+          );
+          return;
+        }
+        if (entries.length === 0) {
+          console.log(chalk.dim(`Map '${opts.map}' has no nodes.`));
+          return;
+        }
+        const sections: string[] = [];
+        for (const { node, depth } of entries) {
+          const heading = '#'.repeat(Math.min(depth + 1, 6));
+          const meta = [
+            node.status,
+            node.mode,
+            node.kind,
+            node.pinned ? 'pinned' : undefined,
+            node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(', ')}` : undefined,
+          ]
+            .filter(Boolean)
+            .join(', ');
+          const body = inFull(node, depth) ? node.body.trim() : '';
+          sections.push(`${heading} ${node.id} – ${node.title}\n(${meta})${body ? `\n\n${body}` : ''}`);
+        }
+        console.log(sections.join('\n\n'));
       } catch (err) {
         fail((err as Error).message);
       }

@@ -64,7 +64,7 @@ This detects your project type and generates `spechub/project.yaml` with workflo
 
 SpecHub ships a Node.js CLI for change management (`spechub new change`, `spechub status`, `spechub list`, `spechub archive`).
 
-The CLI also carries the files backend for map nodes (`spechub node create | read | update | list`), which stores one markdown file per node under `spechub/maps/<name>/`. These four operations are the whole tracker contract. `spechub node frontier` is a composed query over them – open nodes with no unresolved blockers, shallowest provenance depth first. Claim and resolve are compositions too, performed by skills through `update`.
+The CLI also carries the files backend for map nodes (`spechub node create | read | update | list`), which stores one markdown file per node under `spechub/maps/<name>/`. These four operations are the whole tracker contract. `spechub node frontier` is a composed query over them – open nodes with no unresolved blockers, shallowest provenance depth first. `spechub node walk` packages the map for a handoff: a preorder walk of the provenance tree with pinned nodes and the root in full. Claim and resolve are compositions too, performed by skills through `update`.
 
 The plugin's skills and agents invoke the CLI through an invariant absolute path – `~/.claude/spechub/bin/spechub` – that the SessionStart hook maintains. This means agents don't depend on your shell `PATH` and the CLI keeps working across plugin version bumps, non-interactive subshells, and fresh agent contexts.
 

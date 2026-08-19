@@ -10,6 +10,7 @@ import {
   loadNodes,
   mapDir,
   updateNode,
+  walkTree,
 } from './nodes.js';
 
 let root: string;
@@ -203,6 +204,28 @@ describe('list', () => {
     updateNode(root, 'demo', '001', {});
     const after = readFileSync(join(dir, file), 'utf-8');
     expect(after).toBe(before);
+  });
+});
+
+describe('walk', () => {
+  it('emits preorder with children in id order, regardless of mode or status', () => {
+    createNode(root, 'demo', { title: 'Root', status: 'resolved' });
+    createNode(root, 'demo', { title: 'A', answers: '001', status: 'resolved' });
+    createNode(root, 'demo', { title: 'B', answers: '001', mode: 'afk', status: 'fog' });
+    createNode(root, 'demo', { title: 'A1', answers: '002', status: 'out-of-scope' });
+    const walk = walkTree(loadNodes(root, 'demo'));
+    expect(walk.map(e => e.node.id)).toEqual(['001', '002', '004', '003']);
+    expect(walk.map(e => e.depth)).toEqual([0, 1, 2, 1]);
+  });
+
+  it('returns empty for an empty map and rejects two roots', () => {
+    expect(walkTree([])).toEqual([]);
+    const dir = mapDir(root, 'demo');
+    mkdirSync(dir, { recursive: true });
+    const rootFile = '---\nstatus: open\nmode: hitl\nblocked-by: []\n---\n\n';
+    writeFileSync(join(dir, '001-a.md'), rootFile + '# A\n');
+    writeFileSync(join(dir, '002-b.md'), rootFile + '# B\n');
+    expect(() => walkTree(loadNodes(root, 'demo'))).toThrow(/2 roots/);
   });
 });
 

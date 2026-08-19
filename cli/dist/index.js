@@ -16223,6 +16223,29 @@ function frontier(nodes) {
     return byDepth !== 0 ? byDepth : a.id.localeCompare(b.id);
   });
 }
+function walkTree(nodes) {
+  deriveDepths(nodes);
+  const roots = nodes.filter((n) => !n.answers);
+  if (nodes.length === 0) return [];
+  if (roots.length !== 1) {
+    throw new Error(`map has ${roots.length} roots \u2013 expected exactly one`);
+  }
+  const children = /* @__PURE__ */ new Map();
+  for (const node of nodes) {
+    if (!node.answers) continue;
+    const siblings = children.get(node.answers) ?? [];
+    siblings.push(node);
+    children.set(node.answers, siblings);
+  }
+  const out = [];
+  const visit = (node, depth) => {
+    out.push({ node, depth });
+    const kids = (children.get(node.id) ?? []).sort((a, b) => a.id.localeCompare(b.id));
+    for (const kid of kids) visit(kid, depth + 1);
+  };
+  visit(roots[0], 0);
+  return out;
+}
 var import_yaml5, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
 var init_nodes = __esm({
   "src/lib/nodes.ts"() {
@@ -16397,6 +16420,51 @@ function register8(program3) {
         return;
       }
       for (const node of ready) printNode(node);
+    } catch (err) {
+      fail(err.message);
+    }
+  });
+  nodeCmd.command("walk").description("Package the map: preorder provenance walk, pinned nodes and the root in full").requiredOption("--map <name>", "map name").option("--full", "emit every body, not only pinned nodes and the root").option("--json", "output as JSON").action((opts) => {
+    const root = findProjectRoot();
+    requireProject(root);
+    try {
+      const entries = walkTree(loadNodes(root, opts.map));
+      const inFull = (node, depth) => Boolean(opts.full) || node.pinned || depth === 0;
+      if (opts.json) {
+        console.log(
+          JSON.stringify(
+            entries.map(({ node, depth }) => ({
+              ...toJson(node),
+              depth,
+              ...inFull(node, depth) ? { body: node.body } : {}
+            })),
+            null,
+            2
+          )
+        );
+        return;
+      }
+      if (entries.length === 0) {
+        console.log(source_default.dim(`Map '${opts.map}' has no nodes.`));
+        return;
+      }
+      const sections = [];
+      for (const { node, depth } of entries) {
+        const heading = "#".repeat(Math.min(depth + 1, 6));
+        const meta = [
+          node.status,
+          node.mode,
+          node.kind,
+          node.pinned ? "pinned" : void 0,
+          node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(", ")}` : void 0
+        ].filter(Boolean).join(", ");
+        const body = inFull(node, depth) ? node.body.trim() : "";
+        sections.push(`${heading} ${node.id} \u2013 ${node.title}
+(${meta})${body ? `
+
+${body}` : ""}`);
+      }
+      console.log(sections.join("\n\n"));
     } catch (err) {
       fail(err.message);
     }

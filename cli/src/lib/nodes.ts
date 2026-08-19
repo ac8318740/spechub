@@ -316,6 +316,33 @@ export function frontier(nodes: MapNode[]): MapNode[] {
     });
 }
 
+// The packaging walk: preorder over the provenance tree, children in id
+// order. The walk is the reading order and the handoff – it emits every
+// node regardless of mode or depth, never filtering on leaf position.
+export function walkTree(nodes: MapNode[]): Array<{ node: MapNode; depth: number }> {
+  deriveDepths(nodes); // validates parents exist and the chain is acyclic
+  const roots = nodes.filter(n => !n.answers);
+  if (nodes.length === 0) return [];
+  if (roots.length !== 1) {
+    throw new Error(`map has ${roots.length} roots – expected exactly one`);
+  }
+  const children = new Map<string, MapNode[]>();
+  for (const node of nodes) {
+    if (!node.answers) continue;
+    const siblings = children.get(node.answers) ?? [];
+    siblings.push(node);
+    children.set(node.answers, siblings);
+  }
+  const out: Array<{ node: MapNode; depth: number }> = [];
+  const visit = (node: MapNode, depth: number): void => {
+    out.push({ node, depth });
+    const kids = (children.get(node.id) ?? []).sort((a, b) => a.id.localeCompare(b.id));
+    for (const kid of kids) visit(kid, depth + 1);
+  };
+  visit(roots[0], 0);
+  return out;
+}
+
 export function listMaps(root: string): string[] {
   const dir = join(root, SPECHUB_DIR, MAPS_DIR);
   if (!existsSync(dir)) return [];
