@@ -119,6 +119,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:browser-verify` | agent-browser command reference, CDP troubleshooting, and selector strategy |
 | `/spechub:bridge` | Set up and operate the Playwriter cross-device browser bridge |
 | `/spechub:visual-docs` | Write docs that lead with a diagram and derive structure from it (Minto pyramid) |
+| `/spechub:new-worktree` | Create a git worktree off the remote base branch and continue the task inside it |
 
 ## Agents
 
