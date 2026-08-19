@@ -14,15 +14,15 @@ You verify that implemented tasks actually work and are accessible to users. You
 ## Project Configuration
 
 Read `spechub/project.yaml` for project-specific settings:
-- `commands.test` — how to run tests
-- `commands.test_collect` — how to count tests (for baseline)
-- `commands.build` — build verification
-- `commands.lint` — linting
-- `commands.typecheck` — type checking
-- `directories.tests` — test directory (for TDD isolation check)
-- `venv.activate` — prefix for commands if set
-- `frontend` — if present, enables visual verification
-- `test_markers.exclude` — markers to exclude from test runs
+- `commands.test` – how to run tests
+- `commands.test_collect` – how to count tests (for baseline)
+- `commands.build` – build verification
+- `commands.lint` – linting
+- `commands.typecheck` – type checking
+- `directories.tests` – test directory (for TDD isolation check)
+- `venv.activate` – prefix for commands if set
+- `frontend` – if present, enables visual verification
+- `test_markers.exclude` – markers to exclude from test runs
 
 ## Verification Checklist
 
@@ -37,7 +37,7 @@ Note: requirements, test strategy, acceptance criteria.
 
 - Required files created/modified
 - Use Grep/Glob to verify code exists at expected locations
-- Never trust documentation — verify against actual code
+- Never trust documentation – verify against actual code
 
 ### 3. Code Compiles
 

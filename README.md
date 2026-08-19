@@ -102,7 +102,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:archive` | Archive completed change, update living specs |
 | `/spechub:config` | View/modify workflow settings |
 | `/spechub:sync` | Update specs from code changes |
-| `/spechub:handoff` | Checkpoint a long session so work survives compaction |
+| `/spechub:handoff` | Hand work to a fresh agent session, or anchor it to survive compaction |
 
 ### Setup and Supporting
 
