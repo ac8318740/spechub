@@ -28,10 +28,10 @@ If only one active change, use it. If multiple, ask the user.
 
 Read all artifacts from `spechub/changes/<name>/`:
 
-- **tasks.md** (required — the task list to execute)
-- **proposal.md** (context — what/why)
-- **design.md** (context — how, architecture decisions)
-- **research.md** (context — if exists)
+- **tasks.md** (required – the task list to execute)
+- **proposal.md** (context – what/why)
+- **design.md** (context – how, architecture decisions)
+- **research.md** (context – if exists)
 
 ### 2. Read Project Configuration
 
@@ -53,11 +53,11 @@ For each phase in tasks.md:
 
 **For each task (or scope), follow the Implementation Discipline:**
 
-1. **test-writer subagent** — Write failing tests from the task requirements. Skip for pure config/setup tasks (T001, T002, etc.) that have no testable behavior.
+1. **test-writer subagent** – Write failing tests from the task requirements. Skip for pure config/setup tasks (T001, T002, etc.) that have no testable behavior.
 
-2. **task-executor subagent** — Make the failing tests pass. Executor CANNOT modify test files.
+2. **task-executor subagent** – Make the failing tests pass. Executor CANNOT modify test files.
 
-3. **task-checker subagent** — Verify: tests pass, full suite passes, test count >= baseline, mock audit, TDD isolation, integration wired, frontend visual verification (if applicable).
+3. **task-checker subagent** – Verify: tests pass, full suite passes, test count >= baseline, mock audit, TDD isolation, integration wired, frontend visual verification (if applicable).
 
 If checker fails -> route back to executor with feedback. Do not proceed to next task until checker passes.
 
@@ -66,7 +66,7 @@ If checker fails -> route back to executor with feedback. Do not proceed to next
 **tasks.md is the single source of truth for progress.** Keep it updated at all times:
 
 - **Immediately after task-checker passes** for a task: update `- [ ]` -> `- [x]` in tasks.md
-- **Do NOT batch updates** — mark each task done as soon as it passes verification
+- **Do NOT batch updates** – mark each task done as soon as it passes verification
 - **If a task is partially done or blocked**: add a note below the task line: `  <!-- BLOCKED: reason -->`
 - **If you discover a task needs splitting**: add sub-tasks indented below the original, numbered as T005a, T005b, etc.
 - **If a task turns out unnecessary**: mark it `- [~]` with a note: `  <!-- SKIPPED: reason -->`
@@ -111,10 +111,10 @@ After all phases complete:
 
 ## Key Rules
 
-- **TDD pipeline is mandatory** — test-writer -> task-executor -> task-checker. No exceptions except pure config tasks.
-- **Executors CANNOT modify test files** — if tests are wrong, report the issue.
-- **Agent Teams for parallel scopes** — 2+ independent `[P]` tasks with non-overlapping files -> team.
-- **Build verification after every phase** — do not skip.
-- **Update tasks.md immediately** — every completed task gets checked off right away.
-- **Do NOT commit** — the user manages git commits via `/commit`.
-- **Do NOT push** — the user decides when to push.
+- **TDD pipeline is mandatory** – test-writer -> task-executor -> task-checker. No exceptions except pure config tasks.
+- **Executors CANNOT modify test files** – if tests are wrong, report the issue.
+- **Agent Teams for parallel scopes** – 2+ independent `[P]` tasks with non-overlapping files -> team.
+- **Build verification after every phase** – do not skip.
+- **Update tasks.md immediately** – every completed task gets checked off right away.
+- **Do NOT commit** – the user manages git commits via `/commit`.
+- **Do NOT push** – the user decides when to push.

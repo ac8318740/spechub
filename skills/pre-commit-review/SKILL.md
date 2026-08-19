@@ -22,14 +22,14 @@ Parse `$ARGUMENTS` and invocation context to determine mode:
 - **Auto-fix mode**: Use when ANY of these are true:
   - Arguments contain `--auto-fix`, `fix everything`, `auto fix`, or `fix automatically`
   - The LLM is working autonomously (user asked to implement + commit + push, work through
-    a task list, "handle everything", etc.) and the LLM itself decided to commit — the user
+    a task list, "handle everything", etc.) and the LLM itself decided to commit – the user
     is likely not present, so don't block on questions.
 
 - **Interactive mode** (default): Use when ANY of these are true:
   - No `--auto-fix` argument and skill was invoked manually via `/pre-commit-review`
-  - Skill was auto-invoked because the user typed `/commit` — the user is clearly present
+  - Skill was auto-invoked because the user typed `/commit` – the user is clearly present
     and should be consulted via AskUserQuestion waves.
-  - When in doubt, use interactive — it's always safe to ask.
+  - When in doubt, use interactive – it's always safe to ask.
 
 **Rule of thumb**: Who initiated the commit? User typed `/commit` -> interactive.
 LLM decided to commit during autonomous work -> auto-fix.
@@ -37,12 +37,12 @@ LLM decided to commit during autonomous work -> auto-fix.
 ## Workflow Overview
 
 ```
-1. SNAPSHOT  — collect the diff and understand what changed
-2. DISCOVER  — learn project conventions dynamically (parallel subagents)
-3. REVIEW    — analyze changes against conventions + best practices (parallel subagents)
-4. ADJACENT  — check surrounding code for related rot (parallel subagents)
-5. REPORT    — synthesize findings
-6. FIX       — auto-fix or interactive proposal waves
+1. SNAPSHOT  – collect the diff and understand what changed
+2. DISCOVER  – learn project conventions dynamically (parallel subagents)
+3. REVIEW    – analyze changes against conventions + best practices (parallel subagents)
+4. ADJACENT  – check surrounding code for related rot (parallel subagents)
+5. REPORT    – synthesize findings
+6. FIX       – auto-fix or interactive proposal waves
 ```
 
 ## Step 1: SNAPSHOT
@@ -69,12 +69,12 @@ Categorize changed files into scopes using the project configuration:
 
 If no meaningful code changes exist (only docs, config, assets), report "No code changes to review" and exit.
 
-## Step 2: DISCOVER — Learn Project Conventions (Parallel)
+## Step 2: DISCOVER – Learn Project Conventions (Parallel)
 
 Launch **3 parallel Explore subagents** to build a dynamic understanding of the project's current conventions.
-Do NOT hardcode conventions — discover them fresh each time.
+Do NOT hardcode conventions – discover them fresh each time.
 
-**Subagent A — Living Specs & Architecture:**
+**Subagent A – Living Specs & Architecture:**
 
 ```
 Read the living specs relevant to this change:
@@ -85,7 +85,7 @@ Read the living specs relevant to this change:
 Report: list of project conventions and patterns relevant to these changes.
 ```
 
-**Subagent B — Codebase Patterns via Search:**
+**Subagent B – Codebase Patterns via Search:**
 
 ```
 Use Grep and Glob to find established patterns related to the changes.
@@ -96,7 +96,7 @@ Identify: how does the rest of the codebase handle similar things?
 Report: established patterns, common approaches, naming conventions observed.
 ```
 
-**Subagent C — Local Context & Config:**
+**Subagent C – Local Context & Config:**
 
 ```
 For each changed file, read:
@@ -106,15 +106,15 @@ For each changed file, read:
 Report: local conventions, related code patterns, existing abstractions nearby.
 ```
 
-Synthesize the three reports into a **convention profile** — the set of expectations
+Synthesize the three reports into a **convention profile** – the set of expectations
 changes will be measured against.
 
-## Step 3: REVIEW — Analyze Changes (Parallel)
+## Step 3: REVIEW – Analyze Changes (Parallel)
 
 Launch **3 parallel review subagents**, each examining a different quality dimension.
 Every subagent receives the diff AND the convention profile from Step 2.
 
-**Subagent 1 — Hardcodes & SSOT:**
+**Subagent 1 – Hardcodes & SSOT:**
 
 ```
 Examine the diff for:
@@ -129,7 +129,7 @@ For each finding, report:
   FILE:LINE | SEVERITY (MUST/SHOULD/CONSIDER) | WHAT | WHY | SUGGESTED FIX
 ```
 
-**Subagent 2 — Scalability & Readability:**
+**Subagent 2 – Scalability & Readability:**
 
 ```
 Examine the diff for:
@@ -145,7 +145,7 @@ For each finding, report:
   FILE:LINE | SEVERITY (MUST/SHOULD/CONSIDER) | WHAT | WHY | SUGGESTED FIX
 ```
 
-**Subagent 3 — Edge Cases & Robustness:**
+**Subagent 3 – Edge Cases & Robustness:**
 
 ```
 Examine the diff for:
@@ -161,7 +161,7 @@ For each finding, report:
   FILE:LINE | SEVERITY (MUST/SHOULD/CONSIDER) | WHAT | WHY | SUGGESTED FIX
 ```
 
-## Step 4: ADJACENT — Check Surrounding Code for Rot
+## Step 4: ADJACENT – Check Surrounding Code for Rot
 
 For each file that has findings from Step 3, launch an **Explore subagent** (up to 3 in parallel)
 to examine the rest of that file and its immediate imports for the SAME categories of issue.
@@ -170,7 +170,7 @@ to examine the rest of that file and its immediate imports for the SAME categori
 File [path] has these issues in the changed code: [summary].
 Read the FULL file and its direct imports.
 Find any OTHER instances of the same categories of problem in this file
-or closely related files — even if they weren't part of this commit's changes.
+or closely related files – even if they weren't part of this commit's changes.
 These are "while we're here" cleanup opportunities.
 
 Report as: ADJACENT | FILE:LINE | WHAT | WHY | SUGGESTED FIX
@@ -179,7 +179,7 @@ Report as: ADJACENT | FILE:LINE | WHAT | WHY | SUGGESTED FIX
 Only flag adjacent issues that are **closely related** to the current changes (same file,
 same module, or same pattern). Don't boil the ocean.
 
-## Step 5: REPORT — Synthesize Findings
+## Step 5: REPORT – Synthesize Findings
 
 Merge all subagent findings. Deduplicate. Sort by:
 
@@ -194,7 +194,7 @@ For each finding, ensure it has:
 - Severity (MUST / SHOULD / CONSIDER)
 - Clear 1-sentence description of the problem
 - Why it matters (1 sentence)
-- Suggested fix (concrete, actionable — code snippet or approach)
+- Suggested fix (concrete, actionable – code snippet or approach)
 
 If any finding needs deeper analysis to determine the right fix, launch a **planning subagent**:
 
@@ -204,7 +204,7 @@ Think through 2-3 possible fixes, evaluate trade-offs, and recommend the best ap
 Consider: does a fix here require changes in other files? What's the minimal change?
 ```
 
-## Step 6: FIX — Auto-Fix or Interactive Waves
+## Step 6: FIX – Auto-Fix or Interactive Waves
 
 ### Auto-Fix Mode
 
@@ -219,7 +219,7 @@ After all fixes, run full verification using commands from `spechub/project.yaml
 
 ```bash
 # Run the project's configured test, lint, and typecheck commands
-# Read these from project.yaml — do not hardcode
+# Read these from project.yaml – do not hardcode
 ```
 
 Report summary of what was fixed.
@@ -234,15 +234,15 @@ Format each wave like:
 I found these issues in your changes. For each, choose: FIX / SKIP / DISCUSS
 
 1. [MUST | HARDCODE] `path/to/file.py:42`
-   Hardcoded timeout value `30` — should use config constant.
+   Hardcoded timeout value `30` – should use config constant.
    Suggested fix: Move to config, reference from there.
 
 2. [SHOULD | SSOT] `path/to/api/client.ts:15`
-   Duplicated error handling pattern — same try/catch in 3 functions.
+   Duplicated error handling pattern – same try/catch in 3 functions.
    Suggested fix: Extract shared wrapper function.
 
 3. [CONSIDER | ADJACENT] `path/to/component.tsx:88`
-   Existing code (not your change) has a magic string — should use constant.
+   Existing code (not your change) has a magic string – should use constant.
    Suggested fix: Add constant, use in both places.
 
 4. [SHOULD | EDGE-CASE] `path/to/manager.py:120`
@@ -268,10 +268,10 @@ After user responds:
 
 ## What This Skill Does NOT Check
 
-- **Formatting/style** — linters and formatters handle this
-- **Type errors** — typecheckers handle this
-- **Test coverage** — task-checker handles this
-- **UI rendering** — frontend-verify handles this
-- **Security scanning** — dedicated security tools handle credentials in committed code
+- **Formatting/style** – linters and formatters handle this
+- **Type errors** – typecheckers handle this
+- **Test coverage** – task-checker handles this
+- **UI rendering** – frontend-verify handles this
+- **Security scanning** – dedicated security tools handle credentials in committed code
 
 Focus exclusively on the semantic/architectural issues that automated tools miss.

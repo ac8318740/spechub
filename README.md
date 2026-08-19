@@ -102,7 +102,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:archive` | Archive completed change, update living specs |
 | `/spechub:config` | View/modify workflow settings |
 | `/spechub:sync` | Update specs from code changes |
-| `/spechub:handoff` | Checkpoint a long session so work survives compaction |
+| `/spechub:handoff` | Hand work to a fresh agent session, or anchor it to survive compaction |
 
 ### Setup and Supporting
 
@@ -118,6 +118,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:code-review` | Linus Torvalds code philosophy for reviews |
 | `/spechub:browser-verify` | agent-browser command reference, CDP troubleshooting, and selector strategy |
 | `/spechub:bridge` | Set up and operate the Playwriter cross-device browser bridge |
+| `/spechub:visual-docs` | Write docs that lead with a diagram and derive structure from it (Minto pyramid) |
 
 ## Agents
 
@@ -150,4 +151,5 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 
 - **[OpenSpec](https://github.com/Fission-AI/OpenSpec)** – SpecHub's CLI is forked from OpenSpec, which was the core spec engine that the workflow was originally built on. The spec-driven development concepts – proposals, designs, tasks, living specs, change management, archiving – all originate from OpenSpec.
 - **[Taskmaster AI](https://github.com/eyaltoledano/claude-task-master)** – The orchestrator pattern and agent coordination approach were inspired by Taskmaster's task management model.
+- **[Skills for Real Engineers](https://github.com/mattpocock/skills)** by Matt Pocock – the Wayfinder map, the grilling technique, and the durability rule for agent briefs. SpecHub's node graph is a direct adaptation of Wayfinder. MIT licensed; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
 - Additional inspiration from [Superpowers](https://github.com/obra/superpowers), [GSD](https://github.com/gsd-build/get-shit-done), and [Spec Kit](https://github.com/github/spec-kit).

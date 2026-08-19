@@ -23,7 +23,7 @@ Archive a completed change's artifacts and update the cumulative living specs wi
 2. If no arguments: Run `~/.claude/spechub/bin/spechub list --json` to find active changes
 3. If only one active change, use it. If multiple, ask the user.
 4. Verify directory exists at `spechub/changes/<name>/`
-5. Read `spechub/changes/<name>/tasks.md` — if many tasks incomplete, WARN user and ask for confirmation
+5. Read `spechub/changes/<name>/tasks.md` – if many tasks incomplete, WARN user and ask for confirmation
 
 ## Step 2: Check Artifact Status
 
@@ -67,9 +67,9 @@ For each domain affected (determine from file paths in tasks.md mapped via `spec
 For each affected domain:
 
 1. Read `spechub/specs/[domain]/spec.md`
-2. Apply ADDED — append new FR-NNN entries with next available number
-3. Apply MODIFIED — update existing FR-NNN in place
-4. Apply REMOVED — delete the FR-NNN entry
+2. Apply ADDED – append new FR-NNN entries with next available number
+3. Apply MODIFIED – update existing FR-NNN in place
+4. Apply REMOVED – delete the FR-NNN entry
 5. Write updated spec back
 
 ## Step 5: Update Documentation

@@ -35,7 +35,7 @@ If the user provided an error message or stack trace, note the key details (file
 
 1. **Locate the code**: Find the file(s) involved. Use Grep and Glob to search for relevant functions, classes, and modules. Launch an Explore subagent if the scope is unclear.
 
-2. **Read the integration points**: Don't just read the broken function — read its callers and callees. Understand:
+2. **Read the integration points**: Don't just read the broken function – read its callers and callees. Understand:
    - What calls this code? (upstream)
    - What does this code call? (downstream)
    - What data flows through it? (inputs/outputs)
@@ -58,7 +58,7 @@ Recent changes: <relevant commits or "none suspicious">
 
 ## Step 3: Root Cause Analysis
 
-Based on the exploration, identify the root cause — not just the symptom.
+Based on the exploration, identify the root cause – not just the symptom.
 
 Bad: "The function returns null" (symptom)
 Good: "The function returns null because the query filter uses `org_id` but the test user's org isn't in the result set" (root cause)
@@ -71,18 +71,18 @@ Before coding, state:
 
 1. **What** will change (which file(s), which function(s))
 2. **Why** this fixes the root cause (not just the symptom)
-3. **What won't change** (confirm the fix is minimal — no drive-by refactors)
+3. **What won't change** (confirm the fix is minimal – no drive-by refactors)
 
-If the fix touches more than 3 files, pause and confirm with the user — it may be bigger than a quick fix.
+If the fix touches more than 3 files, pause and confirm with the user – it may be bigger than a quick fix.
 
 ## Step 5: Implement via Implementation Discipline
 
 Follow the standard pipeline:
 
-1. **test-writer** — Write a failing test that reproduces the bug (if testable behavior exists). Skip for pure config/infra fixes.
-2. **task-executor** — Implement the minimal fix to make the test pass. Executor CANNOT modify test files.
-3. **task-checker** — Verify: task tests pass, full suite passes, test count >= baseline, no regressions.
-4. **frontend-verify** — Only if frontend files were modified (check `frontend.directory` in project.yaml).
+1. **test-writer** – Write a failing test that reproduces the bug (if testable behavior exists). Skip for pure config/infra fixes.
+2. **task-executor** – Implement the minimal fix to make the test pass. Executor CANNOT modify test files.
+3. **task-checker** – Verify: task tests pass, full suite passes, test count >= baseline, no regressions.
+4. **frontend-verify** – Only if frontend files were modified (check `frontend.directory` in project.yaml).
 
 ## Step 6: Verify
 
@@ -90,16 +90,16 @@ Run build verification using commands from `spechub/project.yaml`:
 
 ```bash
 # Run the project's configured test, lint, and typecheck commands
-# Read these from project.yaml — do not hardcode
+# Read these from project.yaml – do not hardcode
 ```
 
-**STOP — if frontend files were modified, you MUST visually verify before proceeding to Step 7.**
+**STOP – if frontend files were modified, you MUST visually verify before proceeding to Step 7.**
 
 If the project has a frontend verification agent or browser verification configured, use them. Otherwise, take a browser screenshot and think through:
 
-1. **Expected vs actual** — What should the change look like? Does the screenshot match?
-2. **Gaps** — Is anything missing, wrong, or showing the wrong data/labels/formatting?
-3. **General UX** — Anything weird? Overlapping elements, bad spacing, truncation, unprofessional appearance?
+1. **Expected vs actual** – What should the change look like? Does the screenshot match?
+2. **Gaps** – Is anything missing, wrong, or showing the wrong data/labels/formatting?
+3. **General UX** – Anything weird? Overlapping elements, bad spacing, truncation, unprofessional appearance?
 
 If any issue -> fix it and re-verify. Do NOT proceed to Step 7 with unverified frontend changes.
 

@@ -43,15 +43,15 @@ Your job is to:
 
 Launch **3 parallel subagents** (`subagent_type=Explore`) in a single message. Each gets a different exploration strategy:
 
-### Pass 1 — Entry Points Strategy
+### Pass 1 – Entry Points Strategy
 
 Explore from entry points (main files, route handlers, API endpoints, page components) to discover functionality domain by domain.
 
-### Pass 2 — Data Models Strategy
+### Pass 2 – Data Models Strategy
 
 Explore from data models outward (database models, schemas, interfaces) to map data flow from storage through services to API to UI.
 
-### Pass 3 — Tests Strategy
+### Pass 3 – Tests Strategy
 
 Explore from test files to understand expected behaviors by reading test names, assertions, and cross-referencing with source code.
 
@@ -82,11 +82,11 @@ Each pass outputs domain drafts using this format:
 
 ## Phase 2: Judge Merge (Pass 4)
 
-Launch a single subagent to merge the 3 independent drafts per domain — resolve conflicts, deduplicate, pick the most accurate description for each FR.
+Launch a single subagent to merge the 3 independent drafts per domain – resolve conflicts, deduplicate, pick the most accurate description for each FR.
 
 ## Phase 3: Validation (Passes 5-7)
 
-Launch 3 parallel Explore subagents to validate ALL domains independently — each checks that FRs match actual code behavior.
+Launch 3 parallel Explore subagents to validate ALL domains independently – each checks that FRs match actual code behavior.
 
 ## Phase 4: Correction Merge (Pass 8)
 
@@ -98,7 +98,7 @@ Present summary to user. Ask: "Review the specs in `spechub/specs/`. Want to edi
 
 ## Phase 6: Finalization (Pass 10)
 
-Launch a single subagent to finalize all specs — remove markers, ensure consistent formatting, re-number FR entries.
+Launch a single subagent to finalize all specs – remove markers, ensure consistent formatting, re-number FR entries.
 
 ## Completion
 
