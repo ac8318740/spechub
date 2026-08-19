@@ -135,10 +135,27 @@ Two rules keep them honest:
 
 `/spechub:bootstrap` generates the first set from an existing codebase, so a project does not have to start from an empty directory.
 
-## 8. Where this document goes next
+## 8. What the redesign changes
 
-*This describes what ships today. A redesign in progress replaces sections 1 through 3.*
+*This describes what ships today. A redesign in progress replaces sections 1 to 3 and leaves 4 to 7 standing.*
 
-The design record under `docs/maps/wayfinder-unification/` replaces the fixed proposal, design and tasks sequence with a single node type, and removes the path decision in section 1 entirely. Sections 4 through 7 are largely unaffected – the TDD pipeline, spec sync and living specs survive.
+The plan lives in the issues labelled `wayfinder` on this repository, not in this
+repo's files. Each issue is one decision with its reasoning, and the implementation
+works against them.
 
-This document deliberately describes current behaviour rather than the plan, on the same principle the living specs follow: document what is implemented, never the roadmap.
+| Section              | What happens to it                                                     |
+| -------------------- | ---------------------------------------------------------------------- |
+| 1. Pick a path       | **removed.** No router. Deciding whether SpecHub applied was itself a decision, and that is part of why it went unused |
+| 2. Implement directly | **`implement-quick` is deleted.** `implement` absorbs it – a unit of work carries its own size, so one small item is a quick change and forty is a long effort. Nothing declares which. `quick-fix` is unaffected and stays |
+| 3. Plan in stages    | **the three documents become one primitive.** `propose`, `design`, `tasks` and `verify` all go. Planning grows only as far as the unknowns demand |
+| 4. Build under TDD   | unchanged                                                              |
+| 5. Commit, sync specs | unchanged                                                              |
+| 6. Archive           | rewired – it extracts the durable result rather than moving documents   |
+| 7. Living specs      | unchanged, and still the durable output                                 |
+
+Nothing above is built yet. Every skill named here is installed and working, and
+none is removed until its replacement is.
+
+This document deliberately describes current behaviour rather than the plan, on the
+same principle the living specs follow: document what is implemented, never the
+roadmap.
