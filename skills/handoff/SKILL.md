@@ -25,8 +25,8 @@ should run the command.
 
 | Do not write it down       | The next session gets it from            |
 | -------------------------- | ---------------------------------------- |
-| Active change and phase    | `~/.claude/spechub/bin/spechub status`     |
-| Task list and progress     | the active change's task list            |
+| Map state and reading order | `~/.claude/spechub/bin/spechub node walk --map <name>` |
+| What can be worked next    | `~/.claude/spechub/bin/spechub node frontier --map <name>` |
 | Files in flight            | `git status --short` and `git diff`       |
 | Test baseline, last result | `.test-baseline`, then run the suite      |
 | What the code does         | the living specs in `spechub/specs/`      |
@@ -92,10 +92,10 @@ touched:
 ```markdown
 ---
 spechub_handoff: 1
-change: <change-id, or "ad-hoc" when none is active>
+map: <map name, or "ad-hoc" when none is active>
 created: <ISO 8601 UTC>
 ---
-# SpecHub handoff – <change-id or "ad-hoc">
+# SpecHub handoff – <map name or "ad-hoc">
 
 ## Next action
 <the single concrete next step>
@@ -114,7 +114,7 @@ created: <ISO 8601 UTC>
 - <skill name> – <why>
 
 ## References
-- Change state: `spechub status`
+- Map state: `spechub node walk` and `spechub node frontier`
 - Files in flight: `git status --short`
 ```
 
@@ -133,8 +133,8 @@ say so – it holds conversation content and should not be committed.
   fresh start, `--resume` or `/clear`, so a stale anchor never leaks into unrelated
   work. Handing off to a genuinely new session is destination A's job
 - **Consume-once.** The hook retires the anchor as it injects it, moving it to
-  `spechub/changes/<change>/handoffs/<created>.md` when that change directory exists,
-  otherwise `spechub/handoffs/<change>/<created>.md`. Collisions get a `-2` suffix
+  `spechub/handoffs/<map>/<created>.md` (legacy `spechub/changes/<name>/handoffs/`
+  when that directory still exists). Collisions get a `-2` suffix
 - **Subagents and teammates have isolated context.** This protects the
   orchestrator's coordination state, which is the long-lived part. Per-scope work
   does not need it

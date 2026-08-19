@@ -29,8 +29,8 @@ Source:        src/
 Tests:         tests/
 
 Workflow:
-  Auto-select:   on (quick path for small changes)
   Spec sync:     enabled
+  Grilling:      tool (question tool, inline fallback)
   TDD:           strict
   Orchestrator:  strict (delegates all code work)
 
@@ -105,7 +105,7 @@ cat spechub/domain-map.yaml
 
 Applies to every project, not just those with a frontend.
 
-If missing, spec sync is silently dead – `/spechub:commit`, `/spechub:archive`, `/spechub:bootstrap`, `/spechub:propose` and `/spechub:pre-commit-review` all read this file and skip when it is absent, so living specs never update. Projects initialized before SpecHub generated this file are the common case.
+If missing, spec sync is silently dead – `/spechub:commit`, `/spechub:archive`, `/spechub:bootstrap` and `/spechub:pre-commit-review` all read this file and skip when it is absent, so living specs never update. Projects initialized before SpecHub generated this file are the common case.
 
 Offer to build it:
 
@@ -251,22 +251,18 @@ Modify a setting. Supported keys:
 
 | Key | Values | Description |
 |-----|--------|-------------|
-| `workflow.auto_select` | `true`, `false` | Allow quick path for small changes |
 | `workflow.spec_sync` | `true`, `false` | Mandatory spec sync at commit |
 | `workflow.tdd.strict` | `true`, `false` | Require TDD pipeline |
 | `workflow.tdd.orchestrator_strict` | `true`, `false` | Orchestrator delegates all code work |
 | `workflow.frontend_verification` | `true`, `false` | Require frontend verification |
-| `workflow.clarification.propose` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for proposals |
-| `workflow.clarification.design` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for designs |
-| `workflow.clarification.tasks` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for tasks |
 | `workflow.grilling.questions` | `tool`, `inline` | How grilling presents a round – the host's question tool, or prose. `tool` falls back to inline when a round exceeds 4 questions or a question has no discrete options |
 | `workflow.maps.tracker` | `github`, `files` | Which tracker holds map nodes. Unset means the map skill picks at materialisation and writes the choice here |
+| `workflow.maps.persist` | `true`, `false` | Keep archived map nodes under `spechub/archive/` instead of deleting them (files tracker only, default `false`) |
 | `frontend.browser.mode` | `remote`, `headless`, `local` | Browser environment for verification |
 | `frontend.browser.fallback` | `headless`, `none` | What to do when primary mode unavailable |
 | `frontend.browser.cdp_port` | number | CDP port – default `19988` for `mode: remote`, `9555` for `headless`/`local` |
 
 Examples:
-- `/spechub:config set workflow.auto_select false`
 - `/spechub:config set workflow.tdd.strict false`
 - `/spechub:config set workflow.spec_sync false`
 
@@ -276,12 +272,9 @@ Reset all workflow settings to defaults:
 
 ```yaml
 workflow:
-  auto_select: true
   spec_sync: true
-  clarification:
-    propose: thorough
-    design: thorough
-    tasks: thorough
+  grilling:
+    questions: tool
   tdd:
     strict: true
     orchestrator_strict: true
@@ -306,12 +299,11 @@ Read `spechub/project.yaml`. If it doesn't exist, tell the user to run `/spechub
 After any modification:
 1. Write the updated `spechub/project.yaml`
 2. Show the changed setting and its new value
-3. Note any implications (e.g., "Auto-select is now off – all changes will go through the full TDD pipeline")
+3. Note any implications (e.g., "Spec sync is now off – living specs will no longer update at commit time")
 
 ## Validation Rules
 
 - Boolean values accept: `true`/`false`, `on`/`off`, `yes`/`no` (normalize to `true`/`false`)
-- Clarification levels must be one of: `none`, `critical`, `thorough`, `exhaustive`
 - Browser mode must be one of: `remote`, `headless`, `local`
 - Browser fallback must be one of: `headless`, `none`
 - If `workflow` section doesn't exist in project.yaml, create it with defaults before applying changes

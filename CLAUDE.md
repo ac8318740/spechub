@@ -5,7 +5,7 @@
 You are a **coordinator**, not an implementer. Your job is to:
 
 1. Understand tasks – from specs OR direct user requests
-2. Select the right workflow path for the work
+2. Chart maps and work the frontier when decisions need settling
 3. Delegate ALL research and implementation to specialized agents
 4. Synthesize agent outputs and make decisions
 5. Keep working until tasks are COMPLETE or you need user input
@@ -17,7 +17,7 @@ You are a **coordinator**, not an implementer. Your job is to:
 1. **NEVER search/read codebase directly** – Always delegate to subagents
 2. **Use Agent Teams for parallel independent scopes** – When work has 2+ discrete, independent scopes (different modules, different layers, non-overlapping files), launch an Agent Team. Each teammate owns one scope and runs the full test-writer -> task-executor -> task-checker pipeline internally via subagents. When work is sequential or single-scope, just do it yourself with subagents directly.
 3. **Every executor MUST be followed by task-checker verification**
-4. **ALL changes update living specs** – via spec sync at commit time (all workflows) and `/spechub:archive` at the end of every full pipeline run
+4. **ALL changes update living specs** – via spec sync at commit time; `/spechub:archive` verifies the residue when a map closes
 5. **VERIFY BUILD before marking tasks complete** – See Build Verification below
 6. **VERIFY FRONTEND VISUALLY for UI changes** – See Frontend Visual Verification below
 7. **PLANNING AND VERIFICATION STEPS SHOULD TAKE ~4X THE EFFORT AS IMPLEMENTATION/EXECUTION** – Subagents are often wrong as they don't have full context. Launch ~4x as many planning/verification subagents as you do executor subagents.
@@ -66,39 +66,31 @@ When running commands, check for `venv.activate` and prefix commands accordingly
 
 ## Workflows
 
-Read `spechub/project.yaml` for the `workflow` section. Two paths:
+There is no path selection. Planning structure grows only as far as the fog
+demands, and nothing declares how big the work is:
 
-**Quick path** – for small, clear-scope changes (bug fixes, typos, config tweaks):
+- **The way is clear** – implement it. `/spechub:implement` runs the TDD
+  pipeline on the request directly; a small unit of work is simply small.
+- **Something is broken** – `/spechub:quick-fix`. Broken is a different axis
+  from foggy: a bug has a root cause to find, not a decision to settle.
+- **Decisions need settling** – `/spechub:map`. It charts if no map exists
+  (one opening grill that fixes the destination and surfaces the fog) and
+  works the frontier if one does. A map materialises on the tracker only when
+  the fog will outlive the session; one question is grilled in conversation
+  and leaves an ADR, not a map.
 
-1. Invoke `/spechub:implement-quick`
-2. Spec sync happens automatically at commit time
+Whichever route ran, spec sync updates the living specs at commit time.
 
-No TDD pipeline. No planning artifacts. Implement directly.
-
-**Full pipeline** – for features, refactors, and all larger work:
-
-1. `/spechub:propose` – create proposal with user stories (P1/P2/P3)
-2. `/spechub:clarify` – resolve ambiguities (add this step when requirements are unclear)
-3. `/spechub:design` – generate implementation design (can skip for simple features – `/spechub:tasks` can run right after propose)
-4. `/spechub:tasks` – generate dependency-ordered task list
-5. `/spechub:implement` – execute tasks via TDD pipeline
-6. `/spechub:archive` – archive change, update living specs
-
-### Path Selection
-
-**Automatic (default)**: When `workflow.auto_select` is `true`, select the path based on request complexity. Tell the user which path you picked and why.
-
-**Manual override**: When `workflow.auto_select` is `false`, all requests use the full pipeline regardless of complexity.
-
-**Quick path criteria**: Bug fixes, typos, config tweaks, small isolated changes with clear and unambiguous scope.
-
-**Full pipeline criteria**: New features, refactors, multi-file changes, anything with architectural impact or unclear requirements.
+Two supporting primitives are model-invoked, not user commands: `grilling`
+(rounds of numbered questions over the frontier, each with a recommended
+answer) and `record-context` (an ADR, a glossary term, both, or neither, when
+a decision lands).
 
 ---
 
-## Implementation Discipline (Full Pipeline)
+## Implementation Discipline
 
-This pipeline applies to all implementation work in the full pipeline. No exceptions.
+This pipeline applies to all implementation work. No exceptions.
 
 ### The Four-Phase Pipeline
 
@@ -152,7 +144,6 @@ If Phase 4 fails -> route back to Phase 2 with the UI bug details.
 - **Frontend-verifier only runs** when `frontend` is configured in `spechub/project.yaml` AND frontend files were modified AND `workflow.frontend_verification` is `true`
 - **Never skip** the task-checker – verification always runs
 - **Never skip** the frontend-verifier when frontend files changed and it's configured – it's non-negotiable
-- **Quick path skips the entire TDD pipeline** – implement directly via `/spechub:implement-quick`
 
 ---
 
@@ -219,11 +210,11 @@ You (Team Lead / Orchestrator)
 ## Living Specs
 
 - `spechub/specs/` contains the cumulative source of truth for the system
-- Updated automatically via `/spechub:commit` (spec sync at commit time) or `/spechub:archive` (run at end of every full pipeline)
+- Updated automatically via `/spechub:commit` (spec sync at commit time); `/spechub:archive` closes out a cleared map
 - Domain-organized per `spechub/domain-map.yaml`
 - Format: Given/When/Then, FR-NNN requirements
 - Bootstrap from existing codebase: `/spechub:bootstrap`
-- Change management: SpecHub CLI (`~/.claude/spechub/bin/spechub new change`, `~/.claude/spechub/bin/spechub status`, `~/.claude/spechub/bin/spechub list`)
+- Map nodes: SpecHub CLI (`~/.claude/spechub/bin/spechub node create | read | update | list`, plus the composed `node frontier` and `node walk` queries)
 
 ### Spec Correction Protocol (Fix It When You See It)
 
@@ -300,7 +291,7 @@ See the `browser-verify` skill for the `agent-browser` command reference, select
 
 | YOU (Orchestrator / Team Lead)       | TEAMMATES (parallel scopes)           | SUBAGENTS (focused tasks) |
 | ------------------------------------ | ------------------------------------- | ------------------------- |
-| Select workflow path                 | Own a scope end-to-end                | Search/read codebase      |
+| Chart maps, work the frontier        | Own a scope end-to-end                | Search/read codebase      |
 | Launch Agent Teams for parallel work | Launch subagents (test/exec/check)    | Write code and tests      |
 | Decide go/no-go based on checker     | Run Implementation Discipline         | Run tests                 |
 | Run lint/typecheck commands          | Message each other to coordinate      | Verify integration        |
@@ -345,7 +336,7 @@ See the `browser-verify` skill for the `agent-browser` command reference, select
 - **Delegate everything** – You orchestrate, subagents and teammates implement
 - **Agent Teams for parallel scopes** – 2+ independent scopes -> team; single scope -> subagents directly
 - **Living specs** – Always kept in sync via commit-time spec sync
-- **Right-sized workflow** – Quick path for small changes, full pipeline for features and larger work
+- **Progressive materialisation** – structure appears only when it must persist; a map exists only when fog outlives a session, and nothing declares how big the work is
 - **Cross-device setups** – When a task spans two devices (Playwriter bridge, remote tunnels, etc.), invoke the `bridge` skill first to establish the platform-detection + handoff convention, then proceed
 - **Handing work over** – `/spechub:handoff` writes a summary outside the repo and launches a fresh session with it. It records only what nothing on disk holds (next action, decisions, blockers, file ownership) and references the rest
 - **Survive compaction** – `/spechub:handoff compact` is the variant for staying in this session. It writes an in-repo anchor instead of launching anything. Run it before `/compact`, then type `continue` to resume from the anchor

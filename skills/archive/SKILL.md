@@ -1,7 +1,7 @@
 ---
 name: archive
-description: Archive a completed SpecHub change, merge deltas into living specs, and move artifacts to the archive directory.
-argument-hint: "[change-name]"
+description: Close out a cleared map – verify the durable residue (living specs, ADRs, glossary) was extracted, then dispose of the nodes per workflow.maps.persist. Also archives legacy spechub/changes/ directories from the pre-map workflow.
+argument-hint: "[map or legacy change name]"
 disable-model-invocation: true
 ---
 
@@ -15,85 +15,76 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Purpose
 
-Archive a completed change's artifacts and update the cumulative living specs with any changes the feature introduced.
+A map is scaffolding. It exists to clear fog, and once the fog is gone the
+answers belong in living specs, ADRs and the glossary – not in a second copy
+that drifts. Archive verifies that extraction happened, then disposes of the
+nodes.
 
-## Step 1: Locate the Change
+## Step 1: Locate the Map
 
-1. If `$ARGUMENTS` provided: Use as change name
-2. If no arguments: Run `~/.claude/spechub/bin/spechub list --json` to find active changes
-3. If only one active change, use it. If multiple, ask the user.
-4. Verify directory exists at `spechub/changes/<name>/`
-5. Read `spechub/changes/<name>/tasks.md` – if many tasks incomplete, WARN user and ask for confirmation
-
-## Step 2: Check Artifact Status
+If `$ARGUMENTS` names a map, use it. Otherwise list maps on the configured
+tracker (`workflow.maps.tracker`; files backend shown):
 
 ```bash
-~/.claude/spechub/bin/spechub status --change "<name>" --json
+ls spechub/maps/
 ```
 
-Parse to check if all artifacts are `done`. If any incomplete, warn and ask for confirmation.
+If exactly one, use it. If several, ask. If `$ARGUMENTS` names a legacy
+`spechub/changes/` directory instead, jump to Legacy below.
 
-## Step 3: Generate Delta
+## Step 2: Verify the Map Is Cleared
 
-Read the change's artifacts and the current living specs.
-
-For each domain affected (determine from file paths in tasks.md mapped via `spechub/domain-map.yaml`):
-
-1. Read current living spec at `spechub/specs/[domain]/spec.md`
-2. Analyze what the feature added, modified, or removed
-3. Generate delta:
-
-```markdown
-# Delta: [Feature Name]
-# Date: [YYYY-MM-DD]
-# Source: spechub/changes/[change-name]/
-
-## Domain: [domain-name]
-
-### ADDED Requirements
-- FR-NEW-NNN: [Description]
-  - Source: [file path]
-
-### MODIFIED Requirements
-- FR-NNN: [Updated description] (was: [old description])
-  - Reason: [why changed]
-
-### REMOVED Requirements
-- FR-NNN: [Description] (reason: [why removed])
+```bash
+~/.claude/spechub/bin/spechub node frontier --map <name> --json
+~/.claude/spechub/bin/spechub node list --map <name> --status fog --json
+~/.claude/spechub/bin/spechub node list --map <name> --status claimed --json
 ```
 
-## Step 4: Merge Deltas into Living Specs
+All three must be empty. If not, WARN with what remains and ask for
+confirmation – archiving an uncleared map throws away open questions.
 
-For each affected domain:
+## Step 3: Extract the Residue
 
-1. Read `spechub/specs/[domain]/spec.md`
-2. Apply ADDED – append new FR-NNN entries with next available number
-3. Apply MODIFIED – update existing FR-NNN in place
-4. Apply REMOVED – delete the FR-NNN entry
-5. Write updated spec back
+Walk the resolved nodes (`spechub node walk --map <name> --full`) and check
+each resolution left what it should have:
 
-## Step 5: Update Documentation
+1. **Living specs** – behaviour the effort built should already be in
+   `spechub/specs/` via commit-time sync. Spot-check the affected domains;
+   fix gaps on sight per the Spec Correction Protocol.
+2. **ADRs and glossary** – invoke `record-context` for any resolved decision
+   that meets the bar but was never recorded. This is the last chance.
+3. **Out-of-scope nodes** – report them; a scope boundary is worth the user
+   hearing once more before the map disappears.
 
-**After merging deltas, update project documentation if warranted.**
+## Step 4: Dispose of the Nodes
 
-Skip for pure config/infra/internal refactors with no user-facing changes.
+`workflow.maps.persist` in `spechub/project.yaml` decides (default `false`):
 
-If docs updates are warranted, launch a subagent to update docs/ (if it exists) with:
-- New or changed user-facing behavior
-- API changes
-- Configuration changes
-- Architecture changes for developer docs
+| Value             | Action                                                       |
+| ----------------- | ------------------------------------------------------------ |
+| `false` (default) | delete `spechub/maps/<name>/`                                 |
+| `true`            | move the nodes to `spechub/archive/[YYYY-MM-DD]-[name]/nodes/` |
 
-## Step 6: Archive Change Artifacts
+Default is delete because keeping the nodes leaves a second copy of every
+decision, and the two drift. On the GitHub tracker there is nothing to
+dispose – closed issues are already the archive.
 
-1. Create: `spechub/archive/[YYYY-MM-DD]-[change-name]/`
-2. Copy from change directory: all artifacts
-3. Write generated `delta.md` to archive directory
-4. Remove the change from `spechub/changes/`
+## Step 5: Report
 
-## Step 7: Report
-
-- Archive location
-- Domains updated (N added, N modified, N removed per domain)
-- Docs updated (list files changed, or "skipped")
+- Nodes resolved / out-of-scope counts
+- Residue: domains spot-checked, ADRs and glossary entries written
+- Disposal: deleted, or archive path
 - Reminder: commit with `/commit`
+
+## Legacy: archiving a `spechub/changes/` directory
+
+Changes created by the pre-map workflow (proposal.md / design.md / tasks.md)
+still archive the old way, so an upgrade never strands work:
+
+1. Read the change's artifacts and derive affected domains from file paths in
+   `tasks.md` via `spechub/domain-map.yaml`.
+2. For each domain, merge what the feature ADDED, MODIFIED or REMOVED into
+   `spechub/specs/[domain]/spec.md`.
+3. Write a `delta.md` summarising those entries, copy the artifacts to
+   `spechub/archive/[YYYY-MM-DD]-[change-name]/`, and remove the change from
+   `spechub/changes/` (the CLI's `spechub archive <name>` does the move).

@@ -11307,73 +11307,21 @@ var init_constants = __esm({
   }
 });
 
-// src/lib/schema.ts
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join as join2 } from "node:path";
-function resolveSchema(name, projectRoot) {
-  const locations = [];
-  if (projectRoot) {
-    locations.push({ dir: join2(projectRoot, "spechub", "schemas"), source: "project" });
-  }
-  locations.push({ dir: join2(GLOBAL_DATA_DIR, "schemas"), source: "user" });
-  locations.push({ dir: PACKAGE_SCHEMAS_DIR, source: "package" });
-  for (const { dir, source } of locations) {
-    const schemaPath = join2(dir, name, "schema.yaml");
-    if (existsSync(schemaPath)) {
-      const raw = readFileSync(schemaPath, "utf-8");
-      const parsed = (0, import_yaml.parse)(raw);
-      return { ...parsed, name, source, path: schemaPath };
-    }
-  }
-  return null;
-}
-function listSchemas(projectRoot) {
-  const seen = /* @__PURE__ */ new Set();
-  const schemas = [];
-  const locations = [];
-  if (projectRoot) {
-    locations.push({ dir: join2(projectRoot, "spechub", "schemas"), source: "project" });
-  }
-  locations.push({ dir: join2(GLOBAL_DATA_DIR, "schemas"), source: "user" });
-  locations.push({ dir: PACKAGE_SCHEMAS_DIR, source: "package" });
-  for (const { dir, source } of locations) {
-    if (!existsSync(dir)) continue;
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (!entry.isDirectory() || seen.has(entry.name)) continue;
-      const schema = resolveSchema(entry.name, projectRoot);
-      if (schema) {
-        seen.add(entry.name);
-        schemas.push(schema);
-      }
-    }
-  }
-  return schemas;
-}
-var import_yaml, PACKAGE_SCHEMAS_DIR;
-var init_schema = __esm({
-  "src/lib/schema.ts"() {
-    "use strict";
-    import_yaml = __toESM(require_dist(), 1);
-    init_constants();
-    PACKAGE_SCHEMAS_DIR = join2(import.meta.dirname, "..", "..", "schemas");
-  }
-});
-
 // src/lib/utils.ts
-import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, readdirSync as readdirSync2 } from "node:fs";
-import { join as join3 } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { join as join2 } from "node:path";
 function ensureDir(path) {
-  if (!existsSync2(path)) mkdirSync(path, { recursive: true });
+  if (!existsSync(path)) mkdirSync(path, { recursive: true });
 }
 function listChanges(root) {
-  const dir = join3(root, SPECHUB_DIR, CHANGES_DIR);
-  if (!existsSync2(dir)) return [];
-  return readdirSync2(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== ARCHIVE_DIR).map((e) => e.name);
+  const dir = join2(root, SPECHUB_DIR, CHANGES_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== ARCHIVE_DIR).map((e) => e.name);
 }
 function listSpecs(root) {
-  const dir = join3(root, SPECHUB_DIR, SPECS_DIR);
-  if (!existsSync2(dir)) return [];
-  return readdirSync2(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  const dir = join2(root, SPECHUB_DIR, SPECS_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 }
 function requireProject(root) {
   if (!root) {
@@ -11384,11 +11332,11 @@ function requireProject(root) {
 function formatDate() {
   return (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
 }
-var import_yaml2;
+var import_yaml;
 var init_utils = __esm({
   "src/lib/utils.ts"() {
     "use strict";
-    import_yaml2 = __toESM(require_dist(), 1);
+    import_yaml = __toESM(require_dist(), 1);
     init_source();
     init_constants();
   }
@@ -11399,193 +11347,67 @@ var init_exports = {};
 __export(init_exports, {
   register: () => register
 });
-import { existsSync as existsSync3, writeFileSync, cpSync } from "node:fs";
-import { join as join4, resolve } from "node:path";
+import { existsSync as existsSync2, writeFileSync } from "node:fs";
+import { join as join3, resolve } from "node:path";
 function register(program3) {
-  program3.command("init").description("Initialize SpecHub in a project").argument("[path]", "project directory", ".").option("--force", "overwrite existing configuration").option("--schema <name>", "workflow schema to use", "default").action((path, opts) => {
+  program3.command("init").description("Initialize SpecHub in a project").argument("[path]", "project directory", ".").option("--force", "overwrite existing configuration").action((path, opts) => {
     const root = resolve(path);
-    const dir = join4(root, SPECHUB_DIR);
-    if (existsSync3(dir) && !opts.force) {
+    const dir = join3(root, SPECHUB_DIR);
+    if (existsSync2(dir) && !opts.force) {
       console.error(source_default.yellow(`${SPECHUB_DIR}/ already exists. Use --force to overwrite.`));
       process.exit(1);
     }
-    ensureDir(join4(dir, SPECS_DIR));
-    ensureDir(join4(dir, CHANGES_DIR, ARCHIVE_DIR));
-    const schema = resolveSchema(opts.schema);
+    ensureDir(join3(dir, SPECS_DIR));
     const config = {
-      schema: opts.schema,
       context: {}
     };
-    writeFileSync(join4(dir, CONFIG_FILE), (0, import_yaml3.stringify)(config), "utf-8");
-    if (schema) {
-      const templatesDir = join4(schema.path, "..", "templates");
-      if (existsSync3(templatesDir)) {
-        const targetTemplates = join4(dir, "schemas", opts.schema, "templates");
-        ensureDir(targetTemplates);
-        cpSync(templatesDir, targetTemplates, { recursive: true });
-      }
-    }
+    writeFileSync(join3(dir, CONFIG_FILE), (0, import_yaml2.stringify)(config), "utf-8");
     console.log(source_default.green("Initialized SpecHub project:"));
     console.log(`  ${SPECHUB_DIR}/`);
     console.log(`  ${SPECHUB_DIR}/${SPECS_DIR}/`);
-    console.log(`  ${SPECHUB_DIR}/${CHANGES_DIR}/`);
-    console.log(`  ${SPECHUB_DIR}/${CHANGES_DIR}/${ARCHIVE_DIR}/`);
     console.log(`  ${SPECHUB_DIR}/${CONFIG_FILE}`);
-    if (schema) {
-      console.log(`  Schema: ${opts.schema} (${schema.source})`);
-    } else {
-      console.log(source_default.yellow(`  Schema '${opts.schema}' not found \u2013 using defaults`));
-    }
   });
 }
-var import_yaml3;
+var import_yaml2;
 var init_init = __esm({
   "src/commands/init.ts"() {
     "use strict";
-    import_yaml3 = __toESM(require_dist(), 1);
+    import_yaml2 = __toESM(require_dist(), 1);
     init_source();
     init_constants();
-    init_schema();
     init_utils();
   }
 });
 
 // src/lib/project.ts
-import { existsSync as existsSync4, readFileSync as readFileSync3 } from "node:fs";
-import { join as join5, resolve as resolve2 } from "node:path";
+import { existsSync as existsSync3, readFileSync as readFileSync2 } from "node:fs";
+import { join as join4, resolve as resolve2 } from "node:path";
 function findProjectRoot(from = process.cwd()) {
   let dir = resolve2(from);
   while (true) {
-    if (existsSync4(join5(dir, SPECHUB_DIR))) return dir;
+    if (existsSync3(join4(dir, SPECHUB_DIR))) return dir;
     const parent = resolve2(dir, "..");
     if (parent === dir) return null;
     dir = parent;
   }
 }
-function readProjectConfig(root) {
-  const configPath = join5(root, SPECHUB_DIR, CONFIG_FILE);
-  if (!existsSync4(configPath)) return null;
-  const raw = readFileSync3(configPath, "utf-8");
-  return (0, import_yaml4.parse)(raw);
-}
-var import_yaml4;
+var import_yaml3;
 var init_project = __esm({
   "src/lib/project.ts"() {
     "use strict";
-    import_yaml4 = __toESM(require_dist(), 1);
+    import_yaml3 = __toESM(require_dist(), 1);
     init_constants();
-  }
-});
-
-// src/commands/new-change.ts
-var new_change_exports = {};
-__export(new_change_exports, {
-  register: () => register2
-});
-import { existsSync as existsSync5, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join6 } from "node:path";
-function defaultTemplate(artifact, changeName) {
-  const templates = {
-    "proposal.md": `# ${changeName}
-
-## Summary
-
-<!-- What and why -->
-
-## User Stories
-
-### P1 (Must Have)
-
-- As a [user], I want [feature] so that [benefit]
-
-### P2 (Should Have)
-
-### P3 (Nice to Have)
-
-## Acceptance Criteria
-
-- [ ] 
-`,
-    "design.md": `# ${changeName} \u2013 Design
-
-## Approach
-
-<!-- Technical approach and architecture -->
-
-## Components
-
-## API Changes
-
-## Data Model Changes
-
-## Open Questions
-`,
-    "tasks.md": `# ${changeName} \u2013 Tasks
-
-## Task List
-
-| ID | Task | Status | Dependencies |
-|----|------|--------|-------------|
-| T001 | | todo | \u2013 |
-`
-  };
-  return templates[artifact] ?? `# ${changeName} \u2013 ${artifact}
-`;
-}
-function register2(program3) {
-  const newCmd = program3.command("new").description("Create new artifacts");
-  newCmd.command("change").description("Create a new change proposal").argument("<name>", "change name (kebab-case)").option("--description <text>", "short description").option("--schema <name>", "workflow schema override").action((name, opts) => {
-    const root = findProjectRoot();
-    requireProject(root);
-    const changeDir = join6(root, SPECHUB_DIR, CHANGES_DIR, name);
-    if (existsSync5(changeDir)) {
-      console.error(source_default.red(`Change '${name}' already exists.`));
-      process.exit(1);
-    }
-    const config = readProjectConfig(root);
-    const schemaName = opts.schema ?? config?.schema ?? "default";
-    const schema = resolveSchema(schemaName, root);
-    ensureDir(changeDir);
-    ensureDir(join6(changeDir, "specs"));
-    const artifacts = schema?.artifacts ?? [
-      { name: "proposal", filename: "proposal.md" },
-      { name: "design", filename: "design.md" },
-      { name: "tasks", filename: "tasks.md" }
-    ];
-    for (const artifact of artifacts) {
-      const filePath = join6(changeDir, artifact.filename);
-      const content = defaultTemplate(artifact.filename, name);
-      writeFileSync2(filePath, content, "utf-8");
-    }
-    console.log(source_default.green(`Created change: ${name}`));
-    console.log(`  ${SPECHUB_DIR}/${CHANGES_DIR}/${name}/`);
-    for (const artifact of artifacts) {
-      console.log(`    ${artifact.filename}`);
-    }
-    if (opts.description) {
-      console.log(`  Description: ${opts.description}`);
-    }
-  });
-}
-var init_new_change = __esm({
-  "src/commands/new-change.ts"() {
-    "use strict";
-    init_source();
-    init_constants();
-    init_project();
-    init_schema();
-    init_utils();
   }
 });
 
 // src/commands/list.ts
 var list_exports = {};
 __export(list_exports, {
-  register: () => register3
+  register: () => register2
 });
-import { existsSync as existsSync6, readdirSync as readdirSync3, statSync } from "node:fs";
-import { join as join7 } from "node:path";
-function register3(program3) {
+import { existsSync as existsSync4, readdirSync as readdirSync2, statSync } from "node:fs";
+import { join as join5 } from "node:path";
+function register2(program3) {
   program3.command("list").description("List active changes or specs").option("--specs", "list specs instead of changes").option("--changes", "list changes (default)").option("--json", "output as JSON").option("--sort <order>", "sort order: name or recent", "recent").action((opts) => {
     const root = findProjectRoot();
     requireProject(root);
@@ -11593,19 +11415,19 @@ function register3(program3) {
     const items = [];
     if (showSpecs) {
       for (const name of listSpecs(root)) {
-        const specDir = join7(root, SPECHUB_DIR, SPECS_DIR, name);
-        const specFile = join7(specDir, "spec.md");
+        const specDir = join5(root, SPECHUB_DIR, SPECS_DIR, name);
+        const specFile = join5(specDir, "spec.md");
         items.push({
           name,
           type: "spec",
           path: specDir,
-          modified: existsSync6(specFile) ? statSync(specFile).mtime.toISOString().split("T")[0] : void 0
+          modified: existsSync4(specFile) ? statSync(specFile).mtime.toISOString().split("T")[0] : void 0
         });
       }
     } else {
       for (const name of listChanges(root)) {
-        const changeDir = join7(root, SPECHUB_DIR, CHANGES_DIR, name);
-        const artifacts = existsSync6(changeDir) ? readdirSync3(changeDir).filter((f) => f.endsWith(".md")).map((f) => f.replace(".md", "")) : [];
+        const changeDir = join5(root, SPECHUB_DIR, CHANGES_DIR, name);
+        const artifacts = existsSync4(changeDir) ? readdirSync2(changeDir).filter((f) => f.endsWith(".md")).map((f) => f.replace(".md", "")) : [];
         items.push({
           name,
           type: "change",
@@ -11652,11 +11474,11 @@ var init_list = __esm({
 // src/commands/show.ts
 var show_exports = {};
 __export(show_exports, {
-  register: () => register4
+  register: () => register3
 });
-import { existsSync as existsSync7, readFileSync as readFileSync4, readdirSync as readdirSync4 } from "node:fs";
-import { join as join8 } from "node:path";
-function register4(program3) {
+import { existsSync as existsSync5, readFileSync as readFileSync3, readdirSync as readdirSync3 } from "node:fs";
+import { join as join6 } from "node:path";
+function register3(program3) {
   program3.command("show").description("Display a change or spec").argument("[name]", "change or spec name").option("--json", "output as JSON").option("--type <type>", "force type: change or spec").action((name, opts) => {
     const root = findProjectRoot();
     requireProject(root);
@@ -11664,17 +11486,17 @@ function register4(program3) {
       console.error(source_default.red("Provide a change or spec name."));
       process.exit(1);
     }
-    const changeDir = join8(root, SPECHUB_DIR, CHANGES_DIR, name);
-    const specDir = join8(root, SPECHUB_DIR, SPECS_DIR, name);
+    const changeDir = join6(root, SPECHUB_DIR, CHANGES_DIR, name);
+    const specDir = join6(root, SPECHUB_DIR, SPECS_DIR, name);
     let type;
     let targetDir;
-    if (opts.type === "spec" || !opts.type && !existsSync7(changeDir) && existsSync7(specDir)) {
+    if (opts.type === "spec" || !opts.type && !existsSync5(changeDir) && existsSync5(specDir)) {
       type = "spec";
       targetDir = specDir;
-    } else if (existsSync7(changeDir)) {
+    } else if (existsSync5(changeDir)) {
       type = "change";
       targetDir = changeDir;
-    } else if (existsSync7(specDir)) {
+    } else if (existsSync5(specDir)) {
       type = "spec";
       targetDir = specDir;
     } else {
@@ -11682,12 +11504,12 @@ function register4(program3) {
       process.exit(1);
     }
     if (type === "spec") {
-      const specFile = join8(targetDir, "spec.md");
-      if (!existsSync7(specFile)) {
+      const specFile = join6(targetDir, "spec.md");
+      if (!existsSync5(specFile)) {
         console.error(source_default.red(`Spec '${name}' has no spec.md file.`));
         process.exit(1);
       }
-      const content = readFileSync4(specFile, "utf-8");
+      const content = readFileSync3(specFile, "utf-8");
       if (opts.json) {
         console.log(JSON.stringify({ name, type: "spec", content }, null, 2));
       } else {
@@ -11695,10 +11517,10 @@ function register4(program3) {
       }
       return;
     }
-    const files = readdirSync4(targetDir).filter((f) => f.endsWith(".md"));
+    const files = readdirSync3(targetDir).filter((f) => f.endsWith(".md"));
     const artifacts = {};
     for (const file of files) {
-      artifacts[file.replace(".md", "")] = readFileSync4(join8(targetDir, file), "utf-8");
+      artifacts[file.replace(".md", "")] = readFileSync3(join6(targetDir, file), "utf-8");
     }
     if (opts.json) {
       console.log(JSON.stringify({ name, type: "change", artifacts }, null, 2));
@@ -11721,157 +11543,14 @@ var init_show = __esm({
   }
 });
 
-// src/commands/status.ts
-var status_exports = {};
-__export(status_exports, {
-  register: () => register5
-});
-import { existsSync as existsSync8 } from "node:fs";
-import { join as join9 } from "node:path";
-function register5(program3) {
-  program3.command("status").description("Show artifact completion status for a change").option("--change <name>", "change name").option("--json", "output as JSON").action((opts) => {
-    const root = findProjectRoot();
-    requireProject(root);
-    if (!opts.change) {
-      console.error(source_default.red("Specify a change with --change <name>"));
-      process.exit(1);
-    }
-    const changeDir = join9(root, SPECHUB_DIR, CHANGES_DIR, opts.change);
-    if (!existsSync8(changeDir)) {
-      console.error(source_default.red(`Change '${opts.change}' not found.`));
-      process.exit(1);
-    }
-    const config = readProjectConfig(root);
-    const schemaName = config?.schema ?? "default";
-    const schema = resolveSchema(schemaName, root);
-    const artifacts = schema?.artifacts ?? [
-      { name: "proposal", filename: "proposal.md", required: true },
-      { name: "design", filename: "design.md", required: false },
-      { name: "tasks", filename: "tasks.md", required: false }
-    ];
-    const statuses = artifacts.map((a) => ({
-      name: a.name,
-      filename: a.filename,
-      required: a.required ?? false,
-      exists: existsSync8(join9(changeDir, a.filename))
-    }));
-    if (opts.json) {
-      console.log(JSON.stringify({ change: opts.change, artifacts: statuses }, null, 2));
-      return;
-    }
-    console.log(source_default.bold(`Status: ${opts.change}
-`));
-    for (const s of statuses) {
-      const icon = s.exists ? source_default.green("\u2713") : s.required ? source_default.red("\u2717") : source_default.dim("\u2013");
-      const label = s.required ? s.name : source_default.dim(s.name);
-      console.log(`  ${icon} ${label} (${s.filename})`);
-    }
-  });
-}
-var init_status = __esm({
-  "src/commands/status.ts"() {
-    "use strict";
-    init_source();
-    init_constants();
-    init_project();
-    init_schema();
-    init_utils();
-  }
-});
-
-// src/commands/instructions.ts
-var instructions_exports = {};
-__export(instructions_exports, {
-  register: () => register6
-});
-import { existsSync as existsSync9, readFileSync as readFileSync5 } from "node:fs";
-import { join as join10 } from "node:path";
-function register6(program3) {
-  program3.command("instructions").description("Output enriched instructions for creating an artifact").argument("<artifact>", "artifact name (proposal, design, tasks, apply)").option("--change <name>", "change name").option("--schema <name>", "schema override").option("--json", "output as JSON").action((artifact, opts) => {
-    const root = findProjectRoot();
-    requireProject(root);
-    const config = readProjectConfig(root);
-    const schemaName = opts.schema ?? config?.schema ?? "default";
-    const schema = resolveSchema(schemaName, root);
-    if (!schema) {
-      console.error(source_default.red(`Schema '${schemaName}' not found.`));
-      process.exit(1);
-    }
-    const artifactDef = schema.artifacts.find((a) => a.name === artifact);
-    if (!artifactDef) {
-      console.error(source_default.red(`Artifact '${artifact}' not defined in schema '${schemaName}'.`));
-      console.error(`Available: ${schema.artifacts.map((a) => a.name).join(", ")}`);
-      process.exit(1);
-    }
-    let template = "";
-    if (artifactDef.template) {
-      const templatePath = join10(schema.path, "..", "templates", artifactDef.template);
-      if (existsSync9(templatePath)) {
-        template = readFileSync5(templatePath, "utf-8");
-      }
-    }
-    let context = {};
-    if (opts.change) {
-      const changeDir = join10(root, SPECHUB_DIR, CHANGES_DIR, opts.change);
-      if (existsSync9(changeDir)) {
-        for (const a of schema.artifacts) {
-          const filePath = join10(changeDir, a.filename);
-          if (existsSync9(filePath) && a.name !== artifact) {
-            context[a.name] = readFileSync5(filePath, "utf-8");
-          }
-        }
-      }
-    }
-    const result = {
-      artifact: artifactDef.name,
-      schema: schemaName,
-      change: opts.change ?? null,
-      template,
-      context,
-      description: artifactDef.description ?? ""
-    };
-    if (opts.json) {
-      console.log(JSON.stringify(result, null, 2));
-      return;
-    }
-    console.log(source_default.bold(`Instructions: ${artifact}`));
-    if (artifactDef.description) {
-      console.log(`
-${artifactDef.description}`);
-    }
-    if (template) {
-      console.log(source_default.dim("\n--- Template ---\n"));
-      console.log(template);
-    }
-    if (Object.keys(context).length > 0) {
-      console.log(source_default.dim("\n--- Context (existing artifacts) ---"));
-      for (const [name, content] of Object.entries(context)) {
-        console.log(source_default.dim(`
-[${name}]`));
-        console.log(content.slice(0, 500) + (content.length > 500 ? "..." : ""));
-      }
-    }
-  });
-}
-var init_instructions = __esm({
-  "src/commands/instructions.ts"() {
-    "use strict";
-    init_source();
-    init_constants();
-    init_project();
-    init_schema();
-    init_utils();
-  }
-});
-
 // src/commands/archive.ts
 var archive_exports = {};
 __export(archive_exports, {
-  register: () => register7
+  register: () => register4
 });
-import { existsSync as existsSync10, cpSync as cpSync2, rmSync } from "node:fs";
-import { join as join11 } from "node:path";
-function register7(program3) {
+import { existsSync as existsSync6, cpSync, rmSync } from "node:fs";
+import { join as join7 } from "node:path";
+function register4(program3) {
   program3.command("archive").description("Archive a completed change").argument("[name]", "change name").option("-y, --yes", "skip confirmation").option("--skip-specs", "skip living spec updates").action((name, opts) => {
     const root = findProjectRoot();
     requireProject(root);
@@ -11888,15 +11567,15 @@ function register7(program3) {
       console.log(source_default.dim("\nRun: spechub archive <name>"));
       return;
     }
-    const changeDir = join11(root, SPECHUB_DIR, CHANGES_DIR, name);
-    if (!existsSync10(changeDir)) {
+    const changeDir = join7(root, SPECHUB_DIR, CHANGES_DIR, name);
+    if (!existsSync6(changeDir)) {
       console.error(source_default.red(`Change '${name}' not found.`));
       process.exit(1);
     }
     const archiveName = `${formatDate()}-${name}`;
-    const archiveDir = join11(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR, archiveName);
-    ensureDir(join11(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR));
-    cpSync2(changeDir, archiveDir, { recursive: true });
+    const archiveDir = join7(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR, archiveName);
+    ensureDir(join7(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR));
+    cpSync(changeDir, archiveDir, { recursive: true });
     rmSync(changeDir, { recursive: true });
     console.log(source_default.green(`Archived: ${name}`));
     console.log(`  From: ${SPECHUB_DIR}/${CHANGES_DIR}/${name}/`);
@@ -16023,26 +15702,26 @@ var init_zod = __esm({
 });
 
 // src/lib/nodes.ts
-import { existsSync as existsSync11, readFileSync as readFileSync6, readdirSync as readdirSync5, writeFileSync as writeFileSync3 } from "node:fs";
-import { join as join12 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync4, readdirSync as readdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
+import { join as join8 } from "node:path";
 function normalizeId(id) {
   const trimmed = id.trim();
   if (!/^\d+$/.test(trimmed)) return trimmed;
   return trimmed.padStart(3, "0");
 }
 function mapDir(root, map) {
-  return join12(root, SPECHUB_DIR, MAPS_DIR, map);
+  return join8(root, SPECHUB_DIR, MAPS_DIR, map);
 }
 function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/, "") || "node";
 }
 function parseNodeFile(dir, file) {
-  const raw = readFileSync6(join12(dir, file), "utf-8");
+  const raw = readFileSync4(join8(dir, file), "utf-8");
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
   }
-  const parsed = frontmatterSchema.safeParse((0, import_yaml5.parse)(match[1]));
+  const parsed = frontmatterSchema.safeParse((0, import_yaml4.parse)(match[1]));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new Error(`${file}: ${issue.path.join(".")} ${issue.message}`);
@@ -16072,8 +15751,8 @@ function parseNodeFile(dir, file) {
 }
 function loadNodes(root, map) {
   const dir = mapDir(root, map);
-  if (!existsSync11(dir)) return [];
-  return readdirSync5(dir).filter((f) => /^\d+.*\.md$/.test(f)).map((f) => parseNodeFile(dir, f)).sort((a, b) => a.id.localeCompare(b.id));
+  if (!existsSync7(dir)) return [];
+  return readdirSync4(dir).filter((f) => /^\d+.*\.md$/.test(f)).map((f) => parseNodeFile(dir, f)).sort((a, b) => a.id.localeCompare(b.id));
 }
 function getNode(root, map, id) {
   const normalized = normalizeId(id);
@@ -16099,7 +15778,7 @@ function serializeNode(node) {
 function writeNode(root, map, node) {
   const dir = mapDir(root, map);
   ensureDir(dir);
-  writeFileSync3(join12(dir, node.file), serializeNode(node), "utf-8");
+  writeFileSync2(join8(dir, node.file), serializeNode(node), "utf-8");
 }
 function requireExisting(nodes, id, role) {
   if (!nodes.some((n) => n.id === id)) {
@@ -16246,11 +15925,11 @@ function walkTree(nodes) {
   visit(roots[0], 0);
   return out;
 }
-var import_yaml5, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
+var import_yaml4, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
 var init_nodes = __esm({
   "src/lib/nodes.ts"() {
     "use strict";
-    import_yaml5 = __toESM(require_dist(), 1);
+    import_yaml4 = __toESM(require_dist(), 1);
     init_zod();
     init_constants();
     init_utils();
@@ -16271,10 +15950,10 @@ var init_nodes = __esm({
 // src/commands/node.ts
 var node_exports = {};
 __export(node_exports, {
-  register: () => register8
+  register: () => register5
 });
-import { readFileSync as readFileSync7 } from "node:fs";
-import { join as join13 } from "node:path";
+import { readFileSync as readFileSync5 } from "node:fs";
+import { join as join9 } from "node:path";
 function fail(message) {
   console.error(source_default.red(message));
   process.exit(1);
@@ -16300,8 +15979,8 @@ function readBody(body, bodyFile) {
   }
   if (body !== void 0) return body;
   if (bodyFile === void 0) return void 0;
-  if (bodyFile === "-") return readFileSync7(0, "utf-8");
-  return readFileSync7(bodyFile, "utf-8");
+  if (bodyFile === "-") return readFileSync5(0, "utf-8");
+  return readFileSync5(bodyFile, "utf-8");
 }
 function toJson(node) {
   return {
@@ -16326,7 +16005,7 @@ function printNode(node) {
     `${source_default.bold(node.id)}  ${node.status.padEnd(12)} ${node.mode.padEnd(4)} ${node.title}` + source_default.dim(`  (${links}${flags ? `; ${flags}` : ""})`)
   );
 }
-function register8(program3) {
+function register5(program3) {
   const nodeCmd = program3.command("node").description("Map nodes on the files backend (spechub/maps/<name>/)");
   nodeCmd.command("create").description("Create a node; the first node in a map is the root").requiredOption("--map <name>", "map name").requiredOption("--title <title>", "node title").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", `one of: ${NODE_MODES.join(", ")}`, parseMode).option("--kind <kind>", "advisory kind hint (grilling, research, task, ...)").option("--answers <id>", "provenance parent \u2013 required except on the root").option("--blocked-by <ids>", "comma-separated blocking node ids", parseIdList).option("--pinned", "load in full every session").option("--body <text>", "markdown body").option("--body-file <path>", "read body from file, or - for stdin").option("--json", "output as JSON").action(
     (opts) => {
@@ -16361,7 +16040,7 @@ function register8(program3) {
       if (opts.json) {
         console.log(JSON.stringify({ ...toJson(node), body: node.body }, null, 2));
       } else {
-        console.log(readFileSync7(join13(mapDir(root, opts.map), node.file), "utf-8"));
+        console.log(readFileSync5(join9(mapDir(root, opts.map), node.file), "utf-8"));
       }
     } catch (err) {
       fail(err.message);
@@ -16499,125 +16178,21 @@ var init_node = __esm({
   }
 });
 
-// src/commands/validate.ts
-var validate_exports = {};
-__export(validate_exports, {
-  register: () => register9
-});
-import { existsSync as existsSync12, readFileSync as readFileSync8 } from "node:fs";
-import { join as join14 } from "node:path";
-function validateChange(root, name, strict) {
-  const result = { name, type: "change", valid: true, errors: [], warnings: [] };
-  const changeDir = join14(root, SPECHUB_DIR, CHANGES_DIR, name);
-  if (!existsSync12(changeDir)) {
-    result.valid = false;
-    result.errors.push("Change directory does not exist");
-    return result;
-  }
-  const proposalPath = join14(changeDir, "proposal.md");
-  if (!existsSync12(proposalPath)) {
-    result.valid = false;
-    result.errors.push("Missing required artifact: proposal.md");
-  } else {
-    const content = readFileSync8(proposalPath, "utf-8");
-    if (content.trim().length < 50) {
-      result.warnings.push("proposal.md appears to be a stub (< 50 chars)");
-      if (strict) {
-        result.valid = false;
-        result.errors.push("proposal.md too short in strict mode");
-      }
-    }
-  }
-  return result;
-}
-function validateSpec(root, name, strict) {
-  const result = { name, type: "spec", valid: true, errors: [], warnings: [] };
-  const specDir = join14(root, SPECHUB_DIR, SPECS_DIR, name);
-  const specFile = join14(specDir, "spec.md");
-  if (!existsSync12(specFile)) {
-    result.valid = false;
-    result.errors.push("Missing spec.md");
-    return result;
-  }
-  const content = readFileSync8(specFile, "utf-8");
-  if (content.includes("[PLANNED]")) {
-    result.warnings.push("Contains [PLANNED] items \u2013 living specs document what is implemented, not roadmap");
-    if (strict) {
-      result.valid = false;
-      result.errors.push("[PLANNED] items not allowed in strict mode");
-    }
-  }
-  return result;
-}
-function register9(program3) {
-  program3.command("validate").description("Validate changes and/or specs").argument("[name]", "specific item to validate").option("--all", "validate everything").option("--changes", "validate all changes").option("--specs", "validate all specs").option("--strict", "strict validation").option("--json", "output as JSON").action((name, opts) => {
-    const root = findProjectRoot();
-    requireProject(root);
-    const strict = opts.strict ?? false;
-    const results = [];
-    if (name) {
-      const changeDir = join14(root, SPECHUB_DIR, CHANGES_DIR, name);
-      const specDir = join14(root, SPECHUB_DIR, SPECS_DIR, name);
-      if (existsSync12(changeDir)) results.push(validateChange(root, name, strict));
-      if (existsSync12(specDir)) results.push(validateSpec(root, name, strict));
-      if (results.length === 0) {
-        console.error(source_default.red(`'${name}' not found as a change or spec.`));
-        process.exit(1);
-      }
-    } else {
-      const doChanges = opts.all || opts.changes || !opts.specs;
-      const doSpecs = opts.all || opts.specs;
-      if (doChanges) {
-        for (const c of listChanges(root)) results.push(validateChange(root, c, strict));
-      }
-      if (doSpecs) {
-        for (const s of listSpecs(root)) results.push(validateSpec(root, s, strict));
-      }
-    }
-    if (opts.json) {
-      console.log(JSON.stringify(results, null, 2));
-      return;
-    }
-    if (results.length === 0) {
-      console.log(source_default.dim("Nothing to validate."));
-      return;
-    }
-    let allValid = true;
-    for (const r of results) {
-      const icon = r.valid ? source_default.green("\u2713") : source_default.red("\u2717");
-      console.log(`${icon} ${r.type}: ${r.name}`);
-      for (const e of r.errors) console.log(source_default.red(`    error: ${e}`));
-      for (const w of r.warnings) console.log(source_default.yellow(`    warn: ${w}`));
-      if (!r.valid) allValid = false;
-    }
-    if (!allValid) process.exit(1);
-  });
-}
-var init_validate = __esm({
-  "src/commands/validate.ts"() {
-    "use strict";
-    init_source();
-    init_constants();
-    init_project();
-    init_utils();
-  }
-});
-
 // src/commands/config.ts
 var config_exports = {};
 __export(config_exports, {
-  register: () => register10
+  register: () => register6
 });
-import { existsSync as existsSync13, readFileSync as readFileSync9, writeFileSync as writeFileSync4 } from "node:fs";
+import { existsSync as existsSync8, readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
 function readGlobalConfig() {
-  if (!existsSync13(GLOBAL_CONFIG_FILE)) return {};
-  return JSON.parse(readFileSync9(GLOBAL_CONFIG_FILE, "utf-8"));
+  if (!existsSync8(GLOBAL_CONFIG_FILE)) return {};
+  return JSON.parse(readFileSync6(GLOBAL_CONFIG_FILE, "utf-8"));
 }
 function writeGlobalConfig(config) {
   ensureDir(GLOBAL_CONFIG_DIR);
-  writeFileSync4(GLOBAL_CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf-8");
+  writeFileSync3(GLOBAL_CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf-8");
 }
-function register10(program3) {
+function register6(program3) {
   const configCmd = program3.command("config").description("Manage global configuration");
   configCmd.command("path").description("Print config file path").action(() => {
     console.log(GLOBAL_CONFIG_FILE);
@@ -16670,53 +16245,13 @@ var init_config = __esm({
   }
 });
 
-// src/commands/schemas.ts
-var schemas_exports = {};
-__export(schemas_exports, {
-  register: () => register11
-});
-function register11(program3) {
-  program3.command("schemas").description("List available workflow schemas").option("--json", "output as JSON").action((opts) => {
-    const root = findProjectRoot() ?? void 0;
-    const schemas = listSchemas(root);
-    if (opts.json) {
-      console.log(JSON.stringify(schemas.map((s) => ({
-        name: s.name,
-        description: s.description,
-        source: s.source,
-        artifacts: s.artifacts.map((a) => a.name)
-      })), null, 2));
-      return;
-    }
-    if (schemas.length === 0) {
-      console.log(source_default.dim("No schemas found."));
-      return;
-    }
-    console.log(source_default.bold(`Schemas (${schemas.length}):
-`));
-    for (const s of schemas) {
-      console.log(`  ${source_default.cyan(s.name)} ${source_default.dim(`(${s.source})`)}`);
-      if (s.description) console.log(`    ${s.description}`);
-      console.log(`    Artifacts: ${s.artifacts.map((a) => a.name).join(", ")}`);
-    }
-  });
-}
-var init_schemas = __esm({
-  "src/commands/schemas.ts"() {
-    "use strict";
-    init_source();
-    init_project();
-    init_schema();
-  }
-});
-
 // src/commands/feedback.ts
 var feedback_exports = {};
 __export(feedback_exports, {
-  register: () => register12
+  register: () => register7
 });
 import { execSync } from "node:child_process";
-function register12(program3) {
+function register7(program3) {
   program3.command("feedback").description("Submit feedback or report an issue").argument("<message>", "feedback message").option("--body <text>", "additional details").action((message, opts) => {
     const title = encodeURIComponent(message);
     const body = opts.body ? encodeURIComponent(opts.body) : "";
@@ -16758,24 +16293,19 @@ var {
 } = import_index.default;
 
 // src/index.ts
-import { readFileSync as readFileSync10 } from "node:fs";
-import { join as join15 } from "node:path";
+import { readFileSync as readFileSync7 } from "node:fs";
+import { join as join10 } from "node:path";
 var pkg = JSON.parse(
-  readFileSync10(join15(import.meta.dirname, "..", "package.json"), "utf-8")
+  readFileSync7(join10(import.meta.dirname, "..", "package.json"), "utf-8")
 );
 var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(pkg.version);
 var commands = await Promise.all([
   Promise.resolve().then(() => (init_init(), init_exports)),
-  Promise.resolve().then(() => (init_new_change(), new_change_exports)),
   Promise.resolve().then(() => (init_list(), list_exports)),
   Promise.resolve().then(() => (init_show(), show_exports)),
-  Promise.resolve().then(() => (init_status(), status_exports)),
-  Promise.resolve().then(() => (init_instructions(), instructions_exports)),
   Promise.resolve().then(() => (init_archive(), archive_exports)),
   Promise.resolve().then(() => (init_node(), node_exports)),
-  Promise.resolve().then(() => (init_validate(), validate_exports)),
   Promise.resolve().then(() => (init_config(), config_exports)),
-  Promise.resolve().then(() => (init_schemas(), schemas_exports)),
   Promise.resolve().then(() => (init_feedback(), feedback_exports))
 ]);
 for (const mod of commands) {

@@ -4,35 +4,23 @@ A Claude Code plugin for spec-driven TDD development.
 
 ## Overview
 
-SpecHub provides right-sized workflows for any task – from a one-line fix to a fully planned initiative. Living specifications stay in sync with your codebase automatically via commit-time spec sync.
+SpecHub grows planning structure only as far as the fog demands – the same entry point serves a one-question change and a fifty-question effort. Living specifications stay in sync with your codebase automatically via commit-time spec sync.
 
 Every rule exists because something went wrong without it. Built over months of actual product development with Claude Code.
 
 ## Workflows
 
-Two paths. The orchestrator picks based on complexity, or you can steer it.
+No path selection. Planning structure grows only as far as the fog demands:
 
-**Quick** – small, clear-scope changes (bug fixes, typos, config tweaks):
+- **The way is clear** – `/spechub:implement` runs the TDD pipeline (test-writer -> task-executor -> task-checker) on the request directly. A small unit of work is simply small.
+- **Something is broken** – `/spechub:quick-fix` forces root-cause analysis before any edit.
+- **Decisions need settling** – `/spechub:map` charts a map if none exists and works the frontier if one does. One question is grilled in conversation and leaves an ADR; a long effort becomes nodes on a tracker, worked across sessions.
 
-```
-/spechub:implement-quick
-```
-
-**Full pipeline** – features, refactors, and larger work:
-
-```
-/spechub:propose → /spechub:design → /spechub:tasks → /spechub:implement → /spechub:archive
-```
-
-Two optional adjustments:
-- Add `/spechub:clarify` between propose and design when requirements are ambiguous
-- Skip `/spechub:design` for simple features – `/spechub:tasks` can run right after propose
-
-The full pipeline always ends with the TDD pipeline (test-writer → task-executor → task-checker) and `/spechub:archive` to update living specs. Frontend-verifier also runs when `frontend` is configured in `project.yaml`.
+A map is one node type – five statuses, a provenance parent, blocking edges – behind a pluggable tracker (GitHub issues first-class, files as the fallback). The frontier query answers "what can be worked right now"; the packaging walk hands an effort to a fresh session without re-reading everything. Frontend-verifier also runs when `frontend` is configured in `project.yaml`.
 
 ## Features
 
-- **Right-sized workflows** – Quick path for small changes, full pipeline for features and larger work
+- **Progressive materialisation** – structure appears only when it must persist; a map exists only when fog outlives a session
 - **Commit-time spec sync** – Living specs auto-update on every commit
 - **Four-phase TDD pipeline** – test-writer → task-executor → task-checker → frontend-verifier
 - **Orchestrator pattern** – Claude coordinates specialized agents rather than doing everything itself
@@ -62,7 +50,7 @@ This detects your project type and generates `spechub/project.yaml` with workflo
 
 ## CLI
 
-SpecHub ships a Node.js CLI for change management (`spechub new change`, `spechub status`, `spechub list`, `spechub archive`).
+SpecHub ships a Node.js CLI (`spechub init`, `spechub list`, `spechub node ...`, `spechub archive`).
 
 Map nodes live behind a pluggable tracker declaring four operations – create, read, update, list. GitHub issues are the first-class backend (native sub-issues carry provenance, native dependencies carry blocking). The CLI carries the files fallback for map nodes (`spechub node create | read | update | list`), which stores one markdown file per node under `spechub/maps/<name>/`. These four operations are the whole tracker contract. `spechub node frontier` is a composed query over them – open nodes with no unresolved blockers, shallowest provenance depth first. `spechub node walk` packages the map for a handoff: a preorder walk of the provenance tree with pinned nodes and the root in full. Claim and resolve are compositions too, performed by skills through `update`.
 
@@ -82,10 +70,9 @@ Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:implement-quick` | Quick path for small, clear-scope changes – 3-explorer analysis then implement |
 | `/spechub:implement` | Claim afk work from the map frontier and run the TDD pipeline – runs directly on the request when no map exists |
 
-For larger work, chain the planning skills below first, then run `/spechub:implement`.
+For work with open decisions, chart it with `/spechub:map` first.
 
 ### Planning
 
@@ -94,17 +81,13 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 | `/spechub:map` | Entry point for planned work – charts a map if none exists, works the frontier if one does |
 | `grilling` | Interview technique – asks the whole frontier per round, each question with a recommended answer (model-invoked) |
 | `record-context` | Writes durable records when a decision lands – an ADR, a glossary term, both, or neither (model-invoked) |
-| `/spechub:propose` | Create a feature proposal with user stories |
-| `/spechub:clarify` | Resolve ambiguities in the proposal |
-| `/spechub:design` | Generate implementation design |
-| `/spechub:tasks` | Generate dependency-ordered task list |
 
 ### Operations
 
 | Skill | Description |
 |-------|-------------|
 | `/spechub:commit` | Git commit with mandatory spec sync |
-| `/spechub:archive` | Archive completed change, update living specs |
+| `/spechub:archive` | Close out a cleared map – verify residue, dispose of nodes |
 | `/spechub:config` | View/modify workflow settings |
 | `/spechub:sync` | Update specs from code changes |
 | `/spechub:handoff` | Hand work to a fresh agent session, or anchor it to survive compaction |
@@ -115,7 +98,6 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 |-------|-------------|
 | `/spechub:init` | Initialize SpecHub in a project |
 | `/spechub:bootstrap` | Generate initial living specs from code |
-| `/spechub:verify` | Cross-artifact consistency analysis |
 | `/spechub:explore` | Thinking partner mode (read-only) |
 | `/spechub:quick-fix` | Structured bug fix workflow with root cause analysis |
 | `/spechub:pre-commit-review` | Deep quality review of all changes since last commit |
@@ -145,7 +127,7 @@ For larger work, chain the planning skills below first, then run `/spechub:imple
 
 - **TDD is structural, not aspirational.** Test-writer can't see the implementation plan. Executor can't touch test files. Tests stay independent of the code they verify.
 - **Specs converge toward reality.** Every commit updates the living specs via spec sync. Agents fix inaccuracies on sight. Specs track what is implemented, never what's planned.
-- **Right-sized workflow.** A typo fix doesn't need a proposal. A new payment system does. The orchestrator picks the right path automatically.
+- **Progressive materialisation.** A typo fix needs no machinery. A long effort earns a map. The same entry point serves both, and nothing declares which.
 - **Planning outweighs coding.** Three parallel explorers run before any code is written. Mock audits, mutation checks, regression suites, integration wiring.
 - **Strict defaults, easy to relax.** Use `/spechub:config` to adjust TDD strictness, orchestrator mode, or default tier.
 
