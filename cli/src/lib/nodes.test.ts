@@ -2,7 +2,15 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createNode, getNode, loadNodes, mapDir, updateNode } from './nodes.js';
+import {
+  createNode,
+  deriveDepths,
+  frontier,
+  getNode,
+  loadNodes,
+  mapDir,
+  updateNode,
+} from './nodes.js';
 
 let root: string;
 
@@ -160,6 +168,28 @@ describe('list', () => {
     expect(loadNodes(root, 'demo').map(n => n.id)).toEqual(['001', '002']);
   });
 
+  it('derives depth from the answers chain', () => {
+    createNode(root, 'demo', { title: 'Root' });
+    createNode(root, 'demo', { title: 'A', answers: '001' });
+    createNode(root, 'demo', { title: 'B', answers: '002' });
+    const depths = deriveDepths(loadNodes(root, 'demo'));
+    expect(depths.get('001')).toBe(0);
+    expect(depths.get('002')).toBe(1);
+    expect(depths.get('003')).toBe(2);
+  });
+
+  it('names the node when a hand-edited parent is missing or cyclic', () => {
+    const dir = mapDir(root, 'demo');
+    mkdirSync(dir, { recursive: true });
+    const frontmatter = (answers: string) =>
+      `---\nstatus: open\nmode: hitl\nanswers: "${answers}"\nblocked-by: []\n---\n\n`;
+    writeFileSync(join(dir, '001-a.md'), frontmatter('002') + '# A\n');
+    writeFileSync(join(dir, '002-b.md'), frontmatter('001') + '# B\n');
+    expect(() => deriveDepths(loadNodes(root, 'demo'))).toThrow(/cycle/);
+    rmSync(join(dir, '002-b.md'));
+    expect(() => deriveDepths(loadNodes(root, 'demo'))).toThrow(/does not exist/);
+  });
+
   it('round-trips a serialized file byte-for-byte through parse and write', () => {
     createNode(root, 'demo', {
       title: 'Root',
@@ -173,5 +203,39 @@ describe('list', () => {
     updateNode(root, 'demo', '001', {});
     const after = readFileSync(join(dir, file), 'utf-8');
     expect(after).toBe(before);
+  });
+});
+
+describe('frontier', () => {
+  it('returns open nodes with no unresolved blockers', () => {
+    createNode(root, 'demo', { title: 'Root', status: 'resolved' });
+    createNode(root, 'demo', { title: 'A', answers: '001' });
+    createNode(root, 'demo', { title: 'B', answers: '001', blockedBy: ['002'] });
+    createNode(root, 'demo', { title: 'C', answers: '001', status: 'fog' });
+    const ready = frontier(loadNodes(root, 'demo'));
+    expect(ready.map(n => n.id)).toEqual(['002']);
+  });
+
+  it('treats fog and claimed blockers as blocking, resolved and out-of-scope as settled', () => {
+    createNode(root, 'demo', { title: 'Root', status: 'resolved' });
+    createNode(root, 'demo', { title: 'Fog blocker', answers: '001', status: 'fog' });
+    createNode(root, 'demo', { title: 'Claimed blocker', answers: '001', status: 'claimed' });
+    createNode(root, 'demo', { title: 'Resolved blocker', answers: '001', status: 'resolved' });
+    createNode(root, 'demo', { title: 'Descoped blocker', answers: '001', status: 'out-of-scope' });
+    createNode(root, 'demo', { title: 'Behind fog', answers: '001', blockedBy: ['002'] });
+    createNode(root, 'demo', { title: 'Behind claim', answers: '001', blockedBy: ['003'] });
+    createNode(root, 'demo', { title: 'Behind settled', answers: '001', blockedBy: ['004', '005'] });
+    const ready = frontier(loadNodes(root, 'demo'));
+    expect(ready.map(n => n.id)).toEqual(['008']);
+  });
+
+  it('orders by shallowest depth, then id – a late shallow node jumps the queue', () => {
+    createNode(root, 'demo', { title: 'Root', status: 'resolved' });
+    createNode(root, 'demo', { title: 'Deep parent', answers: '001', status: 'resolved' });
+    createNode(root, 'demo', { title: 'Deep open', answers: '002' });
+    createNode(root, 'demo', { title: 'Late shallow', answers: '001' });
+    createNode(root, 'demo', { title: 'Shallow sibling', answers: '001' });
+    const ready = frontier(loadNodes(root, 'demo'));
+    expect(ready.map(n => n.id)).toEqual(['004', '005', '003']);
   });
 });

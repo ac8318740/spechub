@@ -261,6 +261,61 @@ export function updateNode(
   return node;
 }
 
+// Depth is derived from the answers chain, never declared. Root is 0.
+// Hand-edited maps can hold a missing parent or a cycle, so both throw
+// with the node named rather than looping or guessing.
+export function deriveDepths(nodes: MapNode[]): Map<string, number> {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const depths = new Map<string, number>();
+
+  function depthOf(id: string, trail: Set<string>): number {
+    const known = depths.get(id);
+    if (known !== undefined) return known;
+    if (trail.has(id)) {
+      throw new Error(`node ${id}: provenance cycle in answers chain`);
+    }
+    trail.add(id);
+    const node = byId.get(id);
+    if (!node) {
+      throw new Error(`node ${id} is referenced but does not exist`);
+    }
+    let depth = 0;
+    if (node.answers) {
+      if (!byId.has(node.answers)) {
+        throw new Error(`node ${id}: parent ${node.answers} does not exist`);
+      }
+      depth = depthOf(node.answers, trail) + 1;
+    }
+    depths.set(id, depth);
+    return depth;
+  }
+
+  for (const node of nodes) depthOf(node.id, new Set());
+  return depths;
+}
+
+// The frontier: open nodes with no unresolved blockers, shallowest
+// provenance depth first, node number only as a stable final tiebreak.
+// A blocker blocks unless it is resolved or out-of-scope – fog and
+// claimed both still block, since neither is settled.
+export function frontier(nodes: MapNode[]): MapNode[] {
+  const depths = deriveDepths(nodes);
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const settled = (id: string): boolean => {
+    const blocker = byId.get(id);
+    if (!blocker) {
+      throw new Error(`blocking node ${id} is referenced but does not exist`);
+    }
+    return blocker.status === 'resolved' || blocker.status === 'out-of-scope';
+  };
+  return nodes
+    .filter(n => n.status === 'open' && n.blockedBy.every(settled))
+    .sort((a, b) => {
+      const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
+      return byDepth !== 0 ? byDepth : a.id.localeCompare(b.id);
+    });
+}
+
 export function listMaps(root: string): string[] {
   const dir = join(root, SPECHUB_DIR, MAPS_DIR);
   if (!existsSync(dir)) return [];

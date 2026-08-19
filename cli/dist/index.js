@@ -16181,6 +16181,48 @@ function updateNode(root, map, id, input) {
   writeNode(root, map, node);
   return node;
 }
+function deriveDepths(nodes) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const depths = /* @__PURE__ */ new Map();
+  function depthOf(id, trail) {
+    const known = depths.get(id);
+    if (known !== void 0) return known;
+    if (trail.has(id)) {
+      throw new Error(`node ${id}: provenance cycle in answers chain`);
+    }
+    trail.add(id);
+    const node = byId.get(id);
+    if (!node) {
+      throw new Error(`node ${id} is referenced but does not exist`);
+    }
+    let depth = 0;
+    if (node.answers) {
+      if (!byId.has(node.answers)) {
+        throw new Error(`node ${id}: parent ${node.answers} does not exist`);
+      }
+      depth = depthOf(node.answers, trail) + 1;
+    }
+    depths.set(id, depth);
+    return depth;
+  }
+  for (const node of nodes) depthOf(node.id, /* @__PURE__ */ new Set());
+  return depths;
+}
+function frontier(nodes) {
+  const depths = deriveDepths(nodes);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const settled = (id) => {
+    const blocker = byId.get(id);
+    if (!blocker) {
+      throw new Error(`blocking node ${id} is referenced but does not exist`);
+    }
+    return blocker.status === "resolved" || blocker.status === "out-of-scope";
+  };
+  return nodes.filter((n) => n.status === "open" && n.blockedBy.every(settled)).sort((a, b) => {
+    const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
+    return byDepth !== 0 ? byDepth : a.id.localeCompare(b.id);
+  });
+}
 var import_yaml5, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
 var init_nodes = __esm({
   "src/lib/nodes.ts"() {
@@ -16332,6 +16374,33 @@ function register8(program3) {
       }
     }
   );
+  nodeCmd.command("frontier").description("Open nodes with no unresolved blockers, shallowest provenance depth first").requiredOption("--map <name>", "map name").option("--mode <mode>", `filter by mode: ${NODE_MODES.join(", ")}`, parseMode).option("--json", "output as JSON").action((opts) => {
+    const root = findProjectRoot();
+    requireProject(root);
+    try {
+      const nodes = loadNodes(root, opts.map);
+      const depths = deriveDepths(nodes);
+      let ready = frontier(nodes);
+      if (opts.mode) ready = ready.filter((n) => n.mode === opts.mode);
+      if (opts.json) {
+        console.log(
+          JSON.stringify(
+            ready.map((n) => ({ ...toJson(n), depth: depths.get(n.id) })),
+            null,
+            2
+          )
+        );
+        return;
+      }
+      if (ready.length === 0) {
+        console.log(source_default.dim(`Frontier of map '${opts.map}' is empty.`));
+        return;
+      }
+      for (const node of ready) printNode(node);
+    } catch (err) {
+      fail(err.message);
+    }
+  });
   nodeCmd.command("list").description("List nodes in a map").requiredOption("--map <name>", "map name").option("--status <status>", `filter by status: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--json", "output as JSON").action((opts) => {
     const root = findProjectRoot();
     requireProject(root);

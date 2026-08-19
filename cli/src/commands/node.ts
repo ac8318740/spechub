@@ -13,6 +13,8 @@ import {
   type NodeStatus,
   type NodeMode,
   createNode,
+  deriveDepths,
+  frontier,
   getNode,
   loadNodes,
   mapDir,
@@ -223,6 +225,40 @@ export function register(program: Command): void {
         }
       }
     );
+
+  nodeCmd
+    .command('frontier')
+    .description('Open nodes with no unresolved blockers, shallowest provenance depth first')
+    .requiredOption('--map <name>', 'map name')
+    .option('--mode <mode>', `filter by mode: ${NODE_MODES.join(', ')}`, parseMode)
+    .option('--json', 'output as JSON')
+    .action((opts: { map: string; mode?: NodeMode; json?: boolean }) => {
+      const root = findProjectRoot();
+      requireProject(root);
+      try {
+        const nodes = loadNodes(root, opts.map);
+        const depths = deriveDepths(nodes);
+        let ready = frontier(nodes);
+        if (opts.mode) ready = ready.filter(n => n.mode === opts.mode);
+        if (opts.json) {
+          console.log(
+            JSON.stringify(
+              ready.map(n => ({ ...toJson(n), depth: depths.get(n.id) })),
+              null,
+              2
+            )
+          );
+          return;
+        }
+        if (ready.length === 0) {
+          console.log(chalk.dim(`Frontier of map '${opts.map}' is empty.`));
+          return;
+        }
+        for (const node of ready) printNode(node);
+      } catch (err) {
+        fail((err as Error).message);
+      }
+    });
 
   nodeCmd
     .command('list')
