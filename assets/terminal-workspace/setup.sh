@@ -18,17 +18,34 @@ END="# <<< spechub terminal-workspace <<<"
 ACTION="${1:-status}"
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+require_yaml() {
+  python3 -c 'import yaml' 2>/dev/null && return 0
+  echo "PyYAML is required to read $CFG" >&2
+  echo "Install it (pip install --user pyyaml) and run again. Refusing to" >&2
+  echo "continue, because without it every setting falls back to a default" >&2
+  echo "and your config is silently ignored." >&2
+  exit 1
+}
+
+arch_supported() {
+  case "$(uname -m)" in
+    x86_64|amd64) return 0 ;;
+    *) say "prebuilt binaries are x86_64 only, and this is $(uname -m)"
+       say "install herdr, delta, and diffnav yourself, then run apply again"
+       return 1 ;;
+  esac
+}
 say()  { printf '  %s\n' "$*"; }
 
 py() { python3 - "$@"; }
 
+# Reads one dotted path. require_yaml runs first, so a fallback here means
+# the key is absent, never that yaml failed to import.
 cfg_get() {  # cfg_get <dotted.path> <default>
   SPECHUB_CFG="$CFG" py "$1" "${2:-}" <<'PY'
 import os, sys
-try:
-    import yaml
-except ImportError:
-    print(sys.argv[2]); raise SystemExit
+import yaml
 p = os.environ["SPECHUB_CFG"]
 if not os.path.isfile(p):
     print(sys.argv[2]); raise SystemExit
@@ -244,8 +261,15 @@ case "$ACTION" in
     grep -q "$BEGIN" "$HERDR_CFG" 2>/dev/null && say "herdr managed block: present" || say "herdr managed block: absent"
     ;;
   apply)
+    require_yaml
+    arch_supported || exit 1
     [ "$(cfg_get enabled true)" = "true" ] || { echo "terminal workspace disabled in config"; exit 0; }
-    [ "$(cfg_get herdr.enabled true)"   = "true" ] && install_binary herdr herdrdev/herdr x86_64-unknown-linux
+    if [ "$(cfg_get herdr.enabled true)" = "true" ] && ! have herdr; then
+      # herdr ships an installer that picks the right build and verifies a
+      # checksum. Prefer it over matching release asset names ourselves.
+      curl -fsSL https://herdr.dev/install.sh | sh >/dev/null 2>&1 \
+        && say "herdr installed" || say "herdr install failed, see herdr.dev"
+    fi
     [ "$(cfg_get delta.enabled true)"   = "true" ] && install_binary delta dandavison/delta x86_64-unknown-linux-gnu
     [ "$(cfg_get diffnav.enabled true)" = "true" ] && install_binary diffnav dlvhdr/diffnav Linux_x86_64
     write_helpers
@@ -257,9 +281,12 @@ case "$ACTION" in
   disable)
     comp="${2:?usage: setup.sh disable <herdr|delta|diffnav|gh_dash>}"
     case "$comp" in
-      delta) git config --global --unset core.pager; git config --global --unset interactive.diffFilter
-             say "delta unset as git pager" ;;
-      herdr|diffnav|gh_dash)
+      delta) for k in core.pager interactive.diffFilter delta.navigate delta.line-numbers; do
+               git config --global --unset "$k" 2>/dev/null
+             done
+             say "delta unset as git pager"
+             say "now set delta.enabled: false in $CFG so apply does not restore it" ;;
+      herdr)
         py "$HERDR_CFG" "$BEGIN" "$END" <<'PY'
 import re, sys, os
 p, b, e = sys.argv[1:4]
@@ -267,9 +294,22 @@ if os.path.isfile(p):
     t = open(p).read()
     open(p, "w").write(re.sub(re.escape(b) + r".*?" + re.escape(e) + r"\n?", "", t, flags=re.S))
 PY
-        say "managed block removed from herdr config" ;;
+        say "managed block removed from herdr config"
+        say "now set herdr.enabled: false in $CFG so apply does not restore it" ;;
+      diffnav|gh_dash)
+        # Only this component's popup goes away. Rebuild the managed block so
+        # the rest of the keymap survives.
+        require_yaml
+        SPECHUB_CFG="$CFG" py "$comp" <<'PY'
+import os, sys, yaml
+p = os.environ["SPECHUB_CFG"]
+c = yaml.safe_load(open(p)) or {}
+c.setdefault(sys.argv[1], {})["enabled"] = False
+yaml.safe_dump(c, open(p, "w"), sort_keys=False)
+PY
+        apply_herdr
+        say "$comp disabled, rest of the keymap left in place" ;;
     esac
-    say "now set $comp.enabled: false in $CFG so apply does not restore it"
     ;;
   uninstall)
     "$0" disable herdr; "$0" disable delta
