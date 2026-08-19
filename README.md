@@ -83,7 +83,7 @@ Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.
 | Skill | Description |
 |-------|-------------|
 | `/spechub:implement-quick` | Quick path for small, clear-scope changes – 3-explorer analysis then implement |
-| `/spechub:implement` | Execute tasks from an active change via the TDD pipeline |
+| `/spechub:implement` | Claim afk work from the map frontier and run the TDD pipeline – runs directly on the request when no map exists |
 
 For larger work, chain the planning skills below first, then run `/spechub:implement`.
 

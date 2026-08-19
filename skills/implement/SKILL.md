@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Execute tasks from an active SpecHub change via the TDD pipeline (test-writer -> task-executor -> task-checker). Creates a feature branch and implements phase by phase.
+description: Execute implementation work via the TDD pipeline (test-writer -> task-executor -> task-checker). Claims afk work nodes from the map frontier when a map exists; runs the same discipline directly on the request when none does. A unit of work carries its own size – one node is a quick change, forty is a long effort, and nothing declares which.
 disable-model-invocation: true
 ---
 
@@ -12,26 +12,33 @@ $ARGUMENTS
 
 ## What This Skill Does
 
-Implements tasks from an active SpecHub change's `tasks.md`. Creates a feature branch, executes tasks phase by phase using the TDD pipeline, and verifies everything builds. Keeps tasks.md updated as the single source of progress.
+Implements work under the TDD pipeline. The unit of work is a map node when a
+map exists, and the request itself when none does – same discipline either
+way. Progress lives on the tracker as claims and resolutions; there is no
+checkbox file to maintain.
 
 ## Steps
 
-### 1. Find the Change
+### 1. Find the Work
 
-If `$ARGUMENTS` specifies a change name, use it. Otherwise:
+Check the configured tracker for maps (`workflow.maps.tracker` in
+`spechub/project.yaml`; the map skill's `trackers/` docs declare the
+operations – files backend shown below).
+
+**A map exists** (or `$ARGUMENTS` names one):
 
 ```bash
-~/.claude/spechub/bin/spechub list --json
+~/.claude/spechub/bin/spechub node frontier --map <name> --mode afk --json
 ```
 
-If only one active change, use it. If multiple, ask the user.
+These are the workable nodes: open, unblocked, and containing no decision.
+Pull them regardless of depth – work can hang anywhere, including straight
+off the root. If the frontier holds only `hitl` nodes, stop and point the
+user at `/spechub:map` – those need a human, not a pipeline.
 
-Read all artifacts from `spechub/changes/<name>/`:
-
-- **tasks.md** (required – the task list to execute)
-- **proposal.md** (context – what/why)
-- **design.md** (context – how, architecture decisions)
-- **research.md** (context – if exists)
+**No map**: the request in `$ARGUMENTS` is the work item. Same discipline,
+no tracker writes. This is the whole quick path – a small change is just a
+small unit of work, and nothing has to declare it small.
 
 ### 2. Read Project Configuration
 
@@ -39,82 +46,96 @@ Read `spechub/project.yaml` for build/test/lint commands and directory paths.
 
 ### 3. Create Feature Branch
 
+Branch from the default branch, named after the map (or a short slug of the
+request). If the branch already exists, ask the user whether to continue on
+it or start fresh.
+
+### 4. Orient, Then Claim
+
+With a map, orient once per session before claiming:
+
 ```bash
-git checkout master && git checkout -b "<change-name>"
+~/.claude/spechub/bin/spechub node walk --map <name>
 ```
 
-If the branch already exists, ask the user whether to continue on it or start fresh.
+The root and pinned nodes carry the destination and standing preferences.
+The resolved chain above a work node carries its why – read it before
+touching code.
 
-### 4. Execute Tasks Phase by Phase
+Claim each node as you start it:
 
-For each phase in tasks.md:
-
-**Assess parallelism**: If the phase has 2+ tasks marked `[P]` that touch non-overlapping files, launch an **Agent Team** where each teammate owns a scope. Otherwise, execute sequentially with subagents.
-
-**For each task (or scope), follow the Implementation Discipline:**
-
-1. **test-writer subagent** – Write failing tests from the task requirements. Skip for pure config/setup tasks (T001, T002, etc.) that have no testable behavior.
-
-2. **task-executor subagent** – Make the failing tests pass. Executor CANNOT modify test files.
-
-3. **task-checker subagent** – Verify: tests pass, full suite passes, test count >= baseline, mock audit, TDD isolation, integration wired, frontend visual verification (if applicable).
-
-If checker fails -> route back to executor with feedback. Do not proceed to next task until checker passes.
-
-### 5. Task Progress Tracking (MANDATORY)
-
-**tasks.md is the single source of truth for progress.** Keep it updated at all times:
-
-- **Immediately after task-checker passes** for a task: update `- [ ]` -> `- [x]` in tasks.md
-- **Do NOT batch updates** – mark each task done as soon as it passes verification
-- **If a task is partially done or blocked**: add a note below the task line: `  <!-- BLOCKED: reason -->`
-- **If you discover a task needs splitting**: add sub-tasks indented below the original, numbered as T005a, T005b, etc.
-- **If a task turns out unnecessary**: mark it `- [~]` with a note: `  <!-- SKIPPED: reason -->`
-
-**After completing each phase**, report progress to the user:
-
-```
-## Phase N Complete
-
-Tasks: X/Y done (Z skipped)
-Tests: [pass count] passing, [fail count] failing
-Build: OK | FAIL
-
-Moving to Phase N+1...
+```bash
+~/.claude/spechub/bin/spechub node update <id> --map <name> --status claimed
 ```
 
-### 6. Build Verification (After Each Phase)
+Nodes describe behaviour, not paths. **Resolve paths at claim time**: before
+any code change, dispatch parallel explorer subagents over the relevant code
+– as many as there are distinct places to look, not a fixed count – and act
+on what they find.
 
-Run the commands from `spechub/project.yaml`:
+### 5. Execute Within the Claim
 
-- Backend/source build command
-- Frontend build command (if configured)
-- Full test suite
-- Lint and typecheck
+The pipeline's state lives inside the claim, not on the node. For each
+claimed node (or the bare request), run the Implementation Discipline to
+completion:
 
-All must pass before moving to the next phase.
+1. **test-writer subagent** – failing tests from the node's behaviour
+   description. Skip for pure config/setup work with no testable behaviour.
+2. **task-executor subagent** – make the tests pass. Executor CANNOT modify
+   test files.
+3. **task-checker subagent** – verify: tests pass, full suite passes, test
+   count >= baseline, mock audit, TDD isolation, integration wired, frontend
+   visual verification (if applicable).
 
-### 7. Frontend Visual Verification
+If the checker fails, route back to the executor with the feedback. If the
+work stalls or the session must stop mid-node, release the claim
+(`--status open`) – the node is plainly open again, and no phase breadcrumb
+is needed.
 
-**Only if `frontend` is configured in `spechub/project.yaml`.**
+**Parallelism**: afk nodes run unlimited and in parallel. When 2+ frontier
+nodes touch non-overlapping files, launch an Agent Team where each teammate
+owns one node and its file set. Otherwise work them sequentially.
 
-For any phase that creates or modifies UI components, the task-checker handles this automatically. For deeper visual audits, launch an Explore subagent to verify spacing, styling, and visual consistency.
+### 6. Resolve
+
+When the checker passes, resolve the node in one call:
+
+```bash
+~/.claude/spechub/bin/spechub node update <id> --map <name> --status resolved \
+  --append-body "## Answer
+
+<what was built, which files, what the tests pin down>"
+```
+
+Then:
+
+- Invoke `record-context` – implementation decisions can earn ADRs too.
+- Create nodes for anything the work surfaced (a question found mid-build is
+  `hitl`, `--answers <this node>`).
+- Recompute the frontier – resolutions unblock nodes.
+
+### 7. Build Verification
+
+After each node (and before ending the session), run the commands from
+`spechub/project.yaml`: build, full test suite, lint and typecheck. All must
+pass before claiming the next node.
 
 ### 8. Completion
 
-After all phases complete:
-
-- Verify all tasks in tasks.md are marked `[x]` or `[~]`
-- Run final build verification
-- Report summary: tasks completed, tests passing, lines added/removed
-- Remind user: run `/commit` to commit, then `/archive` to update living specs
+Stop when the afk frontier is empty, or when only `hitl` nodes remain
+(hand those to `/spechub:map`). Report: nodes resolved, tests passing, lines
+added/removed. Remind the user: `/commit` to commit – spec sync extracts the
+durable record from the diff.
 
 ## Key Rules
 
-- **TDD pipeline is mandatory** – test-writer -> task-executor -> task-checker. No exceptions except pure config tasks.
-- **Executors CANNOT modify test files** – if tests are wrong, report the issue.
-- **Agent Teams for parallel scopes** – 2+ independent `[P]` tasks with non-overlapping files -> team.
-- **Build verification after every phase** – do not skip.
-- **Update tasks.md immediately** – every completed task gets checked off right away.
-- **Do NOT commit** – the user manages git commits via `/commit`.
-- **Do NOT push** – the user decides when to push.
+- **TDD pipeline is mandatory** – test-writer -> task-executor ->
+  task-checker. No exceptions except pure config work.
+- **Executors CANNOT modify test files** – if tests are wrong, report it.
+- **The tracker is the progress record** – claim on start, resolve on pass,
+  release on stall. No checkbox files, no phase fields.
+- **Explore before writing** – parallel explorer subagents over the relevant
+  code, sized to the node, before any edit.
+- **Resume is a query** – a fresh session runs the frontier query and
+  continues. Never re-read an effort end to end to find where it stopped.
+- **Do NOT commit or push** – the user manages git via `/commit`.
