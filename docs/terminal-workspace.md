@@ -4,6 +4,8 @@ Run several coding agents in parallel, keep them alive when you close the termin
 
 Use it when you work on a remote machine over SSH, drive more than one agent at a time, and want a keyboard-only workflow. Skip it if you work locally in a graphical editor: a desktop tool will serve you better.
 
+Run `/spechub:terminal-workspace` to install and configure all of it from a single toggleable config. The rest of this document explains what that sets up and why, and is worth reading if you would rather configure it by hand or change the defaults.
+
 ## What you get
 
 - **Agents that survive disconnect.** herdr runs a background server, so closing the terminal, dropping the network, or attaching from another machine never stops an agent mid-task

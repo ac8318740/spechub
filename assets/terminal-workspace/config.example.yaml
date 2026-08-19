@@ -1,0 +1,49 @@
+# SpecHub terminal workspace.
+# Copy to ~/.config/spechub/terminal-workspace.yaml, edit, then run setup.sh apply.
+#
+# This is machine-level, not per-project: it installs binaries and writes
+# keybindings for your user, so it does not belong in spechub/project.yaml.
+
+enabled: true
+
+herdr:
+  enabled: true
+  # Direct chords that need no prefix. Use "alt" if you work over SSH:
+  # many terminals cannot encode ctrl+alt through it. Set "none" to keep
+  # herdr's default prefix-only keymap.
+  chord_modifier: alt
+  worktrees_directory: "~/.herdr/worktrees"
+  # Agent state hook, so herdr reads state from the agent instead of the
+  # screen. One of: claude, codex, opencode, copilot, none.
+  integration: claude
+
+delta:
+  enabled: true
+  # Sets core.pager and interactive.diffFilter. Agents are unaffected:
+  # git only pages to a terminal.
+  set_git_pager: true
+
+diffnav:
+  enabled: true
+  # Popup that shows the most relevant diff: unstaged, else staged, else HEAD.
+  popup_key: "alt+d"
+
+gh_dash:
+  enabled: true
+  popup_key: "alt+i"
+  # Add a section for whichever repo you are standing in, at launch.
+  dynamic_repo_section: true
+  sections:
+    - title: Mine
+      filters: "is:open author:@me"
+    - title: Needs review
+      filters: "is:open review-requested:@me"
+    - title: Failing
+      filters: "is:open author:@me status:failure"
+  # Local clones. Needed for checkout and for {{.RepoPath}} in keybindings.
+  repo_paths: {}
+  keybindings:
+    # Pipe the selected pull request into diffnav.
+    tree_diff: "D"
+    # Hand the selected pull request to an agent. Empty disables it.
+    agent_review: "S"
