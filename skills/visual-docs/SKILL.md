@@ -34,11 +34,24 @@ flowchart TD
 
 *The diagram is the table of contents. If a section has no home in the diagram, one of the two is wrong.*
 
-Every numbered section maps to exactly one element of the lead diagram, and section headings reuse the diagram's node labels verbatim. This is mechanical, not stylistic:
+Every numbered section maps to an element of the lead diagram, and section headings
+reuse the diagram's node labels verbatim. This is mechanical, not stylistic:
 
-- A diagram node with no section means the doc is incomplete
-- A section with no node means either the diagram is missing something, or the section does not belong in this doc
+- A **process node** with no section means the doc is incomplete
+- A section covering no part of the diagram either belongs in another doc, or the
+  diagram is missing something
 - Renaming a node renames its section, and the reverse
+
+Three exemptions, and only these three:
+
+| Exempt                                            | Why                                              |
+| ------------------------------------------------- | ------------------------------------------------ |
+| **Terminals** – the incoming request, a datastore | inputs and outputs are not steps                 |
+| **One section over adjacent nodes**               | allowed when they are one action, and the section names both |
+| **Meta sections** – limits, what changes next     | about the document, not the system               |
+
+Anything else without a match is a defect in one of the two. Do not add a section
+to justify a node, or a node to justify a section.
 
 End the lead diagram with a mapping table when the doc has more than four sections, so the reader can jump from a box to its detail.
 
