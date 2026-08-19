@@ -347,4 +347,5 @@ See the `browser-verify` skill for the `agent-browser` command reference, select
 - **Living specs** – Always kept in sync via commit-time spec sync
 - **Right-sized workflow** – Quick path for small changes, full pipeline for features and larger work
 - **Cross-device setups** – When a task spans two devices (Playwriter bridge, remote tunnels, etc.), invoke the `bridge` skill first to establish the platform-detection + handoff convention, then proceed
-- **Survive compaction** – On a long orchestration that is filling the context window, run `/spechub:handoff` before `/compact`, then type `continue` after compaction to resume from the anchor
+- **Handing work over** – `/spechub:handoff` writes a summary outside the repo and launches a fresh session with it. It records only what nothing on disk holds (next action, decisions, blockers, file ownership) and references the rest
+- **Survive compaction** – `/spechub:handoff compact` is the variant for staying in this session. It writes an in-repo anchor instead of launching anything. Run it before `/compact`, then type `continue` to resume from the anchor
