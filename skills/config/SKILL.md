@@ -260,6 +260,7 @@ Modify a setting. Supported keys:
 | `workflow.clarification.design` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for designs |
 | `workflow.clarification.tasks` | `none`, `critical`, `thorough`, `exhaustive` | Clarification level for tasks |
 | `workflow.grilling.questions` | `tool`, `inline` | How grilling presents a round – the host's question tool, or prose. `tool` falls back to inline when a round exceeds 4 questions or a question has no discrete options |
+| `workflow.maps.tracker` | `github`, `files` | Which tracker holds map nodes. Unset means the map skill picks at materialisation and writes the choice here |
 | `frontend.browser.mode` | `remote`, `headless`, `local` | Browser environment for verification |
 | `frontend.browser.fallback` | `headless`, `none` | What to do when primary mode unavailable |
 | `frontend.browser.cdp_port` | number | CDP port – default `19988` for `mode: remote`, `9555` for `headless`/`local` |

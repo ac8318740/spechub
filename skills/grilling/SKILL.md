@@ -6,10 +6,11 @@ description: Interview technique for settling open decisions in rounds. A round 
 # Grilling
 
 One technique at two scales. In conversation, the frontier is every open
-question whose prerequisites are settled. On a map, it is what
-`~/.claude/spechub/bin/spechub node frontier --map <name> --mode hitl` returns.
-Same structure either way – the only difference is whether it outlives the
-session.
+question whose prerequisites are settled. On a map, it is the tracker's
+frontier query for `hitl` nodes – on the files backend,
+`~/.claude/spechub/bin/spechub node frontier --map <name> --mode hitl`; other
+backends are declared in the map skill's `trackers/` docs. Same structure
+either way – the only difference is whether it outlives the session.
 
 ## The round
 
@@ -60,13 +61,15 @@ blunt proxy for a guarantee the frontier definition provides.
 
 ## On a map
 
-When the questions are map nodes, each answer is a resolution:
+When the questions are map nodes, each answer is a resolution – all through
+the tracker's `update` and `create` operations:
 
-1. Append the answer to the node body under `## Answer`, set
-   `--status resolved` (one `spechub node update` call does both).
-2. Create a node for each new question the answer surfaced, with
-   `--answers <id of the node that surfaced it>`. Questions that can be
-   stated precisely are `open`; the rest are `fog`.
+1. Append the answer to the node body under `## Answer` and mark the node
+   resolved (on the files backend, one `spechub node update` call does both).
+2. Create a node for each new question the answer surfaced, with `answers`
+   naming the node that surfaced it. Questions that can be stated precisely
+   are `open`; the rest are `fog`.
 3. Invoke the `record-context` skill for each resolution – it decides whether
    the decision earns an ADR, a glossary term, both, or neither.
-4. Recompute with `spechub node frontier` and present the next round.
+4. Recompute the frontier with the tracker's query and present the next
+   round.

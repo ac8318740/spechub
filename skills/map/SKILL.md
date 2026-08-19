@@ -15,15 +15,31 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 # Map
 
-One command, two modes, picked by what exists:
+## Tracker
 
-```bash
-~/.claude/spechub/bin/spechub node list --map <name> --json
-```
+Nodes live behind a pluggable tracker. A backend declares four operations –
+create, read, update, list – and everything else (frontier, claim, resolve,
+walk) is composed from them. Two backends ship, each declared in this skill's
+directory:
 
-Check `spechub/maps/` for existing maps. If `$ARGUMENTS` names one, or exactly
-one map exists, work its frontier. If none exists, chart. If several exist and
-`$ARGUMENTS` does not pick one, ask.
+| Backend | Doc | When |
+| ------- | --- | ---- |
+| GitHub issues | `trackers/github.md` | first choice when `gh` is authenticated against a GitHub remote |
+| Files | `trackers/files.md` | the fallback – no auth, offline, any remote |
+
+`workflow.maps.tracker` in `spechub/project.yaml` (`github` or `files`) records
+the project's choice. If set, read the matching doc and use its operations. If
+unset, pick at materialisation time: recommend `github` when the repo qualifies,
+`files` otherwise, confirm with the user, and write the key so later sessions
+need not re-decide.
+
+## Which mode
+
+One command, two modes, picked by what exists. Check the configured tracker
+for existing maps (`spechub node list` / files under `spechub/maps/` on the
+files backend, `map:*` labels on GitHub). If `$ARGUMENTS` names a map, or
+exactly one exists, work its frontier. If none exists, chart. If several exist
+and `$ARGUMENTS` does not pick one, ask.
 
 There are no tiers and no complexity judgement. One question is a small map or
 no map at all; fifty questions is a long effort. Nothing declares which.
@@ -56,7 +72,11 @@ The test is mechanical: will the fog outlive this session?
 
 ### Materialising
 
+Pick the tracker (see Tracker above), then create the nodes with its `create`
+operation. First the root:
+
 ```bash
+# files backend – github.md has the equivalent
 ~/.claude/spechub/bin/spechub node create --map <name> --title "<destination>" \
   --status resolved --kind grilling --body "<the destination, as settled>"
 ```
@@ -73,17 +93,22 @@ The test is mechanical: will the fog outlive this session?
   wrong means an agent quietly deciding something that was the human's.
 - Nodes describe behaviour, not file paths. A node can sit on the frontier for
   weeks while the codebase moves – paths are resolved at claim time.
-- Suggest adding `spechub/maps/` to `.gitignore`. Nodes are transient working
-  state, like `spechub/HANDOFF.md` – the durable output is specs, ADRs and
-  glossary entries, extracted as nodes resolve.
+- On the files backend, suggest adding `spechub/maps/` to `.gitignore`. Nodes
+  are transient working state, like `spechub/HANDOFF.md` – the durable output
+  is specs, ADRs and glossary entries, extracted as nodes resolve.
 
 ## Working the frontier
 
-1. **Orient.** `spechub node walk --map <name>` – the root and pinned nodes in
-   full, everything else gisted. Zoom with `node read <id>` when a gist turns
-   out to be relevant. Do not load every body.
-2. **Query the frontier.** `spechub node frontier --map <name>`. It is already
-   ordered: shallowest provenance depth first, number only as a tiebreak.
+All commands below are the files backend's shape – on GitHub, compose the
+same queries per `trackers/github.md`.
+
+1. **Orient.** The packaging walk (`spechub node walk --map <name>`) – the
+   root and pinned nodes in full, everything else gisted. Zoom with
+   `node read <id>` when a gist turns out to be relevant. Do not load every
+   body.
+2. **Query the frontier.** `spechub node frontier --map <name>` – open nodes
+   with no unresolved blockers, shallowest provenance depth first, number
+   only as a tiebreak.
 3. **Route by `mode` – the only field the machine routes on** (`kind` is
    advisory):
    - `hitl` nodes: run grilling rounds over them. A round is the whole hitl
