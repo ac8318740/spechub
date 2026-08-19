@@ -16,6 +16,12 @@ only purely AFK type, so the rule was never about tickets but about human
 attention: **one HITL node per session, AFK nodes unlimited and in parallel.**
 Implementation still burns through many nodes per session via subagents.
 
+*Superseded in part by node `018`.* The HITL half is gone. Adopting `grilling`
+made a round the whole frontier, so a session resolves as many HITL nodes as the
+frontier holds. The AFK half stands. The reasoning above is kept because the
+distinction it drew – the rule was about attention, not tickets – is what made it
+possible to see that a bounded frontier already provides the protection.
+
 Depth is derived from the provenance parent, never declared. An earlier draft
 tagged nodes with altitudes; that reintroduced the rigid ladder as metadata and
 was dropped.

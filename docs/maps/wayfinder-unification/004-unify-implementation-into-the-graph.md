@@ -47,9 +47,17 @@ with research as the only exception. Ported literally that would mean one
 implementation task per session, which is absurd.
 
 Research is its only purely AFK type, so the rule was never about tickets. It is
-about human attention. The correct generalisation:
+about human attention. The first generalisation was:
 
 > One HITL node per session. AFK nodes run unlimited and in parallel.
 
 Wayfinder's research exception is a special case. Work nodes are AFK, so
 implementation can still burn through many in one session via subagents.
+
+**The HITL half was later deleted – see node `018`.** Adopting `grilling` as the
+primitive settled it: a round is the whole frontier, so a session resolves as many
+HITL nodes as the frontier holds. Attention is bounded by frontier width, which
+provenance keeps small on its own, rather than by a count.
+
+What survives is the AFK half, unchanged: AFK nodes run unlimited and in parallel,
+and depth never constrains either kind (node `015`).

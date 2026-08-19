@@ -1,5 +1,5 @@
 ---
-status: fog
+status: resolved
 mode: hitl
 kind: grilling
 answers: 006
@@ -22,18 +22,22 @@ each, wait, recompute, repeat. Node `006` adopts `grilling` as the primitive.
 If a map session runs `grilling`, it asks the whole frontier, and the one-node
 rule is broken by the primitive the design just adopted.
 
-## What needs deciding
+## Answer
 
-Whether these are the same rule at different scales or a genuine conflict.
+The whole frontier. **The one-HITL-node-per-session rule is deleted.**
 
-A reading that might hold: one node per session bounds what a session *resolves*
-and commits, while a grilling round bounds what it *asks*. Asking six questions
-and settling one is coherent, but it wastes five answers unless they are recorded,
-and recording them means six nodes resolved, not one.
+Session means one agent session, which is what made the rule look bigger than it
+was. It never protected context – it protected against asking a question whose
+answer depends on one still open. The definition of the frontier already
+guarantees that, so the rule was a blunt proxy for a guarantee already in place.
 
-The opposite reading is that the one-node rule was inherited without being tested,
-and batching the frontier is strictly better for a human who is already sitting
-there. It costs context, which is the thing the rule was protecting.
+`grilling` therefore needs no cap, and node `006` adopts it unmodified.
 
-Writing this map by hand is weak evidence for batching: answering several
-questions in one message was normal and did not feel like too much at once.
+The cost, accepted knowingly: several nodes resolved in one session is a larger
+diff to review than one, and disagreeing with the third answer later leaves work
+stacked on top of it. Grilling this map itself is the evidence – a dozen nodes
+settled across a handful of rounds, with errors caught in the round they appeared.
+
+What survives from the old rule: **the frontier is recomputed every round.** A
+round's answers can surface new nodes and unblock old ones, and the next round
+must be derived fresh rather than continuing down a list planned in advance.

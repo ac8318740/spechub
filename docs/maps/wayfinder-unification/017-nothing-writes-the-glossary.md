@@ -44,10 +44,28 @@ spec directory is the only place a domain reliably has.
 scratch pad. Borrowed from upstream and worth keeping: the moment it accepts
 implementation notes it becomes another document competing with the living specs.
 
+## Settled: one skill, three outputs
+
+One skill, fired by a node resolving. It writes an ADR if the three-part bar is
+met, a glossary term if a term got pinned down, both, or neither. The conditions
+are independent; the trigger is shared.
+
+Two skills watching one event drift. And "ADR skill" stops being the right name
+once it also owns vocabulary – name it for the job, recording durable context.
+
+### The ADR index is generated
+
+`docs/adr/index.md`, rewritten by the same skill every time it writes an ADR.
+Number and slug come from the filename, the title from the file's first heading.
+
+Generated, never hand-edited, and that distinction is the whole point. The
+objection to a `CONTEXT-MAP.md` was a second hand-maintained record of something
+already recorded – not indexes as such. A derived view cannot drift from its
+source. If it is ever edited by hand it becomes the thing that was rejected.
+
 ## Still open
 
-- Is it a skill of its own, or a second responsibility of the ADR skill? Both
-  write durable prose from a settled decision.
+
 - Living specs are generated from code at commit time. A glossary is not derivable
   from code – it is the vocabulary humans agreed on. Does spec sync leave it
   alone, and if so what keeps it from going stale?
