@@ -167,3 +167,29 @@ If the pull request is clean, say so plainly and stop. Do not invent findings to
 - Repo hygiene (gitignore gaps, committed data or generated files, messy branch history) belongs in the summary section of the review file
 - If the diff carries a large generated, vendored, or data blob, note that it probably belongs in `.gitignore`, and do not review its contents
 - A pull request that is too large to review well is itself worth flagging. Suggest splitting it
+
+## 10. Handing off to the implementing session
+
+*When the caller names a herdr target, the review has to reach the session that wrote the code. Get the timing wrong and you answer a permission prompt instead of giving an instruction.*
+
+Address the target by pane id (for example `wR:p1`). Sessions a user started themselves have no agent name, so the pane id is the only reliable address.
+
+1. **Write the review file first.** It is the durable artifact. It must exist before any handoff, so findings survive even if the handoff fails
+2. **Check the target's state** with `herdr agent get <target>`, then:
+   - `idle` or `done`: inject now
+   - `working`: wait with `herdr agent wait <target> --until idle --timeout 3600`. Inject when it goes idle. If the hour passes and it is still working, inject anyway. Submitted input queues and runs at the end of the current turn
+   - `blocked`: **never inject.** A blocked agent is waiting on a permission prompt, and submitted text becomes the answer to that prompt. Stop, leave the file, and report the handoff as skipped
+3. **Inject** with `herdr agent prompt <target> "<message>"`, where the message names the pull request, the branch, and the review file, and asks the receiver to verify before acting:
+
+   ```
+   Automated review handoff for PR #<n> (branch <branch>).
+   Findings: <absolute path to the review file>
+
+   Before acting, confirm `git branch --show-current` here is <branch>.
+   If it is not, stop and say so.
+
+   Fix the blocking items. Skip nits unless trivial. Do not merge.
+   ```
+
+   The receiving session gets no signal that this came from another agent rather than from its user, so the message carries its own verification step. Sender-side matching can be wrong, and target-side confirmation catches it.
+4. **Log the outcome.** Append one line to `handoff.log` beside the reviews directory: timestamp, pull request number, target, and outcome (injected, injected-after-timeout, skipped-blocked, or none)
