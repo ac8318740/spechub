@@ -11380,7 +11380,7 @@ var init_init = __esm({
 });
 
 // src/lib/project.ts
-import { existsSync as existsSync3, readFileSync as readFileSync2 } from "node:fs";
+import { existsSync as existsSync3 } from "node:fs";
 import { join as join4, resolve as resolve2 } from "node:path";
 function findProjectRoot(from = process.cwd()) {
   let dir = resolve2(from);
@@ -11391,11 +11391,9 @@ function findProjectRoot(from = process.cwd()) {
     dir = parent;
   }
 }
-var import_yaml3;
 var init_project = __esm({
   "src/lib/project.ts"() {
     "use strict";
-    import_yaml3 = __toESM(require_dist(), 1);
     init_constants();
   }
 });
@@ -11476,7 +11474,7 @@ var show_exports = {};
 __export(show_exports, {
   register: () => register3
 });
-import { existsSync as existsSync5, readFileSync as readFileSync3, readdirSync as readdirSync3 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync2, readdirSync as readdirSync3 } from "node:fs";
 import { join as join6 } from "node:path";
 function register3(program3) {
   program3.command("show").description("Display a change or spec").argument("[name]", "change or spec name").option("--json", "output as JSON").option("--type <type>", "force type: change or spec").action((name, opts) => {
@@ -11509,7 +11507,7 @@ function register3(program3) {
         console.error(source_default.red(`Spec '${name}' has no spec.md file.`));
         process.exit(1);
       }
-      const content = readFileSync3(specFile, "utf-8");
+      const content = readFileSync2(specFile, "utf-8");
       if (opts.json) {
         console.log(JSON.stringify({ name, type: "spec", content }, null, 2));
       } else {
@@ -11520,7 +11518,7 @@ function register3(program3) {
     const files = readdirSync3(targetDir).filter((f) => f.endsWith(".md"));
     const artifacts = {};
     for (const file of files) {
-      artifacts[file.replace(".md", "")] = readFileSync3(join6(targetDir, file), "utf-8");
+      artifacts[file.replace(".md", "")] = readFileSync2(join6(targetDir, file), "utf-8");
     }
     if (opts.json) {
       console.log(JSON.stringify({ name, type: "change", artifacts }, null, 2));
@@ -15702,7 +15700,7 @@ var init_zod = __esm({
 });
 
 // src/lib/nodes.ts
-import { existsSync as existsSync7, readFileSync as readFileSync4, readdirSync as readdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync3, readdirSync as readdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join8 } from "node:path";
 function normalizeId(id) {
   const trimmed = id.trim();
@@ -15715,23 +15713,38 @@ function mapDir(root, map) {
 function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/, "") || "node";
 }
+function validateTitle(title) {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    throw new Error("title must not be empty");
+  }
+  if (/[\r\n]/.test(title)) {
+    throw new Error("title must be a single line");
+  }
+  return trimmed;
+}
+function compareIds(a, b) {
+  return parseInt(a, 10) - parseInt(b, 10);
+}
 function parseNodeFile(dir, file) {
-  const raw = readFileSync4(join8(dir, file), "utf-8");
+  const raw = readFileSync3(join8(dir, file), "utf-8").replace(/\r\n/g, "\n");
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
   }
-  const parsed = frontmatterSchema.safeParse((0, import_yaml4.parse)(match[1]));
+  const parsed = frontmatterSchema.safeParse((0, import_yaml3.parse)(match[1]));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new Error(`${file}: ${issue.path.join(".")} ${issue.message}`);
   }
-  const rest = match[2];
-  const titleMatch = rest.match(/^\s*# (.+)$/m);
+  const rest = match[2].replace(/^\n+/, "");
+  const newline = rest.indexOf("\n");
+  const firstLine = newline === -1 ? rest : rest.slice(0, newline);
+  const titleMatch = firstLine.match(/^# (.+)$/);
   if (!titleMatch) {
-    throw new Error(`${file}: missing title heading`);
+    throw new Error(`${file}: the first line after the frontmatter must be the "# title" heading`);
   }
-  const body = rest.slice((titleMatch.index ?? 0) + titleMatch[0].length).replace(/^\n+/, "");
+  const body = newline === -1 ? "" : rest.slice(newline + 1);
   const idMatch = file.match(/^(\d+)/);
   if (!idMatch) {
     throw new Error(`${file}: filename must start with the node number`);
@@ -15745,14 +15758,23 @@ function parseNodeFile(dir, file) {
     answers: parsed.data.answers,
     blockedBy: parsed.data["blocked-by"],
     pinned: parsed.data.pinned,
-    body: body.replace(/\n+$/, "\n").replace(/^\n$/, ""),
+    body: body.replace(/^\n+/, "").replace(/\n+$/, ""),
     file
   };
 }
 function loadNodes(root, map) {
   const dir = mapDir(root, map);
   if (!existsSync7(dir)) return [];
-  return readdirSync4(dir).filter((f) => /^\d+.*\.md$/.test(f)).map((f) => parseNodeFile(dir, f)).sort((a, b) => a.id.localeCompare(b.id));
+  const nodes = readdirSync4(dir).filter((f) => /^\d+.*\.md$/.test(f)).map((f) => parseNodeFile(dir, f)).sort((a, b) => compareIds(a.id, b.id));
+  const seen = /* @__PURE__ */ new Map();
+  for (const node of nodes) {
+    const other = seen.get(node.id);
+    if (other) {
+      throw new Error(`duplicate node id ${node.id}: ${other} and ${node.file}`);
+    }
+    seen.set(node.id, node.file);
+  }
+  return nodes;
 }
 function getNode(root, map, id) {
   const normalized = normalizeId(id);
@@ -15764,14 +15786,14 @@ function getNode(root, map, id) {
 }
 function serializeNode(node) {
   const lines = ["---", `status: ${node.status}`, `mode: ${node.mode}`];
-  if (node.kind) lines.push(`kind: ${node.kind}`);
+  if (node.kind) lines.push(`kind: ${JSON.stringify(node.kind)}`);
   if (node.answers) lines.push(`answers: "${node.answers}"`);
   lines.push(
     node.blockedBy.length > 0 ? `blocked-by: [${node.blockedBy.map((b) => `"${b}"`).join(", ")}]` : "blocked-by: []"
   );
   if (node.pinned) lines.push("pinned: true");
   lines.push("---", "", `# ${node.title}`);
-  const body = node.body.trim();
+  const body = node.body.replace(/^\n+/, "").replace(/\n+$/, "");
   if (body) lines.push("", body);
   return lines.join("\n") + "\n";
 }
@@ -15786,6 +15808,7 @@ function requireExisting(nodes, id, role) {
   }
 }
 function createNode(root, map, input) {
+  const title = validateTitle(input.title);
   const nodes = loadNodes(root, map);
   const answers = input.answers ? normalizeId(input.answers) : void 0;
   const blockedBy = (input.blockedBy ?? []).map(normalizeId);
@@ -15801,7 +15824,7 @@ function createNode(root, map, input) {
   const id = String(maxId + 1).padStart(3, "0");
   const node = {
     id,
-    title: input.title,
+    title,
     status: input.status ?? "open",
     mode: input.mode ?? "hitl",
     kind: input.kind,
@@ -15809,7 +15832,7 @@ function createNode(root, map, input) {
     blockedBy,
     pinned: input.pinned ?? false,
     body: input.body ?? "",
-    file: `${id}-${slugify(input.title)}.md`
+    file: `${id}-${slugify(title)}.md`
   };
   writeNode(root, map, node);
   return node;
@@ -15847,8 +15870,18 @@ function updateNode(root, map, id, input) {
       requireExisting(nodes, b, "blocking");
     }
     node.blockedBy = blockedBy;
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const walk = (id2, trail) => {
+      if (trail.has(id2)) {
+        throw new Error(`blocked-by cycle through node ${id2} \u2013 these nodes would block each other forever`);
+      }
+      trail.add(id2);
+      for (const b of byId.get(id2)?.blockedBy ?? []) walk(b, trail);
+      trail.delete(id2);
+    };
+    walk(node.id, /* @__PURE__ */ new Set());
   }
-  if (input.title !== void 0) node.title = input.title;
+  if (input.title !== void 0) node.title = validateTitle(input.title);
   if (input.status !== void 0) node.status = input.status;
   if (input.mode !== void 0) node.mode = input.mode;
   if (input.kind !== void 0) node.kind = input.kind ?? void 0;
@@ -15899,7 +15932,7 @@ function frontier(nodes) {
   };
   return nodes.filter((n) => n.status === "open" && n.blockedBy.every(settled)).sort((a, b) => {
     const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
-    return byDepth !== 0 ? byDepth : a.id.localeCompare(b.id);
+    return byDepth !== 0 ? byDepth : compareIds(a.id, b.id);
   });
 }
 function walkTree(nodes) {
@@ -15919,17 +15952,17 @@ function walkTree(nodes) {
   const out = [];
   const visit = (node, depth) => {
     out.push({ node, depth });
-    const kids = (children.get(node.id) ?? []).sort((a, b) => a.id.localeCompare(b.id));
+    const kids = (children.get(node.id) ?? []).sort((a, b) => compareIds(a.id, b.id));
     for (const kid of kids) visit(kid, depth + 1);
   };
   visit(roots[0], 0);
   return out;
 }
-var import_yaml4, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
+var import_yaml3, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
 var init_nodes = __esm({
   "src/lib/nodes.ts"() {
     "use strict";
-    import_yaml4 = __toESM(require_dist(), 1);
+    import_yaml3 = __toESM(require_dist(), 1);
     init_zod();
     init_constants();
     init_utils();
@@ -15952,7 +15985,7 @@ var node_exports = {};
 __export(node_exports, {
   register: () => register5
 });
-import { readFileSync as readFileSync5 } from "node:fs";
+import { readFileSync as readFileSync4 } from "node:fs";
 import { join as join9 } from "node:path";
 function fail(message) {
   console.error(source_default.red(message));
@@ -15979,8 +16012,8 @@ function readBody(body, bodyFile) {
   }
   if (body !== void 0) return body;
   if (bodyFile === void 0) return void 0;
-  if (bodyFile === "-") return readFileSync5(0, "utf-8");
-  return readFileSync5(bodyFile, "utf-8");
+  if (bodyFile === "-") return readFileSync4(0, "utf-8");
+  return readFileSync4(bodyFile, "utf-8");
 }
 function toJson(node) {
   return {
@@ -16040,7 +16073,7 @@ function register5(program3) {
       if (opts.json) {
         console.log(JSON.stringify({ ...toJson(node), body: node.body }, null, 2));
       } else {
-        console.log(readFileSync5(join9(mapDir(root, opts.map), node.file), "utf-8"));
+        console.log(readFileSync4(join9(mapDir(root, opts.map), node.file), "utf-8"));
       }
     } catch (err) {
       fail(err.message);
@@ -16183,10 +16216,10 @@ var config_exports = {};
 __export(config_exports, {
   register: () => register6
 });
-import { existsSync as existsSync8, readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
+import { existsSync as existsSync8, readFileSync as readFileSync5, writeFileSync as writeFileSync3 } from "node:fs";
 function readGlobalConfig() {
   if (!existsSync8(GLOBAL_CONFIG_FILE)) return {};
-  return JSON.parse(readFileSync6(GLOBAL_CONFIG_FILE, "utf-8"));
+  return JSON.parse(readFileSync5(GLOBAL_CONFIG_FILE, "utf-8"));
 }
 function writeGlobalConfig(config) {
   ensureDir(GLOBAL_CONFIG_DIR);
@@ -16293,10 +16326,10 @@ var {
 } = import_index.default;
 
 // src/index.ts
-import { readFileSync as readFileSync7 } from "node:fs";
+import { readFileSync as readFileSync6 } from "node:fs";
 import { join as join10 } from "node:path";
 var pkg = JSON.parse(
-  readFileSync7(join10(import.meta.dirname, "..", "package.json"), "utf-8")
+  readFileSync6(join10(import.meta.dirname, "..", "package.json"), "utf-8")
 );
 var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(pkg.version);
 var commands = await Promise.all([

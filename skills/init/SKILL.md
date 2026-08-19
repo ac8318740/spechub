@@ -285,6 +285,8 @@ workflow:
   spec_sync: true
   grilling:
     questions: tool      # tool | inline
+  # maps: {tracker: github | files, persist: false} – set by /spechub:map at
+  # materialisation; see the config skill for the key reference
   tdd:
     strict: true
     orchestrator_strict: true

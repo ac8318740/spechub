@@ -36,8 +36,8 @@ need not re-decide.
 ## Which mode
 
 One command, two modes, picked by what exists. Check the configured tracker
-for existing maps (`spechub node list` / files under `spechub/maps/` on the
-files backend, `map:*` labels on GitHub). If `$ARGUMENTS` names a map, or
+for existing maps – `ls spechub/maps/` on the files backend,
+`gh label list --search "map:" --json name` on GitHub. If `$ARGUMENTS` names a map, or
 exactly one exists, work its frontier. If none exists, chart. If several exist
 and `$ARGUMENTS` does not pick one, ask.
 
@@ -84,7 +84,8 @@ operation. First the root:
 - The root is the destination, already resolved. It is implicitly pinned –
   every session orients to it.
 - Standing preferences for the effort (style rules, constraints discovered in
-  the grill) become a resolved node with `--kind notes --pinned`.
+  the grill) become a resolved node with `--answers <root id> --kind notes
+  --pinned`.
 - Every other surfaced question becomes a node: `open` or `fog` per the fog
   test, `--answers <id>` naming the node whose resolution surfaced it,
   `--blocked-by` only where one genuinely cannot be settled before another.
@@ -105,7 +106,10 @@ same queries per `trackers/github.md`.
 1. **Orient.** The packaging walk (`spechub node walk --map <name>`) – the
    root and pinned nodes in full, everything else gisted. Zoom with
    `node read <id>` when a gist turns out to be relevant. Do not load every
-   body.
+   body. Also check `node list --map <name> --status claimed` – a claim left
+   by a dead session hides its node from the frontier forever. If a claim
+   exists and no other session is known to be working it, ask the user and
+   release it (`--status open`).
 2. **Query the frontier.** `spechub node frontier --map <name>` – open nodes
    with no unresolved blockers, shallowest provenance depth first, number
    only as a tiebreak.
@@ -114,15 +118,18 @@ same queries per `trackers/github.md`.
    - `hitl` nodes: run grilling rounds over them. A round is the whole hitl
      frontier.
    - `afk` nodes: claim and run without the user. Unlimited, and in parallel
-     when independent. Research goes to `Explore` subagents; implementation
-     work runs the TDD pipeline (test-writer, task-executor, task-checker)
-     within the claim. Before any code change, dispatch explorer subagents
-     over the relevant code – as many as there are distinct places to look.
-4. **Claim, then resolve** – both are compositions over `update`:
+     when independent. Research goes to `Explore` subagents, with the findings
+     written into the resolution. Implementation work follows
+     `/spechub:implement`'s procedure – it owns the claim-execute-resolve
+     flow, the explorer dispatch, and the TDD pipeline. Do not restate that
+     flow here; invoke it.
+4. **Claim, then resolve** – `afk` nodes only; `hitl` resolutions happen
+   inside the grilling round, no claim step. Both are compositions over
+   `update`:
 
    ```bash
-   spechub node update <id> --map <name> --status claimed
-   spechub node update <id> --map <name> --status resolved \
+   ~/.claude/spechub/bin/spechub node update <id> --map <name> --status claimed
+   ~/.claude/spechub/bin/spechub node update <id> --map <name> --status resolved \
      --append-body "## Answer
 
    <what was decided or done, and why>"

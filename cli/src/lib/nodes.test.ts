@@ -59,6 +59,19 @@ describe('create', () => {
     expect(c.answers).toBe('002');
   });
 
+  it('rejects empty and multiline titles', () => {
+    expect(() => createNode(root, 'demo', { title: '   ' })).toThrow(/empty/);
+    expect(() => createNode(root, 'demo', { title: 'Line1\nLine2' })).toThrow(/single line/);
+  });
+
+  it('quotes kind values that would corrupt YAML', () => {
+    createNode(root, 'demo', { title: 'Root', kind: 'true' });
+    const node = getNode(root, 'demo', '001');
+    expect(node.kind).toBe('true');
+    updateNode(root, 'demo', '001', { kind: 'a: b' });
+    expect(getNode(root, 'demo', '001').kind).toBe('a: b');
+  });
+
   it('stores kind, pinned, blockers and body', () => {
     createNode(root, 'demo', { title: 'Root' });
     createNode(root, 'demo', { title: 'A', answers: '001' });
@@ -103,6 +116,50 @@ describe('read', () => {
   it('throws on a missing node', () => {
     expect(() => getNode(root, 'demo', '001')).toThrow(/not found/);
   });
+
+  it('rejects duplicate ids across files, naming both', () => {
+    createNode(root, 'demo', { title: 'Root' });
+    const dir = mapDir(root, 'demo');
+    writeFileSync(
+      join(dir, '001-imposter.md'),
+      '---\nstatus: open\nmode: hitl\nblocked-by: []\n---\n\n# Imposter\n'
+    );
+    expect(() => loadNodes(root, 'demo')).toThrow(/duplicate node id 001.*001-imposter/);
+  });
+
+  it('requires the title to be the first line after the frontmatter', () => {
+    const dir = mapDir(root, 'demo');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, '001-bad.md'),
+      '---\nstatus: open\nmode: hitl\nblocked-by: []\n---\n\nprose above\n\n# Real title\n'
+    );
+    expect(() => loadNodes(root, 'demo')).toThrow(/first line after the frontmatter/);
+  });
+
+  it('keeps a # line inside the body as body, not title', () => {
+    createNode(root, 'demo', { title: 'Root', body: '```sh\n# a comment\necho hi\n```' });
+    const node = getNode(root, 'demo', '001');
+    expect(node.title).toBe('Root');
+    expect(node.body).toContain('# a comment');
+    expect(node.body).toContain('```');
+  });
+
+  it('parses CRLF files', () => {
+    const dir = mapDir(root, 'demo');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, '001-crlf.md'),
+      '---\r\nstatus: open\r\nmode: hitl\r\nblocked-by: []\r\n---\r\n\r\n# CRLF node\r\n'
+    );
+    expect(getNode(root, 'demo', '001').title).toBe('CRLF node');
+  });
+
+  it('preserves leading indentation in the body', () => {
+    createNode(root, 'demo', { title: 'Root', body: '    indented first line\nplain' });
+    updateNode(root, 'demo', '001', { status: 'resolved' });
+    expect(getNode(root, 'demo', '001').body).toBe('    indented first line\nplain');
+  });
 });
 
 describe('update', () => {
@@ -134,6 +191,13 @@ describe('update', () => {
     createNode(root, 'demo', { title: 'Root' });
     createNode(root, 'demo', { title: 'A', answers: '001' });
     expect(() => updateNode(root, 'demo', '001', { answers: '002' })).toThrow(/root/);
+  });
+
+  it('rejects a blocked-by cycle', () => {
+    createNode(root, 'demo', { title: 'Root' });
+    createNode(root, 'demo', { title: 'A', answers: '001' });
+    createNode(root, 'demo', { title: 'B', answers: '001', blockedBy: ['002'] });
+    expect(() => updateNode(root, 'demo', '002', { blockedBy: ['003'] })).toThrow(/cycle/);
   });
 
   it('replaces and clears blockers, rejecting self-blocking', () => {
@@ -250,6 +314,17 @@ describe('frontier', () => {
     createNode(root, 'demo', { title: 'Behind settled', answers: '001', blockedBy: ['004', '005'] });
     const ready = frontier(loadNodes(root, 'demo'));
     expect(ready.map(n => n.id)).toEqual(['008']);
+  });
+
+  it('orders ids numerically past 999', () => {
+    const dir = mapDir(root, 'demo');
+    mkdirSync(dir, { recursive: true });
+    const file = (answers?: string) =>
+      `---\nstatus: open\nmode: hitl\n${answers ? `answers: "${answers}"\n` : ''}blocked-by: []\n---\n\n# N\n`;
+    writeFileSync(join(dir, '001-root.md'), file().replace('status: open', 'status: resolved'));
+    writeFileSync(join(dir, '999-a.md'), file('001'));
+    writeFileSync(join(dir, '1000-b.md'), file('001'));
+    expect(frontier(loadNodes(root, 'demo')).map(n => n.id)).toEqual(['999', '1000']);
   });
 
   it('orders by shallowest depth, then id – a late shallow node jumps the queue', () => {

@@ -12,11 +12,11 @@ Every rule exists because something went wrong without it. Built over months of 
 
 No path selection. Planning structure grows only as far as the fog demands:
 
-- **The way is clear** – `/spechub:implement` runs the TDD pipeline (test-writer -> task-executor -> task-checker) on the request directly. A small unit of work is simply small.
+- **The way is clear** – `/spechub:implement` runs the TDD pipeline (test-writer → task-executor → task-checker, plus frontend-verifier when `frontend` is configured in `project.yaml`) on the request directly. A small unit of work is simply small.
 - **Something is broken** – `/spechub:quick-fix` forces root-cause analysis before any edit.
 - **Decisions need settling** – `/spechub:map` charts a map if none exists and works the frontier if one does. One question is grilled in conversation and leaves an ADR; a long effort becomes nodes on a tracker, worked across sessions.
 
-A map is one node type – five statuses, a provenance parent, blocking edges – behind a pluggable tracker (GitHub issues first-class, files as the fallback). The frontier query answers "what can be worked right now"; the packaging walk hands an effort to a fresh session without re-reading everything. Frontend-verifier also runs when `frontend` is configured in `project.yaml`.
+A map is one node type – five statuses, a provenance parent, blocking edges – behind a pluggable tracker (GitHub issues first-class, files as the fallback). The frontier query answers "what can be worked right now"; the packaging walk hands an effort to a fresh session without re-reading everything.
 
 ## Features
 
@@ -70,7 +70,7 @@ Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:implement` | Claim afk work from the map frontier and run the TDD pipeline – runs directly on the request when no map exists |
+| `/spechub:implement` | Claim agent-workable (afk) nodes from the map frontier and run the TDD pipeline – runs directly on the request when no map exists |
 
 For work with open decisions, chart it with `/spechub:map` first.
 
@@ -129,7 +129,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 - **Specs converge toward reality.** Every commit updates the living specs via spec sync. Agents fix inaccuracies on sight. Specs track what is implemented, never what's planned.
 - **Progressive materialisation.** A typo fix needs no machinery. A long effort earns a map. The same entry point serves both, and nothing declares which.
 - **Planning outweighs coding.** Three parallel explorers run before any code is written. Mock audits, mutation checks, regression suites, integration wiring.
-- **Strict defaults, easy to relax.** Use `/spechub:config` to adjust TDD strictness, orchestrator mode, or default tier.
+- **Strict defaults, easy to relax.** Use `/spechub:config` to adjust TDD strictness, orchestrator mode, or how grilling presents questions.
 
 ## License
 

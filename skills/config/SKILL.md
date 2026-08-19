@@ -292,7 +292,7 @@ Read `spechub/project.yaml`. If it doesn't exist, tell the user to run `/spechub
 - **show**: Display formatted config summary, then prompt to fix any gaps
 - **check**: Run health checks, offer fixes interactively
 - **set**: Parse the key path, validate the value, update the YAML, write it back
-- **reset**: Replace the `workflow` section with defaults, preserve all other sections
+- **reset**: Replace the `workflow` section with defaults, preserve all other sections. Also preserve `workflow.maps` – it records the tracker choice the map skill persisted, and losing it strands nodes on a backend no session looks at
 
 ### 3. Confirm
 

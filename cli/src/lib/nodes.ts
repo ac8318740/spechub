@@ -91,8 +91,25 @@ export function slugify(title: string): string {
   );
 }
 
+// Titles become the `# ` heading line, so they must be one non-empty line.
+function validateTitle(title: string): string {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    throw new Error('title must not be empty');
+  }
+  if (/[\r\n]/.test(title)) {
+    throw new Error('title must be a single line');
+  }
+  return trimmed;
+}
+
+// Ids are compared numerically – zero-padding stops helping past 999.
+function compareIds(a: string, b: string): number {
+  return parseInt(a, 10) - parseInt(b, 10);
+}
+
 function parseNodeFile(dir: string, file: string): MapNode {
-  const raw = readFileSync(join(dir, file), 'utf-8');
+  const raw = readFileSync(join(dir, file), 'utf-8').replace(/\r\n/g, '\n');
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
@@ -102,12 +119,17 @@ function parseNodeFile(dir: string, file: string): MapNode {
     const issue = parsed.error.issues[0];
     throw new Error(`${file}: ${issue.path.join('.')} ${issue.message}`);
   }
-  const rest = match[2];
-  const titleMatch = rest.match(/^\s*# (.+)$/m);
+  // The title must be the first non-blank line after the frontmatter –
+  // scanning further would let a `# ` line inside the body win, and would
+  // silently drop any content sitting above the real heading.
+  const rest = match[2].replace(/^\n+/, '');
+  const newline = rest.indexOf('\n');
+  const firstLine = newline === -1 ? rest : rest.slice(0, newline);
+  const titleMatch = firstLine.match(/^# (.+)$/);
   if (!titleMatch) {
-    throw new Error(`${file}: missing title heading`);
+    throw new Error(`${file}: the first line after the frontmatter must be the "# title" heading`);
   }
-  const body = rest.slice((titleMatch.index ?? 0) + titleMatch[0].length).replace(/^\n+/, '');
+  const body = newline === -1 ? '' : rest.slice(newline + 1);
   const idMatch = file.match(/^(\d+)/);
   if (!idMatch) {
     throw new Error(`${file}: filename must start with the node number`);
@@ -121,7 +143,7 @@ function parseNodeFile(dir: string, file: string): MapNode {
     answers: parsed.data.answers,
     blockedBy: parsed.data['blocked-by'],
     pinned: parsed.data.pinned,
-    body: body.replace(/\n+$/, '\n').replace(/^\n$/, ''),
+    body: body.replace(/^\n+/, '').replace(/\n+$/, ''),
     file,
   };
 }
@@ -129,10 +151,19 @@ function parseNodeFile(dir: string, file: string): MapNode {
 export function loadNodes(root: string, map: string): MapNode[] {
   const dir = mapDir(root, map);
   if (!existsSync(dir)) return [];
-  return readdirSync(dir)
+  const nodes = readdirSync(dir)
     .filter(f => /^\d+.*\.md$/.test(f))
     .map(f => parseNodeFile(dir, f))
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .sort((a, b) => compareIds(a.id, b.id));
+  const seen = new Map<string, string>();
+  for (const node of nodes) {
+    const other = seen.get(node.id);
+    if (other) {
+      throw new Error(`duplicate node id ${node.id}: ${other} and ${node.file}`);
+    }
+    seen.set(node.id, node.file);
+  }
+  return nodes;
 }
 
 export function getNode(root: string, map: string, id: string): MapNode {
@@ -146,7 +177,9 @@ export function getNode(root: string, map: string, id: string): MapNode {
 
 function serializeNode(node: MapNode): string {
   const lines = ['---', `status: ${node.status}`, `mode: ${node.mode}`];
-  if (node.kind) lines.push(`kind: ${node.kind}`);
+  // kind is free text – JSON quoting keeps values like "true" or "a: b"
+  // from corrupting the YAML.
+  if (node.kind) lines.push(`kind: ${JSON.stringify(node.kind)}`);
   if (node.answers) lines.push(`answers: "${node.answers}"`);
   lines.push(
     node.blockedBy.length > 0
@@ -155,7 +188,9 @@ function serializeNode(node: MapNode): string {
   );
   if (node.pinned) lines.push('pinned: true');
   lines.push('---', '', `# ${node.title}`);
-  const body = node.body.trim();
+  // Strip only newlines – trimming spaces would de-indent a body that
+  // opens with indented markdown.
+  const body = node.body.replace(/^\n+/, '').replace(/\n+$/, '');
   if (body) lines.push('', body);
   return lines.join('\n') + '\n';
 }
@@ -173,6 +208,7 @@ function requireExisting(nodes: MapNode[], id: string, role: string): void {
 }
 
 export function createNode(root: string, map: string, input: CreateNodeInput): MapNode {
+  const title = validateTitle(input.title);
   const nodes = loadNodes(root, map);
   const answers = input.answers ? normalizeId(input.answers) : undefined;
   const blockedBy = (input.blockedBy ?? []).map(normalizeId);
@@ -190,7 +226,7 @@ export function createNode(root: string, map: string, input: CreateNodeInput): M
   const id = String(maxId + 1).padStart(3, '0');
   const node: MapNode = {
     id,
-    title: input.title,
+    title,
     status: input.status ?? 'open',
     mode: input.mode ?? 'hitl',
     kind: input.kind,
@@ -198,7 +234,7 @@ export function createNode(root: string, map: string, input: CreateNodeInput): M
     blockedBy,
     pinned: input.pinned ?? false,
     body: input.body ?? '',
-    file: `${id}-${slugify(input.title)}.md`,
+    file: `${id}-${slugify(title)}.md`,
   };
   writeNode(root, map, node);
   return node;
@@ -244,10 +280,22 @@ export function updateNode(
       if (b === node.id) throw new Error(`node ${node.id} cannot block itself`);
       requireExisting(nodes, b, 'blocking');
     }
+    // blocked-by must stay a DAG – a cycle would deadlock every node on it,
+    // silently, since the frontier only ever sees unresolved blockers.
     node.blockedBy = blockedBy;
+    const byId = new Map(nodes.map(n => [n.id, n]));
+    const walk = (id: string, trail: Set<string>): void => {
+      if (trail.has(id)) {
+        throw new Error(`blocked-by cycle through node ${id} – these nodes would block each other forever`);
+      }
+      trail.add(id);
+      for (const b of byId.get(id)?.blockedBy ?? []) walk(b, trail);
+      trail.delete(id);
+    };
+    walk(node.id, new Set());
   }
 
-  if (input.title !== undefined) node.title = input.title;
+  if (input.title !== undefined) node.title = validateTitle(input.title);
   if (input.status !== undefined) node.status = input.status;
   if (input.mode !== undefined) node.mode = input.mode;
   if (input.kind !== undefined) node.kind = input.kind ?? undefined;
@@ -312,7 +360,7 @@ export function frontier(nodes: MapNode[]): MapNode[] {
     .filter(n => n.status === 'open' && n.blockedBy.every(settled))
     .sort((a, b) => {
       const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
-      return byDepth !== 0 ? byDepth : a.id.localeCompare(b.id);
+      return byDepth !== 0 ? byDepth : compareIds(a.id, b.id);
     });
 }
 
@@ -336,17 +384,9 @@ export function walkTree(nodes: MapNode[]): Array<{ node: MapNode; depth: number
   const out: Array<{ node: MapNode; depth: number }> = [];
   const visit = (node: MapNode, depth: number): void => {
     out.push({ node, depth });
-    const kids = (children.get(node.id) ?? []).sort((a, b) => a.id.localeCompare(b.id));
+    const kids = (children.get(node.id) ?? []).sort((a, b) => compareIds(a.id, b.id));
     for (const kid of kids) visit(kid, depth + 1);
   };
   visit(roots[0], 0);
   return out;
-}
-
-export function listMaps(root: string): string[] {
-  const dir = join(root, SPECHUB_DIR, MAPS_DIR);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true })
-    .filter(e => e.isDirectory())
-    .map(e => e.name);
 }

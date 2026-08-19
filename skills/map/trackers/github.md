@@ -28,6 +28,14 @@ Create the labels once at materialisation:
 for l in "map:<name>" fog claimed afk pinned; do gh label create "$l" 2>/dev/null || true; done
 ```
 
+`kind:<value>` labels are free text, so create each one on first use:
+
+```bash
+gh label create "kind:<k>" 2>/dev/null || true
+```
+
+To enumerate a repo's maps: `gh label list --search "map:" --json name`.
+
 ## The four operations
 
 **create**
@@ -69,8 +77,12 @@ gh api graphql -f query='query { repository(owner:"{owner}", name:"{repo}") { is
 **list**
 
 ```bash
-gh issue list --label "map:<name>" --state all --limit 200 --json number,title,state,stateReason,labels
+gh issue list --label "map:<name>" --state all --limit 500 --json number,title,state,stateReason,labels
 ```
+
+`--limit` caps the result and closed issues count toward it, so history alone
+can hit the ceiling. If the result count equals the limit, re-query with a
+higher one – a truncated list silently corrupts every composed query.
 
 ## Composed queries
 
@@ -95,4 +107,5 @@ node-links: answers #12 · blocked-by #14, #17
 
 Use the same line for reading when the APIs are unavailable. Do not mix
 encodings within one map – pick per map at materialisation and note it on the
-root node.
+root node. If the APIs degrade mid-map after native edges already exist,
+transcribe the existing edges into body headers before continuing.

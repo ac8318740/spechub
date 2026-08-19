@@ -1,6 +1,7 @@
 ---
 name: implement
 description: Execute implementation work via the TDD pipeline (test-writer -> task-executor -> task-checker). Claims afk work nodes from the map frontier when a map exists; runs the same discipline directly on the request when none does. A unit of work carries its own size – one node is a quick change, forty is a long effort, and nothing declares which.
+argument-hint: "[map name, or the request to implement]"
 disable-model-invocation: true
 ---
 
@@ -60,7 +61,10 @@ With a map, orient once per session before claiming:
 
 The root and pinned nodes carry the destination and standing preferences.
 The resolved chain above a work node carries its why – read it before
-touching code.
+touching code. Also check `node list --map <name> --status claimed` – a claim
+left by a dead session hides its node from the frontier forever. If a claim
+exists and no other session is known to be working it, ask the user and
+release it (`--status open`).
 
 Claim each node as you start it:
 
@@ -107,7 +111,8 @@ When the checker passes, resolve the node in one call:
 <what was built, which files, what the tests pin down>"
 ```
 
-Then:
+With no map, skip the tracker write – still invoke `record-context` when a
+decision landed. With a map, then:
 
 - Invoke `record-context` – implementation decisions can earn ADRs too.
 - Create nodes for anything the work surfaced (a question found mid-build is
@@ -123,9 +128,10 @@ pass before claiming the next node.
 ### 8. Completion
 
 Stop when the afk frontier is empty, or when only `hitl` nodes remain
-(hand those to `/spechub:map`). Report: nodes resolved, tests passing, lines
-added/removed. Remind the user: `/commit` to commit – spec sync extracts the
-durable record from the diff.
+(hand those to `/spechub:map`). With no map, stop when the checker passes and
+Step 7 verification is green. Report: nodes resolved, tests passing, lines
+added/removed. Remind the user: `/spechub:commit` to commit – spec sync
+extracts the durable record from the diff.
 
 ## Key Rules
 
@@ -138,4 +144,4 @@ durable record from the diff.
   code, sized to the node, before any edit.
 - **Resume is a query** – a fresh session runs the frontier query and
   continues. Never re-read an effort end to end to find where it stopped.
-- **Do NOT commit or push** – the user manages git via `/commit`.
+- **Do NOT commit or push** – the user manages git via `/spechub:commit`.

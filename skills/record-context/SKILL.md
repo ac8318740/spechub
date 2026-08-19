@@ -23,8 +23,12 @@ an obvious choice buries the ones that matter.
 
 ### Writing one
 
-- Path: `docs/adr/NNNN-slug.md`. Number is the next free one, zero-padded to
-  four digits. Create the directory lazily.
+- Path: `docs/adr/NNNN-slug.md`. Number is the highest existing number plus
+  one, zero-padded to four digits. Create the directory lazily. If the file
+  for that number appeared since you scanned (a parallel teammate wrote one),
+  renumber to the new highest plus one. In agent teams, ADR writing is a
+  shared-file concern – route it through the orchestrator or the sequential
+  after-team step, never two teammates at once.
 - Body: a `# title` heading, then one to three sentences stating the decision
   and the why. Optional short `## Considered options` and `## Consequences`
   sections when they carry weight the summary cannot.
@@ -32,8 +36,14 @@ an obvious choice buries the ones that matter.
 
 ### The index is generated
 
-After writing any ADR, rewrite `docs/adr/index.md` in full: one line per ADR,
-number and slug from the filename, title from the file's first heading.
+After writing any ADR, rewrite `docs/adr/index.md` in full: one line per
+ADR, sorted by number ascending, number and slug from the filename, title
+from the file's first heading:
+
+```markdown
+- [0001](0001-one-node-type.md) – One node type for questions and work
+```
+
 Generated, never hand-edited – a derived view cannot drift from its source.
 If you find hand edits in it, regenerate; the files are the truth.
 

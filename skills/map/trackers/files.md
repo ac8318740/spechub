@@ -7,13 +7,15 @@ CLI. Nodes here are transient working state – suggest `spechub/maps/` for
 
 CLI path: `~/.claude/spechub/bin/spechub`
 
+To enumerate a project's maps: `ls spechub/maps/`.
+
 ## The four operations
 
 | Operation | Command |
 | --------- | ------- |
 | create    | `spechub node create --map <name> --title <t> [--status] [--mode] [--kind] [--answers <id>] [--blocked-by <ids>] [--pinned] [--body <md>]` |
 | read      | `spechub node read <id> --map <name> [--json]` |
-| update    | `spechub node update <id> --map <name> [--status] [--mode] [--kind] [--answers] [--blocked-by] [--pinned true\|false] [--body] [--append-body]` |
+| update    | `spechub node update <id> --map <name> [--title] [--status] [--mode] [--kind] [--answers] [--blocked-by] [--pinned true\|false] [--body] [--body-file] [--append-body]` |
 | list      | `spechub node list --map <name> [--status <s>] [--json]` |
 
 ## Composed queries
