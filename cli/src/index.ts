@@ -20,6 +20,7 @@ const commands = await Promise.all([
   import('./commands/status.js'),
   import('./commands/instructions.js'),
   import('./commands/archive.js'),
+  import('./commands/node.js'),
   import('./commands/validate.js'),
   import('./commands/config.js'),
   import('./commands/schemas.js'),

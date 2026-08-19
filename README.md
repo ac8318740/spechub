@@ -64,6 +64,8 @@ This detects your project type and generates `spechub/project.yaml` with workflo
 
 SpecHub ships a Node.js CLI for change management (`spechub new change`, `spechub status`, `spechub list`, `spechub archive`).
 
+The CLI also carries the files backend for map nodes (`spechub node create | read | update | list`), which stores one markdown file per node under `spechub/maps/<name>/`. These four operations are the whole tracker contract – frontier, claim and resolve are compositions over them, performed by skills.
+
 The plugin's skills and agents invoke the CLI through an invariant absolute path – `~/.claude/spechub/bin/spechub` – that the SessionStart hook maintains. This means agents don't depend on your shell `PATH` and the CLI keeps working across plugin version bumps, non-interactive subshells, and fresh agent contexts.
 
 For typing `spechub` at a terminal yourself, the hook also creates `~/.local/bin/spechub`. Add `~/.local/bin` to your `PATH` to use it; the hook prints a one-line reminder if it isn't already there. This second symlink is a convenience only – nothing in the plugin breaks if you don't set up `PATH`.
