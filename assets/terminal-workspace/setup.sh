@@ -442,11 +442,11 @@ rm -f /tmp/spechub-md.$$.md
 H
   chmod +x "$BIN/spechub-md"
 
-  cat > "$BIN/spechub-tab" <<'H'
+  cat > "$BIN/spechub-herdr-tab" <<'H'
 #!/usr/bin/env bash
 # Run a command in a new herdr tab, beside the pane the key was pressed in.
 #
-#   spechub-tab <label> <command> [args...]
+#   spechub-herdr-tab <label> <command> [args...]
 #
 # herdr has no type = "tab" custom command, and its tab.create API launches a
 # shell rather than a command, so the tab is created first and the command
@@ -459,8 +459,8 @@ H
 # exactly the one the key was pressed in. Installed by spechub.
 set -uo pipefail
 
-label="${1:?usage: spechub-tab <label> <command> [args...]}"; shift
-[ $# -gt 0 ] || { echo "spechub-tab: no command given" >&2; exit 1; }
+label="${1:?usage: spechub-herdr-tab <label> <command> [args...]}"; shift
+[ $# -gt 0 ] || { echo "spechub-herdr-tab: no command given" >&2; exit 1; }
 
 command -v herdr >/dev/null 2>&1 || exec "$@"
 
@@ -489,9 +489,9 @@ pane=$(printf '%s' "$resp" | python3 -c \
 disown 2>/dev/null || true
 exit 0
 H
-  chmod +x "$BIN/spechub-tab"
+  chmod +x "$BIN/spechub-herdr-tab"
 
-  cat > "$BIN/spechub-renumber" <<'H'
+  cat > "$BIN/spechub-herdr-renumber" <<'H'
 #!/usr/bin/env python3
 """Make the herdr sidebar numbers match prefix+1..9.
 
@@ -524,7 +524,7 @@ def call(method, params=None):
         conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         conn.connect(socket_path())
     except OSError as err:
-        sys.exit(f"spechub-renumber: no herdr server at {socket_path()} ({err})")
+        sys.exit(f"spechub-herdr-renumber: no herdr server at {socket_path()} ({err})")
     with conn:
         conn.sendall((json.dumps({"id": "renumber", "method": method,
                                   "params": params or {}}) + "\n").encode())
@@ -536,10 +536,10 @@ def call(method, params=None):
             buf += chunk
     lines = buf.decode().strip().splitlines()
     if not lines:
-        sys.exit(f"spechub-renumber: herdr closed the connection during {method}")
+        sys.exit(f"spechub-herdr-renumber: herdr closed the connection during {method}")
     reply = json.loads(lines[0])
     if "error" in reply:
-        sys.exit(f"spechub-renumber: {method} failed: {reply['error']}")
+        sys.exit(f"spechub-herdr-renumber: {method} failed: {reply['error']}")
     return reply
 
 
@@ -577,9 +577,10 @@ def main():
 if __name__ == "__main__":
     main()
 H
-  chmod +x "$BIN/spechub-renumber"
+  chmod +x "$BIN/spechub-herdr-renumber"
 
-  say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-tab, spechub-renumber"
+  say "helpers written: spechub-diff, spechub-dash, spechub-md"
+  say "herdr helpers written: spechub-herdr-tab, spechub-herdr-renumber"
 }
 
 apply_herdr() {
@@ -607,11 +608,11 @@ mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey, begin, e
 # type "shell" takes no size: herdr rejects width/height on a non-popup.
 CUSTOM = [
     (diffkey,    "spechub-diff",                  "diff (diffnav)",     "popup", "90%"),
-    (difftabkey, "spechub-tab diff spechub-diff", "diff (tab)",         "shell", None),
+    (difftabkey, "spechub-herdr-tab diff spechub-diff", "diff (tab)",         "shell", None),
     (dashkey,    "spechub-dash",                  "PR dashboard",       "popup", "95%"),
-    (dashtabkey, "spechub-tab dash spechub-dash", "PR dashboard (tab)", "shell", None),
+    (dashtabkey, "spechub-herdr-tab dash spechub-dash", "PR dashboard (tab)", "shell", None),
     (filekey,    "yazi",                          "file tree",          "popup", "95%"),
-    (filetabkey, "spechub-tab yazi yazi",         "file tree (tab)",    "shell", None),
+    (filetabkey, "spechub-herdr-tab yazi yazi",         "file tree (tab)",    "shell", None),
 ]
 
 def custom_blocks():

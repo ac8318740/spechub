@@ -35,14 +35,14 @@ Run `/spechub:terminal-workspace` to install and configure all of it from a sing
 Every popup works this way: `alt+d` / `alt+shift+d` for diffnav, `alt+i` /
 `alt+shift+i` for gh-dash. A popup is right for a glance; a tab is right for
 something you will come back to. Both come from the same command, and the tab
-variant goes through `spechub-tab`, which creates the tab in the workspace and
+variant goes through `spechub-herdr-tab`, which creates the tab in the workspace and
 directory the key was pressed in, then sends the command with `herdr pane run`.
 Outside herdr it simply runs the command.
 
 `alt+t` is deliberately left alone: it is Claude Code's thinking toggle.
 
 Two collisions to know about. herdr hosts a `type = "shell"` command in a real
-pane for as long as the process runs, so `spechub-tab` creates the tab and then
+pane for as long as the process runs, so `spechub-herdr-tab` creates the tab and then
 hands the wait to a detached child, returning in about 100ms rather than three
 and a half seconds; without that a stray pane sits in the current tab. And the
 terminal emulator you type in may claim the same chords: Windows Terminal binds
@@ -407,8 +407,14 @@ stored list but appears mid-sidebar under its parent, so everything below it
 shifts and the number you read stops being the number you press.
 
 ```bash
-spechub-renumber
+spechub-herdr-renumber
 ```
+
+The `spechub-herdr-` prefix is the convention for a helper that only works under
+herdr. Plain `spechub-` helpers such as `spechub-diff` and `spechub-md` run in
+any terminal, so the name tells you up front what a command depends on. Both
+forms are reachable through the CLI, which dispatches an unknown subcommand to
+`spechub-<name>` on your PATH.
 
 That rewrites the stored order to match the grouped order, so both agree again.
 Run it after creating or tearing down a worktree. It prints the result and is
