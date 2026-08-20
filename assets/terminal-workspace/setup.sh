@@ -357,7 +357,7 @@ fi
 
 # Terminal render: swap each mermaid fence for its text drawing, then page it.
 SPECHUB_COLS="$COLS" SPECHUB_PAD="$PAD" SPECHUB_ONLY="$ONLY" SPECHUB_RUN="$$" \
-python3 - "$FILE" <<'PY' > /tmp/spechub-md.$$ 2>/dev/null
+python3 - "$FILE" <<'PY' > /tmp/spechub-md.$$.md 2>/dev/null
 import os, pathlib, re, shlex, shutil, subprocess, sys, tempfile
 text = pathlib.Path(sys.argv[1]).read_text()
 # "$HOME/..." rather than the absolute path: shorter, and unlike ~'/x y'
@@ -439,17 +439,44 @@ PY
 
 if [ "$ONLY" != "0" ]; then
   # -S chops instead of wrapping: arrow keys scroll sideways.
-  less -SR /tmp/spechub-md.$$
+  less -SR /tmp/spechub-md.$$.md
 elif command -v glow >/dev/null 2>&1; then
-  glow ${SPECHUB_MD_STYLE:+--style=$SPECHUB_MD_STYLE} -w "$((COLS - 2))" \
-    /tmp/spechub-md.$$ 2>/dev/null > /tmp/spechub-md-out.$$
-  # Put the full-width art back where the marker landed. Prose is already
-  # wrapped to the pane, so -S only ever chops the diagrams.
-  SPECHUB_PID=$$ python3 - /tmp/spechub-md-out.$$ <<'PY'
-import os, pathlib, re, sys
-out = pathlib.Path(sys.argv[1]); pid = os.environ["SPECHUB_PID"]
+  # glow drops all styling when stdout is not a terminal, and its output has
+  # to be captured to splice the diagrams in, so it runs under a pty.
+  SPECHUB_PID=$$ SPECHUB_COLS="$COLS" SPECHUB_STYLE="${SPECHUB_MD_STYLE:-}" \
+    python3 - /tmp/spechub-md.$$.md /tmp/spechub-md-out.$$.md <<'PY'
+import fcntl, os, pathlib, pty, re, struct, subprocess, sys, termios
+src, dst = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+pid = os.environ["SPECHUB_PID"]
+cols = int(os.environ.get("SPECHUB_COLS") or 80)
+# Leave glow on "auto": under a pty it picks its full palette. Pinning a
+# named style here gives a noticeably flatter one.
+style = os.environ.get("SPECHUB_STYLE") or ""
+
+cmd = ["glow", "-w", str(cols - 2)] + (["--style", style] if style else []) + [str(src)]
+master, slave = pty.openpty()
+# glow reads the width from the pty, not just -w, so set it to match.
+fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 200, cols, 0, 0))
+proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=slave, stderr=subprocess.DEVNULL)
+os.close(slave)
+chunks = []
+while True:
+    try:
+        b = os.read(master, 65536)
+    except OSError:
+        break
+    if not b:
+        break
+    chunks.append(b)
+os.close(master); proc.wait()
+text = b"".join(chunks).decode("utf-8", "replace").replace("\r\n", "\n")
+# A pty makes glow probe the terminal for its background colour. Those replies
+# are meant for a real terminal, not a file, so drop them.
+text = re.sub(r"\x1b\][01][01];\?(\x07|\x1b\\)", "", text)
+text = re.sub(r"\x1b\[6n", "", text)
+
 lines = []
-for line in out.read_text().splitlines():
+for line in text.split("\n"):
     m = re.search(r"\x00SPECHUBART(\d+)\x00", line)
     if not m:
         lines.append(line); continue
@@ -458,14 +485,14 @@ for line in out.read_text().splitlines():
     if art.exists():
         lines.extend("  " + l for l in art.read_text().splitlines())
         art.unlink()
-out.write_text("\n".join(lines) + "\n")
+dst.write_text("\n".join(lines) + "\n")
 PY
-  ${PAGER:-less -SR} /tmp/spechub-md-out.$$
-  rm -f /tmp/spechub-md-out.$$ /tmp/spechub-md-art.$$.*
+  ${PAGER:-less -SR} /tmp/spechub-md-out.$$.md
+  rm -f /tmp/spechub-md-out.$$.md /tmp/spechub-md-art.$$.*
 else
-  ${PAGER:-less -R} /tmp/spechub-md.$$
+  ${PAGER:-less -R} /tmp/spechub-md.$$.md
 fi
-rm -f /tmp/spechub-md.$$
+rm -f /tmp/spechub-md.$$.md
 H
   chmod +x "$BIN/spechub-md"
 
