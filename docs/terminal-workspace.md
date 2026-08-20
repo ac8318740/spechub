@@ -81,6 +81,22 @@ unwrapped through `less -S`, where the arrow keys scroll sideways.
 `-x 2 -y 2`). Tighter padding buys roughly a third of the height back and very
 little width.
 
+Wide diagrams still appear in place. glow wraps whatever it renders, so the
+drawing is held back, glow runs on the prose, and the full-width art is spliced
+into its output afterwards. The pager is `less -S`: prose is already wrapped to
+the pane, so only the diagram lines chop, and the arrow keys pan across them.
+
+### Reading markdown from the file tree
+
+`e` in tuicr opens the focused file in `$EDITOR`. `spechub-files` points that at
+`spechub-open`, which sends markdown to `spechub-md` and everything else to the
+editor you already use. The override lives only inside that popup, so `$EDITOR`
+in your shell is unchanged, and `SPECHUB_REAL_EDITOR` holds the original so the
+shim cannot resolve back to itself.
+
+So: `alt+t` for the tree, `e` on a markdown file to read it with its diagrams
+drawn, `q` back to the tree.
+
 Terminal mode replaces each mermaid fence with a box-drawing rendering.
 `mermaid-ascii` handles `graph`, `flowchart`, and `sequenceDiagram`; anything
 else keeps its source visible with a note rather than disappearing.

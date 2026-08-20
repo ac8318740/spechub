@@ -166,9 +166,13 @@ H
 
   cat > "$BIN/spechub-files" <<'H'
 #!/usr/bin/env bash
-# Whole file tree in tuicr, read-only. Installed by spechub.
+# Full file tree in tuicr pristine mode. Bound to alt+t as a herdr popup.
+# Installed by spechub.
 set -uo pipefail
+
 pick_checkout() {
+  # herdr groups worktrees as <root>/<repo>/<branch-slug>, so a pane often
+  # sits in the parent of several checkouts rather than in one.
   local -a repos=()
   while IFS= read -r d; do repos+=("$d"); done < <(
     find . -mindepth 1 -maxdepth 1 -type d -exec test -e '{}/.git' \; -print 2>/dev/null | sort)
@@ -187,11 +191,24 @@ pick_checkout() {
        return 1 ;;
   esac
 }
-# A repo shows its whole tree from the root, however deep the pane sits. In a
-# linked worktree that is the worktree root, not the main checkout - the tree
-# should match the branch the pane is on.
-if root=$(git rev-parse --show-toplevel 2>/dev/null); then cd "$root"
-else pick_checkout || true; fi
+
+# A repo shows its whole tree from the root, however deep the pane sits.
+# Anything else browses where it stands - tuicr --file needs no VCS.
+if root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  cd "$root"
+else
+  pick_checkout || true
+fi
+
+# `e` in tuicr opens the focused file in $EDITOR. Point that at the shim so
+# markdown opens in the reader with its diagrams drawn, and everything else
+# still goes to the real editor. Capture the real one first, or the shim's
+# fallback resolves back to itself.
+if command -v spechub-open >/dev/null 2>&1; then
+  export SPECHUB_REAL_EDITOR="${SPECHUB_REAL_EDITOR:-${EDITOR:-${VISUAL:-vi}}}"
+  export EDITOR=spechub-open
+fi
+
 exec tuicr --file "${1:-.}" --no-update-check
 H
   chmod +x "$BIN/spechub-files"
@@ -339,7 +356,7 @@ fi
 
 
 # Terminal render: swap each mermaid fence for its text drawing, then page it.
-SPECHUB_COLS="$COLS" SPECHUB_PAD="$PAD" SPECHUB_ONLY="$ONLY" \
+SPECHUB_COLS="$COLS" SPECHUB_PAD="$PAD" SPECHUB_ONLY="$ONLY" SPECHUB_RUN="$$" \
 python3 - "$FILE" <<'PY' > /tmp/spechub-md.$$ 2>/dev/null
 import os, pathlib, re, shlex, shutil, subprocess, sys, tempfile
 text = pathlib.Path(sys.argv[1]).read_text()
@@ -402,13 +419,14 @@ def repl(m):
         # Raw, unwrapped, for a pager that can scroll sideways.
         return "\0DIAGRAM%d\0%s\0" % (n, art) if n == ONLY else ""
     if width > BUDGET:
-        # Wrapping box-drawing art destroys it, so say what it is instead.
-        return ("\n```\n"
-                f"Diagram {n}: {width} columns wide, too wide for this "
-                f"{COLS}-column terminal.\n"
-                f"  spechub-md --diagram {n} {SELF}\n"
-                f"  spechub-md --serve {SELF}\n"
-                "```")
+        # glow wraps whatever it renders, and wrapped box-drawing art is
+        # noise. Emit a marker instead and splice the raw art back in after
+        # glow has run, so prose wraps to the pane and the diagram does not.
+        run = os.environ.get("SPECHUB_RUN") or str(os.getpid())
+        art_path = pathlib.Path(tempfile.gettempdir()) / f"spechub-md-art.{run}.{n}"
+        art_path.write_text(art + "\n")
+        return (f"\n```\n\x00SPECHUBART{n}\x00 {width} cols, pans sideways "
+                f"with the arrow keys\n```")
     return "```\n" + art + "\n```"
 
 out = re.sub(r"```mermaid\n(.*?)```", repl, text, flags=re.S)
@@ -424,14 +442,48 @@ if [ "$ONLY" != "0" ]; then
   less -SR /tmp/spechub-md.$$
 elif command -v glow >/dev/null 2>&1; then
   glow ${SPECHUB_MD_STYLE:+--style=$SPECHUB_MD_STYLE} -w "$((COLS - 2))" \
-    /tmp/spechub-md.$$ 2>/dev/null | ${PAGER:-less -R}
+    /tmp/spechub-md.$$ 2>/dev/null > /tmp/spechub-md-out.$$
+  # Put the full-width art back where the marker landed. Prose is already
+  # wrapped to the pane, so -S only ever chops the diagrams.
+  SPECHUB_PID=$$ python3 - /tmp/spechub-md-out.$$ <<'PY'
+import os, pathlib, re, sys
+out = pathlib.Path(sys.argv[1]); pid = os.environ["SPECHUB_PID"]
+lines = []
+for line in out.read_text().splitlines():
+    m = re.search(r"\x00SPECHUBART(\d+)\x00", line)
+    if not m:
+        lines.append(line); continue
+    art = pathlib.Path(f"/tmp/spechub-md-art.{pid}.{m.group(1)}")
+    lines.append(re.sub(r"\x00SPECHUBART\d+\x00", f"Diagram {m.group(1)}:", line))
+    if art.exists():
+        lines.extend("  " + l for l in art.read_text().splitlines())
+        art.unlink()
+out.write_text("\n".join(lines) + "\n")
+PY
+  ${PAGER:-less -SR} /tmp/spechub-md-out.$$
+  rm -f /tmp/spechub-md-out.$$ /tmp/spechub-md-art.$$.*
 else
   ${PAGER:-less -R} /tmp/spechub-md.$$
 fi
 rm -f /tmp/spechub-md.$$
 H
   chmod +x "$BIN/spechub-md"
-  say "helpers written: spechub-diff, spechub-dash, spechub-files, spechub-files-tab, spechub-md"
+
+  cat > "$BIN/spechub-open" <<'H'
+#!/usr/bin/env bash
+# $EDITOR shim for tuicr: markdown opens in the reader, everything else in the
+# real editor. Scoped to spechub-files, so the shell's own $EDITOR is untouched.
+# Installed by spechub.
+set -uo pipefail
+# tuicr may pass +LINE or a file:line argument; the path is the last one.
+for last; do :; done
+case "${last,,}" in
+  *.md|*.markdown|*.mdx) exec spechub-md "$last" ;;
+  *) exec "${SPECHUB_REAL_EDITOR:-${VISUAL:-${EDITOR:-vi}}}" "$@" ;;
+esac
+H
+  chmod +x "$BIN/spechub-open"
+  say "helpers written: spechub-diff, spechub-dash, spechub-files, spechub-files-tab, spechub-md, spechub-open"
 }
 
 apply_herdr() {
