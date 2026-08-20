@@ -116,14 +116,18 @@ the pane, so only the diagram lines chop, and the arrow keys pan across them.
 
 ### Reading markdown from the file tree
 
-`e` in tuicr opens the focused file in `$EDITOR`. `spechub-files` points that at
-`spechub-open`, which sends markdown to `spechub-md` and everything else to the
-editor you already use. The override lives only inside that popup, so `$EDITOR`
-in your shell is unchanged, and `SPECHUB_REAL_EDITOR` holds the original so the
-shim cannot resolve back to itself.
+The file tree is yazi, and it draws markdown twice over. Moving the cursor onto
+a `.md` file renders it straight into the preview pane, through the piper plugin
+running `spechub-md --preview`. The pane is narrow, so a wide diagram shows a
+placeholder there rather than a chopped drawing.
 
-So: `alt+t` for the tree, `e` on a markdown file to read it with its diagrams
-drawn, `q` back to the tree.
+`Enter` on the same file opens `spechub-md` full width, where the diagrams fit.
+An opener rule puts that ahead of the editor, so reading is the default and
+editing is the second entry in the same menu. Nothing shims `$EDITOR`, and your
+shell environment is untouched.
+
+So: `alt+y` for the tree, cursor onto a markdown file to preview it, `Enter` to
+read it full width with its diagrams drawn, `q` back to the tree.
 
 Terminal mode replaces each mermaid fence with a box-drawing rendering.
 `mermaid-ascii` handles `graph`, `flowchart`, and `sequenceDiagram`; anything
