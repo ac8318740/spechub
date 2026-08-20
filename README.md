@@ -4,7 +4,7 @@ A Claude Code plugin for spec-driven TDD development.
 
 ## Overview
 
-SpecHub grows planning structure only as far as the fog demands – the same entry point serves a one-question change and a fifty-question effort. Living specifications stay in sync with your codebase automatically via commit-time spec sync.
+SpecHub grows planning structure only as far as the fog demands. Fog is the part of the work you cannot state precisely yet – the open questions, the undecided shape. Little fog means little structure, so the same entry point serves a one-question change and a fifty-question effort. Living specifications stay in sync with your codebase automatically via commit-time spec sync.
 
 Every rule exists because something went wrong without it. Built over months of actual product development with Claude Code.
 
@@ -14,13 +14,17 @@ No path selection. Planning structure grows only as far as the fog demands:
 
 - **The way is clear** – `/spechub:implement` runs the TDD pipeline (test-writer → task-executor → task-checker, plus frontend-verifier when `frontend` is configured in `project.yaml`) on the request directly. A small unit of work is simply small.
 - **Something is broken** – `/spechub:quick-fix` forces root-cause analysis before any edit.
-- **Decisions need settling** – `/spechub:map` charts a map if none exists and works the frontier if one does. One question is grilled in conversation and leaves an ADR; a long effort becomes nodes on a tracker, worked across sessions.
+- **Decisions need settling** – `/spechub:map` charts a map if none exists and works the frontier if one does. A single question is settled in conversation – SpecHub calls that interviewing technique grilling – and leaves an architecture decision record (ADR): a short note saying what was decided and why. A long effort becomes a map instead, worked across sessions.
 
-A map is one node type – five statuses, a provenance parent, blocking edges – behind a pluggable tracker (GitHub issues first-class, files as the fallback). The frontier query answers "what can be worked right now"; the packaging walk hands an effort to a fresh session without re-reading everything.
+A map is a set of small records called nodes. Each node is one question to settle or one piece of work to do. Every node has one of five statuses: `fog` – cannot be stated precisely yet; `open` – ready to settle; `claimed` – being worked; `resolved` – settled; `out-of-scope` – deliberately dropped. Every node also names its provenance parent – the node whose answer raised this one – and its blocking edges – the nodes that must resolve before this one can start. A node's mode says who settles it: `hitl` for a human, `afk` for an agent working alone.
+
+The frontier is the answer to "what can be worked right now": the open nodes with nothing unresolved blocking them. Nodes are kept by a tracker, the swappable storage layer behind a map (GitHub issues first-class, plain files as the fallback). The packaging walk collects a map into one brief, so a fresh session can pick up an effort without re-reading everything.
+
+For the full picture – each step and how they connect – read [docs/workflows.md](docs/workflows.md).
 
 ## Features
 
-- **Progressive materialisation** – structure appears only when it must persist; a map exists only when fog outlives a session
+- **Progressive materialisation** – structure appears only when it has to persist; a map is created only when the fog will outlive the session
 - **Commit-time spec sync** – Living specs auto-update on every commit
 - **Four-phase TDD pipeline** – test-writer → task-executor → task-checker → frontend-verifier
 - **Orchestrator pattern** – Claude coordinates specialized agents rather than doing everything itself
@@ -52,7 +56,9 @@ This detects your project type and generates `spechub/project.yaml` with workflo
 
 SpecHub ships a Node.js CLI (`spechub init`, `spechub list`, `spechub node ...`, `spechub archive`).
 
-Map nodes live behind a pluggable tracker declaring four operations – create, read, update, list. GitHub issues are the first-class backend (native sub-issues carry provenance, native dependencies carry blocking). The CLI carries the files fallback for map nodes (`spechub node create | read | update | list`), which stores one markdown file per node under `spechub/maps/<name>/`. These four operations are the whole tracker contract. `spechub node frontier` is a composed query over them – open nodes with no unresolved blockers, shallowest provenance depth first. `spechub node walk` packages the map for a handoff: a preorder walk of the provenance tree with pinned nodes and the root in full. Claim and resolve are compositions too, performed by skills through `update`.
+A tracker has to provide four operations and nothing more: create, read, update, list. GitHub issues are the first-class tracker, because they already have the two links a map needs: sub-issues carry the provenance parent, and issue dependencies carry the blocking edges. The CLI also ships a files tracker as the fallback (`spechub node create | read | update | list`), which writes one markdown file per node under `spechub/maps/<name>/`.
+
+Everything else is built on those four operations. `spechub node frontier` lists the nodes ready to work – open, nothing unresolved blocking them, closest to the root node first. `spechub node walk` packages the map for a handoff: it reads the nodes in provenance order and includes the root node in full, plus any node marked pinned – flagged as always worth carrying along. Claiming and resolving a node are just `update` calls, made by the skills.
 
 The plugin's skills and agents invoke the CLI through an invariant absolute path – `~/.claude/spechub/bin/spechub` – that the SessionStart hook maintains. This means agents don't depend on your shell `PATH` and the CLI keeps working across plugin version bumps, non-interactive subshells, and fresh agent contexts.
 
@@ -87,7 +93,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 | Skill | Description |
 |-------|-------------|
 | `/spechub:commit` | Git commit with mandatory spec sync |
-| `/spechub:archive` | Close out a cleared map – verify residue, dispose of nodes |
+| `/spechub:archive` | Close out a cleared map – check the residue landed (the durable output: spec updates, decision records, glossary entries), then dispose of the nodes |
 | `/spechub:config` | View/modify workflow settings |
 | `/spechub:sync` | Update specs from code changes |
 | `/spechub:handoff` | Hand work to a fresh agent session, or anchor it to survive compaction |
@@ -127,7 +133,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 
 - **TDD is structural, not aspirational.** Test-writer can't see the implementation plan. Executor can't touch test files. Tests stay independent of the code they verify.
 - **Specs converge toward reality.** Every commit updates the living specs via spec sync. Agents fix inaccuracies on sight. Specs track what is implemented, never what's planned.
-- **Progressive materialisation.** A typo fix needs no machinery. A long effort earns a map. The same entry point serves both, and nothing declares which.
+- **Progressive materialisation.** Structure appears only when it has to persist. A typo fix needs no machinery. A long effort earns a map. The same entry point serves both, and nothing declares which.
 - **Planning outweighs coding.** Three parallel explorers run before any code is written. Mock audits, mutation checks, regression suites, integration wiring.
 - **Strict defaults, easy to relax.** Use `/spechub:config` to adjust TDD strictness, orchestrator mode, or how grilling presents questions.
 

@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Execute implementation work via the TDD pipeline (test-writer -> task-executor -> task-checker). Claims afk work nodes from the map frontier when a map exists; runs the same discipline directly on the request when none does. A unit of work carries its own size – one node is a quick change, forty is a long effort, and nothing declares which.
+description: Execute implementation work via the TDD pipeline (test-writer -> task-executor -> task-checker). A map is a stored graph of question and work nodes. Claims afk nodes – away from keyboard, meaning nodes an agent settles alone – from the map frontier, the nodes ready to be worked now, when a map exists; runs the same discipline directly on the request when none does. A unit of work carries its own size – one node is a quick change, forty is a long effort, and nothing declares which.
 argument-hint: "[map name, or the request to implement]"
 disable-model-invocation: true
 ---
@@ -34,8 +34,9 @@ operations – files backend shown below).
 
 These are the workable nodes: open, unblocked, and containing no decision.
 Pull them regardless of depth – work can hang anywhere, including straight
-off the root. If the frontier holds only `hitl` nodes, stop and point the
-user at `/spechub:map` – those need a human, not a pipeline.
+off the root. If the frontier holds only `hitl` nodes – human in the loop,
+meaning a person must answer them – stop and point the user at
+`/spechub:map`. Those need a human, not a pipeline.
 
 **No map**: the request in `$ARGUMENTS` is the work item. Same discipline,
 no tracker writes. This is the whole quick path – a small change is just a
@@ -59,10 +60,14 @@ With a map, orient once per session before claiming:
 ~/.claude/spechub/bin/spechub node walk --map <name>
 ```
 
-The root and pinned nodes carry the destination and standing preferences.
-The resolved chain above a work node carries its why – read it before
-touching code. Also check `node list --map <name> --status claimed` – a claim
-left by a dead session hides its node from the frontier forever. If a claim
+The walk prints the map in one pass: the root and pinned nodes in full,
+everything else as a one-line gist. The root holds the destination. Pinned
+nodes hold standing preferences – style rules and constraints that apply to
+the whole effort. The resolved chain above a work node – the already-answered
+questions it hangs off, followed up to the root – carries its why. Read that
+chain before touching code. Also check `node list --map <name> --status claimed` – a claim
+marks a node as being worked, so one left behind by a dead session hides its
+node from the frontier forever. If a claim
 exists and no other session is known to be working it, ask the user and
 release it (`--status open`).
 
@@ -111,6 +116,10 @@ When the checker passes, resolve the node in one call:
 <what was built, which files, what the tests pin down>"
 ```
 
+Write the `## Answer` text for a reader with little context – plain language,
+any term of art defined at first use. It may be read weeks later by someone
+who was not in this conversation.
+
 With no map, skip the tracker write – still invoke `record-context` when a
 decision landed. With a map, then:
 
@@ -142,6 +151,8 @@ extracts the durable record from the diff.
   release on stall. No checkbox files, no phase fields.
 - **Explore before writing** – parallel explorer subagents over the relevant
   code, sized to the node, before any edit.
-- **Resume is a query** – a fresh session runs the frontier query and
-  continues. Never re-read an effort end to end to find where it stopped.
+- **Resume is a query** – picking up where you left off means asking the
+  tracker what is workable now, not reconstructing history. A fresh session
+  runs the frontier query and continues. Never re-read an effort end to end
+  to find where it stopped.
 - **Do NOT commit or push** – the user manages git via `/spechub:commit`.

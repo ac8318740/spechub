@@ -12,7 +12,7 @@ $ARGUMENTS
 
 Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
 
-**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and chart the work with /spechub:map. You MAY create SpecHub artifacts (map nodes, specs, ADRs) if the user asks – that's capturing thinking, not implementing.
+**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and map out the work with /spechub:map. You MAY create SpecHub artifacts (map nodes, specs, ADRs) if the user asks – that's capturing thinking, not implementing.
 
 **This is a stance, not a workflow.** There are no fixed steps, no required sequence, no mandatory outputs. You're a thinking partner helping the user explore.
 
@@ -106,7 +106,7 @@ If the user mentions a map or you detect one is relevant:
 | Requirement changed        | `specs/<domain>/spec.md`     |
 | Design decision made       | an ADR via `record-context`  |
 | Term pinned down           | glossary via `record-context` |
-| New work identified        | a map node (if a map exists) |
+| New work identified        | a map node (a small tracked-work record, if a map exists) |
 | Assumption invalidated     | Relevant artifact            |
 
 4. The user decides – offer and move on. Don't pressure.
@@ -131,6 +131,7 @@ If the user mentions a map or you detect one is relevant:
 - **Don't rush** - Discovery is thinking time, not task time
 - **Don't force structure** - Let patterns emerge naturally
 - **Don't auto-capture** - Offer to save insights, don't just do it
+- **Write for the reader** - Captured artifacts are read by someone with none of this conversation; use plain language, define terms of art at first use
 - **Do visualize** - A good diagram is worth many paragraphs
 - **Do explore the codebase** - Ground discussions in reality
 - **Do question assumptions** - Including the user's and your own

@@ -92,11 +92,13 @@ higher one – a truncated list silently corrupts every composed query.
   number as the final tiebreak.
 - **Walk**: start at the root (the map-labelled issue with no parent),
   recurse over sub-issues in number order. Read `pinned` nodes and the root
-  in full; gist the rest from titles.
+  in full; for the rest, take the title as the gist and do not open the body.
 - Depth is derived from the parent chain, never stored.
 
 ## Degraded remotes
 
+A degraded remote is one where GitHub's native link features are off or not
+permitted, so the edges between nodes cannot be stored as real links.
 Sub-issues and dependencies need a repo where those features are enabled. If
 either API returns 404 or 403, fall back to declaring the edge in the issue
 body header instead – one line, first in the body:

@@ -16039,8 +16039,10 @@ function printNode(node) {
   );
 }
 function register5(program3) {
-  const nodeCmd = program3.command("node").description("Map nodes on the files backend (spechub/maps/<name>/)");
-  nodeCmd.command("create").description("Create a node; the first node in a map is the root").requiredOption("--map <name>", "map name").requiredOption("--title <title>", "node title").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", `one of: ${NODE_MODES.join(", ")}`, parseMode).option("--kind <kind>", "advisory kind hint (grilling, research, task, ...)").option("--answers <id>", "provenance parent \u2013 required except on the root").option("--blocked-by <ids>", "comma-separated blocking node ids", parseIdList).option("--pinned", "load in full every session").option("--body <text>", "markdown body").option("--body-file <path>", "read body from file, or - for stdin").option("--json", "output as JSON").action(
+  const nodeCmd = program3.command("node").description(
+    "Map nodes: small markdown records, one file each, under spechub/maps/<name>/.\nStatus: fog (not yet stated precisely), open (ready), claimed (being worked),\nresolved (settled), out-of-scope (dropped)."
+  );
+  nodeCmd.command("create").description("Create a node; the first node in a map is the root").requiredOption("--map <name>", "map name").requiredOption("--title <title>", "node title").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", "hitl (a human settles it) or afk (an agent settles it alone)", parseMode).option("--kind <kind>", "free-text label for what kind of node this is (grilling, research, task, ...) \u2013 advisory only").option("--answers <id>", "the node whose resolution raised this one (its provenance parent) \u2013 required except on the root").option("--blocked-by <ids>", "comma-separated ids of nodes that must settle before this one can be worked", parseIdList).option("--pinned", "load in full every session").option("--body <text>", "markdown body").option("--body-file <path>", "read body from file, or - for stdin").option("--json", "output as JSON").action(
     (opts) => {
       const root = findProjectRoot();
       requireProject(root);
@@ -16109,7 +16111,9 @@ function register5(program3) {
       }
     }
   );
-  nodeCmd.command("frontier").description("Open nodes with no unresolved blockers, shallowest provenance depth first").requiredOption("--map <name>", "map name").option("--mode <mode>", `filter by mode: ${NODE_MODES.join(", ")}`, parseMode).option("--json", "output as JSON").action((opts) => {
+  nodeCmd.command("frontier").description(
+    "Open nodes with no unresolved blockers, shallowest first (fewest answers links from the root)"
+  ).requiredOption("--map <name>", "map name").option("--mode <mode>", `filter by mode: ${NODE_MODES.join(", ")}`, parseMode).option("--json", "output as JSON").action((opts) => {
     const root = findProjectRoot();
     requireProject(root);
     try {
@@ -16136,7 +16140,9 @@ function register5(program3) {
       fail(err.message);
     }
   });
-  nodeCmd.command("walk").description("Package the map: preorder provenance walk, pinned nodes and the root in full").requiredOption("--map <name>", "map name").option("--full", "emit every body, not only pinned nodes and the root").option("--json", "output as JSON").action((opts) => {
+  nodeCmd.command("walk").description(
+    "Reading-order dump of the whole map for handoff \u2013 parents before children, pinned nodes and the root in full, the rest as one-line summaries"
+  ).requiredOption("--map <name>", "map name").option("--full", "emit every body, not only pinned nodes and the root").option("--json", "output as JSON").action((opts) => {
     const root = findProjectRoot();
     requireProject(root);
     try {

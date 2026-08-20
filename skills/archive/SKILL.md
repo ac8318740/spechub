@@ -1,6 +1,6 @@
 ---
 name: archive
-description: Close out a cleared map – verify the durable residue (living specs, ADRs, glossary) was extracted, then dispose of the nodes per workflow.maps.persist. Also archives legacy spechub/changes/ directories from the pre-map workflow.
+description: Close out a cleared map – one with no questions left open – by verifying the durable residue, meaning what the effort leaves behind in living specs, ADRs and the glossary, was extracted, then disposing of the nodes per workflow.maps.persist. Also archives legacy spechub/changes/ directories from the pre-map workflow.
 argument-hint: "[map or legacy change name]"
 disable-model-invocation: true
 ---
@@ -15,10 +15,11 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Purpose
 
-A map is scaffolding. It exists to clear fog, and once the fog is gone the
-answers belong in living specs, ADRs and the glossary – not in a second copy
-that drifts. Archive verifies that extraction happened, then disposes of the
-nodes.
+A map is scaffolding. It exists to clear fog – the questions that could not
+be stated precisely when the effort started – and once the fog is gone the
+answers belong in living specs, ADRs and the glossary, not in a second copy
+that drifts. That is the residue: what survives the map. Archive verifies the
+residue was extracted, then disposes of the nodes.
 
 ## Step 1: Locate the Map
 
@@ -31,7 +32,8 @@ If exactly one, use it. If several, ask. If `$ARGUMENTS` names a legacy
 
 ## Step 2: Verify the Map Is Cleared
 
-On the files backend:
+A map is cleared when nothing is left to work: no open nodes, no fog, no
+claims. Check all three on the files backend:
 
 ```bash
 ~/.claude/spechub/bin/spechub node list --map <name> --status open --json
@@ -45,16 +47,19 @@ issue is open, fog or claimed – all three fail the gate). Never run the files
 commands against a GitHub-tracked map; they return empty because the
 directory does not exist, and the gate would pass vacuously.
 
-All three must be empty – open is checked directly rather than via the
-frontier, because two open nodes blocking each other leave the frontier empty
-while questions remain. If anything remains, WARN with what it is and ask for
-confirmation – archiving an uncleared map throws away open questions.
+All three must be empty. Open nodes are counted directly rather than through
+the frontier query, because the frontier only lists nodes with no unresolved
+blockers. Two open nodes that block each other therefore show an empty
+frontier while both questions are still open – so an empty frontier is not
+proof the map is cleared. If anything remains, WARN with what it is and ask
+for confirmation – archiving an uncleared map throws away open questions.
 
 ## Step 3: Extract the Residue
 
-Walk the resolved nodes (`spechub node walk --map <name> --full` on files;
-compose the walk per `trackers/github.md` on GitHub) and check each
-resolution left what it should have:
+Walk the resolved nodes – read them in order, root first, then each node that
+hangs off it (`spechub node walk --map <name> --full` on files; compose the
+walk per `trackers/github.md` on GitHub). Check each resolution left what it
+should have:
 
 1. **Living specs** – behaviour the effort built should already be in
    `spechub/specs/` via commit-time sync. Spot-check the affected domains;

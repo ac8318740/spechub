@@ -1,6 +1,6 @@
 ---
 name: map
-description: The entry point for planned work. Charts a map if none exists – one opening grill that fixes the destination and surfaces the fog – and works the frontier if one does. No tiers and no routing – the graph is however big the fog made it, and nothing declares which.
+description: The entry point for planned work. A map is a graph of question and work nodes. Charts one if none exists – an opening grill, meaning a round of interview questions, that fixes the destination and surfaces the fog, meaning what cannot yet be stated precisely – and works the frontier, the nodes ready to be worked now, if one does. No tiers and no routing – the graph is however big the fog made it, and nothing declares which.
 argument-hint: "[map name, or the request to chart]"
 disable-model-invocation: true
 ---
@@ -29,7 +29,8 @@ directory:
 
 `workflow.maps.tracker` in `spechub/project.yaml` (`github` or `files`) records
 the project's choice. If set, read the matching doc and use its operations. If
-unset, pick at materialisation time: recommend `github` when the repo qualifies,
+unset, pick at materialisation time – the moment the map's nodes are first
+written down: recommend `github` when the repo qualifies,
 `files` otherwise, confirm with the user, and write the key so later sessions
 need not re-decide.
 
@@ -38,7 +39,8 @@ need not re-decide.
 One command, two modes, picked by what exists. Check the configured tracker
 for existing maps – `ls spechub/maps/` on the files backend,
 `gh label list --search "map:" --json name` on GitHub. If `$ARGUMENTS` names a map, or
-exactly one exists, work its frontier. If none exists, chart. If several exist
+exactly one exists, work its frontier – the nodes that are ready to be worked
+now. If none exists, chart. If several exist
 and `$ARGUMENTS` does not pick one, ask.
 
 There are no tiers and no complexity judgement. One question is a small map or
@@ -82,21 +84,29 @@ operation. First the root:
 ```
 
 - The root is the destination, already resolved. It is implicitly pinned –
-  every session orients to it.
+  pinned nodes are read in full at the start of every session, so every
+  session orients to it.
 - Standing preferences for the effort (style rules, constraints discovered in
   the grill) become a resolved node with `--answers <root id> --kind notes
   --pinned`.
 - Every other surfaced question becomes a node: `open` or `fog` per the fog
-  test, `--answers <id>` naming the node whose resolution surfaced it,
+  test, `--answers <id>` naming the node whose resolution surfaced it – that
+  link is the node's provenance, the trail back to the root – and
   `--blocked-by` only where one genuinely cannot be settled before another.
-- `mode` defaults to `hitl`. `afk` must be earned by a node containing no
-  decision – research, or work whose questions are all settled. Getting this
-  wrong means an agent quietly deciding something that was the human's.
+- `mode` defaults to `hitl` – human in the loop, meaning a person answers it.
+  `afk` – away from keyboard, meaning an agent settles it alone – must be
+  earned by a node containing no decision: research, or work whose questions
+  are all settled. Getting this wrong means an agent quietly deciding
+  something that was the human's.
+- Write every title and body for a claimer with no context – plain language,
+  any term of art defined at first use. A node may sit on the frontier for
+  weeks and be picked up by someone who was not in this conversation.
 - Nodes describe behaviour, not file paths. A node can sit on the frontier for
   weeks while the codebase moves – paths are resolved at claim time.
 - On the files backend, suggest adding `spechub/maps/` to `.gitignore`. Nodes
-  are transient working state, like `spechub/HANDOFF.md` – the durable output
-  is specs, ADRs and glossary entries, extracted as nodes resolve.
+  are transient working state – scratch that is thrown away once the map
+  clears, like `spechub/HANDOFF.md`. The durable output is specs, ADRs and
+  glossary entries, extracted as nodes resolve.
 
 ## Working the frontier
 
@@ -104,15 +114,18 @@ All commands below are the files backend's shape – on GitHub, compose the
 same queries per `trackers/github.md`.
 
 1. **Orient.** The packaging walk (`spechub node walk --map <name>`) – the
-   root and pinned nodes in full, everything else gisted. Zoom with
-   `node read <id>` when a gist turns out to be relevant. Do not load every
-   body. Also check `node list --map <name> --status claimed` – a claim left
-   by a dead session hides its node from the frontier forever. If a claim
+   root and pinned nodes in full, everything else gisted, meaning title and
+   status only. Zoom in with `node read <id>` – read the whole body – when a
+   gist turns out to be relevant. Do not load every body. Also check
+   `node list --map <name> --status claimed` – a claim marks a node as being
+   worked, so one left behind by a dead session hides its node from the
+   frontier forever. If a claim
    exists and no other session is known to be working it, ask the user and
    release it (`--status open`).
 2. **Query the frontier.** `spechub node frontier --map <name>` – open nodes
    with no unresolved blockers, shallowest provenance depth first, number
-   only as a tiebreak.
+   only as a tiebreak. Provenance depth is how many `answers` links separate
+   a node from the root, so the broadest questions come first.
 3. **Route by `mode` – the only field the machine routes on** (`kind` is
    advisory):
    - `hitl` nodes: run grilling rounds over them. A round is the whole hitl
@@ -153,6 +166,6 @@ no question above it.
 ## Done
 
 The map is cleared when the frontier is empty and no fog remains. The durable
-residue – living specs via commit-time sync, ADRs and glossary via
-`record-context` – has already been extracted along the way. Report what was
+residue – what the map leaves behind: living specs via commit-time sync, ADRs
+and glossary via `record-context` – has already been extracted along the way. Report what was
 settled and point at anything the map left `out-of-scope`.

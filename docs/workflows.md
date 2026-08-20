@@ -1,8 +1,8 @@
 # SpecHub workflows
 
-*Every request ends by updating the living specs – the difference is only how much fog stood in the way.*
+*Every request ends by updating the living specs – the difference is only how much fog (what cannot yet be stated precisely) stood in the way.*
 
-SpecHub is a workflow orchestrator. Planning structure grows only as far as the unknowns demand: a clear request is implemented directly, a broken thing gets root-cause discipline, and open decisions become a map that is worked frontier by frontier. Everything else in this document is detail behind one of the boxes below.
+SpecHub is a workflow orchestrator. Planning structure grows only as far as the unknowns demand: a clear request is implemented directly, a broken thing gets root-cause discipline, and open decisions become a map that is worked frontier by frontier – the frontier being whatever part of the map is ready to work right now. Archiving a map checks its residue first: the durable output an effort leaves behind, meaning spec updates, decision records and glossary entries. Everything else in this document is detail behind one of the boxes below.
 
 ```mermaid
 flowchart TD
@@ -16,7 +16,7 @@ flowchart TD
     T --> C
     C --> Y["Sync specs from the diff<br/>(domain-map.yaml)"]
     Y --> L[("Living specs<br/>spechub/specs/")]
-    M -->|"map cleared"| A["Archive<br/>(verify residue, dispose nodes)"]
+    M -->|"map cleared"| A["Archive<br/>(check the residue,<br/>dispose of nodes)"]
     A --> L
 ```
 
@@ -34,20 +34,22 @@ The request box is a terminal, not a step. Section 5 covers two boxes because on
 
 ## 1. The map
 
-*One node primitive replaces the fixed proposal / design / tasks ladder. The map is never stored – it is queries over the nodes.*
+*One node primitive replaces the fixed proposal / design / tasks ladder – the three-document pipeline earlier versions used. The map is never stored – it is queries over the nodes.*
 
-`/spechub:map` is the entry point for planned work. It charts if no map exists – one opening grill that fixes the destination and surfaces the fog – and works the frontier if one does. There are no tiers and no router: the graph is however big the fog made it, and nothing declares which.
+A map is a set of small records called nodes. Each node is one question to settle or one piece of work to do.
 
-A node carries five statuses (`fog`, `open`, `claimed`, `resolved`, `out-of-scope`), a `mode` (`hitl` – a human settles it – or `afk` – an agent alone), and two link types:
+`/spechub:map` is the entry point for planned work. If no map exists it charts one: an opening grill – a round of questions – that fixes the destination (what finished looks like) and surfaces the fog. If a map exists, it works the frontier instead. Requests are never sorted into sizes, and there is nothing that picks a different process for a big one. There is one path, and the only thing that varies is how many nodes the fog produced.
 
-- `answers` – one provenance parent, forming a tree. It records which resolution surfaced the node, gives reading order, and makes packaging a traversal.
-- `blocked-by` – any number of blocking edges, forming a DAG. It answers what can be worked right now.
+A node carries five statuses – `fog` (cannot be stated precisely yet), `open` (ready to settle), `claimed` (being worked), `resolved` (settled), `out-of-scope` (deliberately dropped) – a `mode` (`hitl` – a human settles it – or `afk` – an agent alone), and two link types:
+
+- `answers` – one provenance parent: the node whose resolution raised this one. The parent links form a tree. They give reading order, and let a handoff be packaged by walking that tree.
+- `blocked-by` – any number of blocking edges: nodes that must resolve before this one can start. They form a directed acyclic graph, meaning the edges never loop back. These edges tell you what can be worked right now.
 
 Depth is derived from `answers`, never declared. The map itself is five queries: the destination is the root node, decisions so far are `resolved` in provenance order, the frontier is `open` with no unresolved blockers, not-yet-specified is `fog`, and out-of-scope is `out-of-scope`.
 
-Nodes live behind a pluggable tracker declaring four operations – create, read, update, list. GitHub issues are first-class (native sub-issues carry provenance, native dependencies carry blocking); files under `spechub/maps/<name>/` are the fallback. Frontier, claim and resolve are compositions, not backend concerns.
+Nodes live in a tracker – the storage layer, swappable, and required to provide only four operations: create, read, update, list. GitHub issues are first-class (its sub-issues carry the provenance parent, its dependencies carry the blocking edges); files under `spechub/maps/<name>/` are the fallback. Frontier, claim and resolve are built on those four operations, so no tracker has to implement them.
 
-**Progressive materialisation**: a map exists only when the fog will outlive the session. One question is grilled in conversation and leaves an ADR, not a map.
+**Progressive materialisation**: structure appears only when it has to persist, so a map is created only when the fog will outlive the session. One question is grilled in conversation and leaves an architecture decision record (ADR), not a map.
 
 ## 2. Implement
 
@@ -61,11 +63,11 @@ The TDD pipeline (section 4) runs to completion inside each claim. The node only
 
 ## 3. Grilling and durable records
 
-*Two model-invoked primitives carry the interviewing and the remembering.*
+*Two model-invoked primitives – skills the agent reaches for itself, not commands you type – carry the interviewing and the remembering.*
 
 **`grilling`** works decisions in rounds. A round asks the whole frontier – every question whose prerequisites are settled – numbered, each with a recommended answer, then recomputes and repeats. Facts are the agent's job, never the user's: a question an environment fact would answer is dispatched to explorer subagents instead. Presentation follows `workflow.grilling.questions` (the host's question tool by default, inline prose past 4 questions or for open questions), and there is no question cap – the frontier bounds itself.
 
-**`record-context`** fires when a decision lands. It writes an ADR (`docs/adr/`) only when the decision is hard to reverse *and* surprising *and* a real trade-off; a glossary term (root `CONTEXT.md` for cross-domain vocabulary, `spechub/specs/<domain>/CONTEXT.md` for domain terms) when a term got pinned down; both, or neither. The ADR index is generated from the files, never hand-edited.
+**`record-context`** fires when a decision lands. It writes an ADR (`docs/adr/`) only when the decision is hard to reverse *and* surprising *and* a real trade-off; a glossary term (root `CONTEXT.md` for cross-domain vocabulary, `spechub/specs/<domain>/CONTEXT.md` for domain terms) when a term got settled; both, or neither. The ADR index is generated from the files, never hand-edited.
 
 ## 4. Build under TDD
 
@@ -93,7 +95,7 @@ A FAIL routes back to the executor with the reason. Phases 1 and 4 are condition
 
 *Spec sync runs on every commit on every path. It reads the diff, so specs describe what was built rather than what was planned.*
 
-`/spechub:commit` groups changes into MECE commits, then before writing them:
+`/spechub:commit` groups changes into MECE commits – mutually exclusive, collectively exhaustive, so no change appears twice and none is left out – then before writing them:
 
 1. Reads `spechub/domain-map.yaml` to map each changed file to a domain
 2. For each affected domain that already has a `spec.md`, works out what the diff adds, modifies or removes
@@ -107,7 +109,7 @@ Sync is skipped when `workflow.spec_sync` is `false`, when no domain map exists,
 
 ## 6. Archive
 
-*A map is scaffolding. Archive verifies the durable residue was extracted, then disposes of the nodes.*
+*A map is scaffolding. Archive verifies the residue – the durable output: spec updates, decision records, glossary entries – was extracted, then disposes of the nodes.*
 
 `/spechub:archive` checks the map is cleared (empty frontier, no fog, no claims), spot-checks that living specs, ADRs and glossary entries captured what the effort settled, then disposes of the nodes: deleted by default, or moved to `spechub/archive/<date>-<name>/nodes/` when `workflow.maps.persist` is `true`. Keeping nodes is off by default because a kept map is a second copy of every decision, and the two drift. On the GitHub tracker there is nothing to dispose – closed issues are already the archive.
 
@@ -117,7 +119,7 @@ Legacy `spechub/changes/` directories from the pre-map workflow still archive th
 
 *The durable output. Maps are scaffolding; `spechub/specs/` is what the project keeps.*
 
-Specs live at `spechub/specs/<domain>/spec.md`, organised by the domains in `domain-map.yaml`, written as `FR-NNN` requirements in Given/When/Then form. They are cumulative and describe only what is implemented – a roadmap item in a living spec is a bug in the spec.
+Specs live at `spechub/specs/<domain>/spec.md`, organised by the domains in `domain-map.yaml`, written as numbered functional requirements (`FR-NNN`) in Given/When/Then form. They are cumulative and describe only what is implemented – a roadmap item in a living spec is a bug in the spec.
 
 Two rules keep them honest:
 

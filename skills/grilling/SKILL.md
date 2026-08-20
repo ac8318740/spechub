@@ -5,12 +5,20 @@ description: Interview technique for settling open decisions in rounds. A round 
 
 # Grilling
 
-One technique at two scales. In conversation, the frontier is every open
-question whose prerequisites are settled. On a map, it is the tracker's
-frontier query for `hitl` nodes – on the files backend,
-`~/.claude/spechub/bin/spechub node frontier --map <name> --mode hitl`; other
-backends are declared in the map skill's `trackers/` docs. Same structure
-either way – the only difference is whether it outlives the session.
+Grilling settles open decisions by asking the user a whole round of questions
+at once. One technique at two scales.
+
+The frontier is the set of questions ready to ask – every open question whose
+prerequisites are settled. In conversation you work it out as you go. On a
+map – a stored graph of question and work nodes – you ask the tracker for it,
+limited to `hitl` nodes, meaning the ones a human must answer rather than an
+agent. On the files backend:
+
+`~/.claude/spechub/bin/spechub node frontier --map <name> --mode hitl`
+
+Other backends are declared in the map skill's `trackers/` docs. Same
+structure either way – the only difference is whether the frontier outlives
+the session.
 
 ## The round
 
@@ -56,8 +64,9 @@ option covers, that text is the answer.
 
 Stop when the frontier is empty, or the user signals stop ("stop", "done",
 "proceed"). There is no question cap. The frontier is already bounded by
-settled prerequisites, and provenance keeps it narrow – a cap would be a
-blunt proxy for a guarantee the frontier definition provides.
+settled prerequisites, and provenance keeps it narrow – every question hangs
+off the answer that surfaced it, so nothing unrelated can join the round. A
+cap would be a blunt proxy for a guarantee the frontier definition provides.
 
 ## On a map
 
@@ -66,6 +75,9 @@ the tracker's `update` and `create` operations:
 
 1. Append the answer to the node body under `## Answer` and mark the node
    resolved (on the files backend, one `spechub node update` call does both).
+   Write the answer so it stands on its own – plain language, any term of art
+   defined at first use. Someone who was not in this conversation may read it
+   weeks from now.
 2. Create a node for each new question the answer surfaced, with `answers`
    naming the node that surfaced it. Questions that can be stated precisely
    are `open`; the rest are `fog`.

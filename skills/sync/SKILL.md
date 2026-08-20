@@ -43,6 +43,9 @@ For each affected domain:
    - Modified signatures or behavior -> MODIFIED requirements
    - Deleted functions/endpoints -> REMOVED requirements
 
+FR entries are written for a reader who has not seen the diff – plain behaviour
+statements, no internal shorthand.
+
 ## Step 4: Apply Deltas
 
 For each affected domain:
@@ -50,6 +53,9 @@ For each affected domain:
 - If spec exists: merge ADDED/MODIFIED/REMOVED into it
 - If no spec exists: create minimal spec with ADDED entries and a comment:
   `<!-- Auto-generated from code changes. Run /bootstrap for full spec. -->`
+
+Write each merged FR for a reader who has not seen the diff – plain behaviour
+statements, no internal shorthand.
 
 ## Step 5: Glossary Check
 

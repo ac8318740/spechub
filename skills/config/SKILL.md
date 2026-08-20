@@ -256,8 +256,8 @@ Modify a setting. Supported keys:
 | `workflow.tdd.orchestrator_strict` | `true`, `false` | Orchestrator delegates all code work |
 | `workflow.frontend_verification` | `true`, `false` | Require frontend verification |
 | `workflow.grilling.questions` | `tool`, `inline` | How grilling presents a round – the host's question tool, or prose. `tool` falls back to inline when a round exceeds 4 questions or a question has no discrete options |
-| `workflow.maps.tracker` | `github`, `files` | Which tracker holds map nodes. Unset means the map skill picks at materialisation and writes the choice here |
-| `workflow.maps.persist` | `true`, `false` | Keep archived map nodes under `spechub/archive/` instead of deleting them (files tracker only, default `false`) |
+| `workflow.maps.tracker` | `github`, `files` | Which tracker holds the map's node records. Unset means the map skill picks when a map is first created, and writes the choice here |
+| `workflow.maps.persist` | `true`, `false` | Keep the map's archived node records under `spechub/archive/` instead of deleting them (files tracker only, default `false`) |
 | `frontend.browser.mode` | `remote`, `headless`, `local` | Browser environment for verification |
 | `frontend.browser.fallback` | `headless`, `none` | What to do when primary mode unavailable |
 | `frontend.browser.cdp_port` | number | CDP port – default `19988` for `mode: remote`, `9555` for `headless`/`local` |
@@ -292,7 +292,7 @@ Read `spechub/project.yaml`. If it doesn't exist, tell the user to run `/spechub
 - **show**: Display formatted config summary, then prompt to fix any gaps
 - **check**: Run health checks, offer fixes interactively
 - **set**: Parse the key path, validate the value, update the YAML, write it back
-- **reset**: Replace the `workflow` section with defaults, preserve all other sections. Also preserve `workflow.maps` – it records the tracker choice the map skill persisted, and losing it strands nodes on a backend no session looks at
+- **reset**: Replace the `workflow` section with defaults, preserve all other sections. Also preserve `workflow.maps` – it records the tracker choice the map skill persisted, and losing it strands node records on a backend no session looks at
 
 ### 3. Confirm
 

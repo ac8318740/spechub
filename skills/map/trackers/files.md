@@ -2,8 +2,9 @@
 
 The fallback backend: no auth, works offline, works on any remote. One
 markdown file per node under `spechub/maps/<name>/`, managed by the SpecHub
-CLI. Nodes here are transient working state – suggest `spechub/maps/` for
-`.gitignore` at materialisation.
+CLI. Nodes here are transient working state – scratch that is thrown away
+once the map clears, so suggest `spechub/maps/` for `.gitignore` when the map
+is first written.
 
 CLI path: `~/.claude/spechub/bin/spechub`
 
@@ -20,13 +21,16 @@ To enumerate a project's maps: `ls spechub/maps/`.
 
 ## Composed queries
 
-The CLI ships the two compositions this backend would otherwise recompute by
-hand every session:
+Composed queries are built from the four operations above rather than stored.
+The CLI ships the two this backend would otherwise recompute by hand every
+session:
 
 - `spechub node frontier --map <name> [--mode hitl|afk] [--json]` – open
   nodes with no unresolved blockers, shallowest provenance depth first.
+  Provenance depth is how many `answers` links separate a node from the root.
 - `spechub node walk --map <name> [--full] [--json]` – the packaging walk:
-  preorder over the provenance tree, root and pinned nodes in full.
+  the root first, then each node that hangs off it, depth first, with the
+  root and pinned nodes printed in full.
 
 Claim and resolve are `update` calls:
 

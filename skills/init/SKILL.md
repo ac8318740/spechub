@@ -47,7 +47,7 @@ Call AskUserQuestion with EXACTLY this JSON (two questions in one call):
       "header": "Workflow",
       "multiSelect": true,
       "options": [
-        {"label": "Grilling", "description": "How grilling presents question rounds – question tool (default) or inline prose"},
+        {"label": "Grilling", "description": "How grilling asks its questions – a question tool (default) or plain prose"},
         {"label": "TDD strictness", "description": "Switch from strict (test-first) to relaxed"},
         {"label": "Orchestrator", "description": "Allow direct code work instead of subagent delegation"},
         {"label": "Spec sync", "description": "Disable automatic spec sync on commit"}
@@ -261,7 +261,7 @@ curl -s --max-time 3 http://localhost:19988/json/version
 Profile:      [profile]
 Source:       [source dir]
 Tests:        [tests dir]
-Grilling:     [tool/inline]
+Grilling:     [question tool/inline prose]
 TDD:          [strict/relaxed]
 Orchestrator: [strict/relaxed]
 Spec sync:    [enabled/disabled]
@@ -285,8 +285,8 @@ workflow:
   spec_sync: true
   grilling:
     questions: tool      # tool | inline
-  # maps: {tracker: github | files, persist: false} – set by /spechub:map at
-  # materialisation; see the config skill for the key reference
+  # maps: {tracker: github | files, persist: false} – set by /spechub:map when
+  # a map is first created; see the config skill for the key reference
   tdd:
     strict: true
     orchestrator_strict: true

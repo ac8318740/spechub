@@ -25,8 +25,8 @@ should run the command.
 
 | Do not write it down       | The next session gets it from            |
 | -------------------------- | ---------------------------------------- |
-| Map state and reading order | `~/.claude/spechub/bin/spechub node walk --map <name>` |
-| What can be worked next    | `~/.claude/spechub/bin/spechub node frontier --map <name>` |
+| Map state and reading order | `~/.claude/spechub/bin/spechub node walk --map <name>` (reading order of the map) |
+| What can be worked next    | `~/.claude/spechub/bin/spechub node frontier --map <name>` (what is workable now) |
 | Files in flight            | `git status --short` and `git diff`       |
 | Test baseline, last result | `.test-baseline`, then run the suite      |
 | What the code does         | the living specs in `spechub/specs/`      |
@@ -49,6 +49,9 @@ in context. If you are about to grep source, stop – the conversation holds it.
 5. **Suggested skills** – which skills the next session should invoke, by name
 
 Omit any that do not apply. Do not pad.
+
+The handoff is read by a session with none of this conversation – plain language,
+no unexplained shorthand.
 
 ## Redaction
 

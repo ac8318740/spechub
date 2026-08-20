@@ -68,3 +68,4 @@ Match the marketplace repo's standards:
 - Short sentences. Plain words.
 - Active voice.
 - No filler, no marketing tone.
+- Write for a reader without context – plain language, every term of art defined at first use.

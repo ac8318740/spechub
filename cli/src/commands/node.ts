@@ -89,7 +89,11 @@ function printNode(node: MapNode): void {
 export function register(program: Command): void {
   const nodeCmd = program
     .command('node')
-    .description('Map nodes on the files backend (spechub/maps/<name>/)');
+    .description(
+      'Map nodes: small markdown records, one file each, under spechub/maps/<name>/.\n' +
+        'Status: fog (not yet stated precisely), open (ready), claimed (being worked),\n' +
+        'resolved (settled), out-of-scope (dropped).'
+    );
 
   nodeCmd
     .command('create')
@@ -97,10 +101,10 @@ export function register(program: Command): void {
     .requiredOption('--map <name>', 'map name')
     .requiredOption('--title <title>', 'node title')
     .option('--status <status>', `one of: ${NODE_STATUSES.join(', ')}`, parseStatus)
-    .option('--mode <mode>', `one of: ${NODE_MODES.join(', ')}`, parseMode)
-    .option('--kind <kind>', 'advisory kind hint (grilling, research, task, ...)')
-    .option('--answers <id>', 'provenance parent – required except on the root')
-    .option('--blocked-by <ids>', 'comma-separated blocking node ids', parseIdList)
+    .option('--mode <mode>', 'hitl (a human settles it) or afk (an agent settles it alone)', parseMode)
+    .option('--kind <kind>', 'free-text label for what kind of node this is (grilling, research, task, ...) – advisory only')
+    .option('--answers <id>', 'the node whose resolution raised this one (its provenance parent) – required except on the root')
+    .option('--blocked-by <ids>', 'comma-separated ids of nodes that must settle before this one can be worked', parseIdList)
     .option('--pinned', 'load in full every session')
     .option('--body <text>', 'markdown body')
     .option('--body-file <path>', 'read body from file, or - for stdin')
@@ -229,7 +233,9 @@ export function register(program: Command): void {
 
   nodeCmd
     .command('frontier')
-    .description('Open nodes with no unresolved blockers, shallowest provenance depth first')
+    .description(
+      'Open nodes with no unresolved blockers, shallowest first (fewest answers links from the root)'
+    )
     .requiredOption('--map <name>', 'map name')
     .option('--mode <mode>', `filter by mode: ${NODE_MODES.join(', ')}`, parseMode)
     .option('--json', 'output as JSON')
@@ -263,7 +269,10 @@ export function register(program: Command): void {
 
   nodeCmd
     .command('walk')
-    .description('Package the map: preorder provenance walk, pinned nodes and the root in full')
+    .description(
+      'Reading-order dump of the whole map for handoff – parents before children, ' +
+        'pinned nodes and the root in full, the rest as one-line summaries'
+    )
     .requiredOption('--map <name>', 'map name')
     .option('--full', 'emit every body, not only pinned nodes and the root')
     .option('--json', 'output as JSON')
