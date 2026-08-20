@@ -444,41 +444,50 @@ H
 
   cat > "$BIN/spechub-tab" <<'H'
 #!/usr/bin/env bash
-# Run a command in a new herdr tab, in the calling pane's workspace and cwd.
+# Run a command in a new herdr tab, beside the pane the key was pressed in.
 #
 #   spechub-tab <label> <command> [args...]
 #
 # herdr has no type = "tab" custom command, and its tab.create API launches a
 # shell rather than a command, so the tab is created first and the command
-# sent into it with `herdr pane run`. Outside herdr it just runs the command.
-# Installed by spechub.
+# sent into it with `herdr pane run`.
+#
+# The target comes from `herdr pane current`, not from HERDR_* variables: a
+# type = "shell" binding runs detached with none of them set, and reading the
+# environment sent every one of these commands off to run with no terminal.
+# Asked without that environment, herdr reports the focused pane, which is
+# exactly the one the key was pressed in. Installed by spechub.
 set -uo pipefail
 
 label="${1:?usage: spechub-tab <label> <command> [args...]}"; shift
 [ $# -gt 0 ] || { echo "spechub-tab: no command given" >&2; exit 1; }
 
-# Only take over when actually inside a herdr pane. With a herdr server
-# running but the caller elsewhere, tab.create would put a tab somewhere the
-# user is not looking.
-if [ -z "${HERDR_ENV:-}" ] || ! command -v herdr >/dev/null 2>&1; then
-  exec "$@"
-fi
+command -v herdr >/dev/null 2>&1 || exec "$@"
 
-cwd="${HERDR_ACTIVE_PANE_CWD:-$PWD}"
-# Without --workspace the tab lands in the first workspace, not the one the
-# key was pressed in.
-ws="${HERDR_ACTIVE_WORKSPACE_ID:-${HERDR_WORKSPACE_ID:-}}"
+cur=$(herdr pane current 2>/dev/null) || exec "$@"
+read -r ws cwd <<<"$(printf '%s' "$cur" | python3 -c '
+import json, sys
+p = json.load(sys.stdin).get("result", {}).get("pane", {})
+print(p.get("workspace_id") or "", p.get("foreground_cwd") or p.get("cwd") or "")
+' 2>/dev/null)"
+[ -n "${ws:-}" ] || exec "$@"
 
-resp=$(herdr tab create ${ws:+--workspace "$ws"} --cwd "$cwd" --label "$label" --focus 2>/dev/null) \
+resp=$(herdr tab create --workspace "$ws" ${cwd:+--cwd "$cwd"} --label "$label" --focus 2>/dev/null) \
   || exec "$@"
 pane=$(printf '%s' "$resp" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])' 2>/dev/null)
 [ -n "$pane" ] || exec "$@"
 
-# The tab's shell may not have drawn its prompt yet. The pty buffers input, so
-# this settle is belt and braces rather than a correctness dependency.
-sleep 0.3
-herdr pane run "$pane" "$*" >/dev/null 2>&1
+# herdr hosts a type = "shell" command in a real pane for as long as the
+# process lives, so anything slow here shows up as a stray terminal in the
+# current tab. Hand the wait to a detached child and return immediately: the
+# host pane then lasts only as long as the tab.create call.
+#
+# The settle is because the new tab's shell may not have drawn its prompt yet.
+# The pty buffers input, so it is belt and braces, not a correctness need.
+( sleep 0.3; herdr pane run "$pane" "$*" >/dev/null 2>&1 ) </dev/null >/dev/null 2>&1 &
+disown 2>/dev/null || true
+exit 0
 H
   chmod +x "$BIN/spechub-tab"
 
@@ -596,7 +605,13 @@ build_tuicr_fork() {
   # TEMPORARY path. Builds the two unmerged upstream pull requests the config
   # comments name. Once both land, set build_from_fork: false and this whole
   # function stops being reachable.
-  have cargo || { say "tuicr fork build needs cargo (see rustup.rs), skipping"; return 1; }
+  # `have cargo` is not enough: a rustup shim on PATH with no default
+  # toolchain installed exits non-zero on every invocation.
+  if ! cargo --version >/dev/null 2>&1; then
+    say "tuicr fork build needs a working cargo (see rustup.rs), skipping"
+    cargo --version 2>&1 | head -2 | sed 's/^/    /'
+    return 1
+  fi
   have git   || { say "tuicr fork build needs git, skipping"; return 1; }
   local url branch dir
   url=$(cfg_get tuicr.fork "https://github.com/ac8318740/tuicr")
@@ -610,7 +625,16 @@ build_tuicr_fork() {
     git clone --quiet -b "$branch" "$url" "$dir" || { say "tuicr: clone failed"; return 1; }
   fi
   say "building tuicr from $branch (a few minutes on a cold cache)"
-  ( cd "$dir" && cargo build --release ) >/dev/null 2>&1 || { say "tuicr: build failed, see $dir"; return 1; }
+  local log; log=$(mktemp)
+  if ! ( cd "$dir" && cargo build --release ) >"$log" 2>&1; then
+    say "tuicr: build failed in $dir"
+    # Swallowing cargo's output here made a missing toolchain look identical
+    # to a compile error.
+    grep -E '^(error|warning: unused)' "$log" | head -5 | sed 's/^/    /'
+    tail -3 "$log" | sed 's/^/    /'
+    rm -f "$log"; return 1
+  fi
+  rm -f "$log"
   mkdir -p "$BIN"
   # mv, not cp: cp fails with "Text file busy" when tuicr is running.
   cp "$dir/target/release/tuicr" "$BIN/tuicr.new" && mv -f "$BIN/tuicr.new" "$BIN/tuicr"
