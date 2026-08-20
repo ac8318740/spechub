@@ -237,7 +237,9 @@ FILE="${1:-}"
 [ -n "$FILE" ] && [ -f "$FILE" ] || { echo "usage: spechub-md [--serve] FILE.md" >&2; exit 1; }
 
 if [ "$SERVE" = "1" ]; then
-  exec python3 - "$FILE" "$PORT" <<'PY'
+  # exec -a names the process spechub-md-serve. Without it the running server
+  # is just "python3 -" and there is nothing sensible to pkill.
+  exec -a spechub-md-serve python3 - "$FILE" "$PORT" <<'PY'
 import html, http.server, pathlib, re, socketserver, sys
 import markdown
 
@@ -290,10 +292,34 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
 socketserver.TCPServer.allow_reuse_address = True
+def holder(port):
+    """pid and command line of whatever is listening, best effort."""
+    import subprocess
+    try:
+        out = subprocess.run(["ss", "-ltnpH", f"sport = :{port}"],
+                             capture_output=True, text=True, timeout=3).stdout
+        pid = re.search(r"pid=(\d+)", out)
+        if not pid:
+            return None, None
+        pid = pid.group(1)
+        cmd = pathlib.Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
+        return pid, cmd.strip()
+    except Exception:
+        return None, None
+
 try:
     srv = socketserver.TCPServer(("127.0.0.1", port), H)
 except OSError as e:
-    sys.exit(f"port {port} is busy: {e}")
+    pid, cmd = holder(port)
+    msg = [f"port {port} is busy: {e}"]
+    if pid:
+        mine = "spechub-md-serve" in cmd or "spechub-md" in cmd
+        msg.append(f"  held by pid {pid}: {cmd[:90]}")
+        msg.append(f"  stop it with:  kill {pid}" if mine else
+                   f"  not spechub-md. use another port:  SPECHUB_MD_PORT=<n> spechub-md --serve ...")
+    else:
+        msg.append("  could not identify the holder. try:  ss -ltnp | grep " + str(port))
+    sys.exit("\n".join(msg))
 url = f"http://localhost:{port}"
 # OSC 8 makes it ctrl+clickable; the bare URL below covers terminals without it.
 sys.stderr.write(f"\033]8;;{url}\033\\{src.name}\033]8;;\033\\  {url}\n")

@@ -89,6 +89,18 @@ ctrl+click opens the page in the browser on your own machine - as long as
 `preview_port` is forwarded from there. The bare URL prints underneath for
 terminals without OSC 8.
 
+Only one server can hold `preview_port` at a time. A second `--serve` names the
+process holding it and the command to stop it:
+
+```
+port 6419 is busy: [Errno 98] Address already in use
+  held by pid 680666: spechub-md-serve - /path/to/NOTES.md 6419
+  stop it with:  kill 680666
+```
+
+Use that pid rather than `pkill -f spechub-md-serve`, which also matches any
+shell whose own command line mentions the name, including the one you type it in.
+
 ### Why text and not inline images
 
 herdr embeds libghostty and emits the **kitty graphics protocol**. It contains
