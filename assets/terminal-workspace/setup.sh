@@ -86,8 +86,29 @@ write_helpers() {
 #!/usr/bin/env bash
 # Show the most relevant diff in diffnav. Installed by spechub.
 set -uo pipefail
+pick_checkout() {
+  # herdr groups worktrees as <root>/<repo>/<branch-slug>, so a pane often
+  # sits in the parent of several checkouts rather than in one.
+  local -a repos=()
+  while IFS= read -r d; do repos+=("$d"); done < <(
+    find . -mindepth 1 -maxdepth 1 -type d -exec test -e '{}/.git' \; -print 2>/dev/null | sort)
+  case ${#repos[@]} in
+    0) return 1 ;;
+    1) cd "${repos[0]}" && return 0 ;;
+    *) echo "Not a repo, but it holds ${#repos[@]} checkouts:"; echo
+       local i=1
+       for d in "${repos[@]}"; do
+         printf '  %d) %-34s %s\n' "$i" "${d#./}" "$(git -C "$d" branch --show-current 2>/dev/null)"
+         i=$((i+1))
+       done
+       echo; read -rp "Which one? [1-${#repos[@]}, q to quit] " choice
+       [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#repos[@]} ] \
+         && cd "${repos[$((choice-1))]}" && return 0
+       return 1 ;;
+  esac
+}
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
-  echo "Not a git repo: $PWD"; echo "Press any key..."; read -rsn1; exit 0
+  pick_checkout || { echo "No git checkout here: $PWD"; echo "Press any key..."; read -rsn1; exit 0; }
 fi
 if ! git diff --quiet; then git diff | diffnav
 elif ! git diff --cached --quiet; then echo "(staged)"; git diff --cached | diffnav

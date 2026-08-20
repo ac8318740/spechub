@@ -161,7 +161,7 @@ Any GitHub search string works as a section filter, so anything you can type int
 
 ### Two helper scripts
 
-`hdiff` picks the most relevant diff, so one key always shows something useful:
+`hdiff` picks the most relevant diff, so one key always shows something useful. It also resolves the case where a pane sits in herdr's `<root>/<repo>/` grouping directory rather than in a checkout, which happens often:
 
 ```bash
 #!/usr/bin/env bash
