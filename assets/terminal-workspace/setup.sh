@@ -112,7 +112,8 @@ write_helpers() {
   mkdir -p "$BIN"
   # Helpers this script used to write and no longer does. Upgrading otherwise
   # leaves them on PATH, shadowing nothing but confusing everything.
-  rm -f "$BIN"/spechub-files "$BIN"/spechub-files-tab "$BIN"/spechub-open
+  rm -f "$BIN"/spechub-files "$BIN"/spechub-files-tab "$BIN"/spechub-open \
+        "$BIN"/spechub-yazi-tab
   cat > "$BIN/spechub-diff" <<'H'
 #!/usr/bin/env bash
 # Show the most relevant diff in diffnav. Installed by spechub.
@@ -441,60 +442,79 @@ rm -f /tmp/spechub-md.$$.md
 H
   chmod +x "$BIN/spechub-md"
 
-  cat > "$BIN/spechub-yazi-tab" <<'H'
+  cat > "$BIN/spechub-tab" <<'H'
 #!/usr/bin/env bash
-# Open the file tree in a new herdr tab, focused on the calling pane's cwd.
-# herdr's tab.create API launches a shell, not a command, so the command is
-# sent afterwards with `herdr pane run`. Installed by spechub.
+# Run a command in a new herdr tab, in the calling pane's workspace and cwd.
+#
+#   spechub-tab <label> <command> [args...]
+#
+# herdr has no type = "tab" custom command, and its tab.create API launches a
+# shell rather than a command, so the tab is created first and the command
+# sent into it with `herdr pane run`. Outside herdr it just runs the command.
+# Installed by spechub.
 set -uo pipefail
 
-command -v herdr >/dev/null 2>&1 || exec yazi
+label="${1:?usage: spechub-tab <label> <command> [args...]}"; shift
+[ $# -gt 0 ] || { echo "spechub-tab: no command given" >&2; exit 1; }
+
+# Only take over when actually inside a herdr pane. With a herdr server
+# running but the caller elsewhere, tab.create would put a tab somewhere the
+# user is not looking.
+if [ -z "${HERDR_ENV:-}" ] || ! command -v herdr >/dev/null 2>&1; then
+  exec "$@"
+fi
+
 cwd="${HERDR_ACTIVE_PANE_CWD:-$PWD}"
 # Without --workspace the tab lands in the first workspace, not the one the
 # key was pressed in.
 ws="${HERDR_ACTIVE_WORKSPACE_ID:-${HERDR_WORKSPACE_ID:-}}"
 
-resp=$(herdr tab create ${ws:+--workspace "$ws"} --cwd "$cwd" --label yazi --focus 2>/dev/null) || exit 0
+resp=$(herdr tab create ${ws:+--workspace "$ws"} --cwd "$cwd" --label "$label" --focus 2>/dev/null) \
+  || exec "$@"
 pane=$(printf '%s' "$resp" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])' 2>/dev/null)
-[ -n "$pane" ] || exit 0
+[ -n "$pane" ] || exec "$@"
 
 # The tab's shell may not have drawn its prompt yet. The pty buffers input, so
-# a short settle is enough - this is not a correctness dependency.
+# this settle is belt and braces rather than a correctness dependency.
 sleep 0.3
-herdr pane run "$pane" yazi >/dev/null 2>&1
+herdr pane run "$pane" "$*" >/dev/null 2>&1
 H
-  chmod +x "$BIN/spechub-yazi-tab"
+  chmod +x "$BIN/spechub-tab"
 
-  say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-yazi-tab"
+  say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-tab"
 }
 
 apply_herdr() {
   have herdr || { say "herdr not installed, skipping keymap"; return 0; }
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
-  local mod wt diffkey dashkey filekey filetabkey
+  local mod wt diffkey dashkey filekey filetabkey difftabkey dashtabkey
   mod=$(cfg_get herdr.chord_modifier alt)
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
   diffkey=$(cfg_get diffnav.popup_key "alt+d")
   dashkey=$(cfg_get gh_dash.popup_key "alt+i")
-  filekey=$(cfg_get yazi.popup_key "alt+t")
-  filetabkey=$(cfg_get yazi.tab_key "alt+shift+t")
-  [ "$(cfg_get diffnav.enabled true)" = "true" ] || diffkey=""
-  [ "$(cfg_get gh_dash.enabled true)" = "true" ] || dashkey=""
+  filekey=$(cfg_get yazi.popup_key "alt+y")
+  filetabkey=$(cfg_get yazi.tab_key "alt+shift+y")
+  difftabkey=$(cfg_get diffnav.tab_key "alt+shift+d")
+  dashtabkey=$(cfg_get gh_dash.tab_key "alt+shift+i")
+  [ "$(cfg_get diffnav.enabled true)" = "true" ] || { diffkey=""; difftabkey=""; }
+  [ "$(cfg_get gh_dash.enabled true)" = "true" ] || { dashkey=""; dashtabkey=""; }
   [ "$(cfg_get yazi.enabled true)"    = "true" ] || { filekey=""; filetabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
-mod, wt, diffkey, dashkey, filekey, filetabkey, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey, begin, end = os.environ["SPECHUB_ARGS"].split("|")
 
 # key, command, description, herdr custom-command type, popup size.
 # type "shell" takes no size: herdr rejects width/height on a non-popup.
 CUSTOM = [
-    (diffkey,    "spechub-diff",      "diff (diffnav)",  "popup", "90%"),
-    (dashkey,    "spechub-dash",      "PR dashboard",    "popup", "95%"),
-    (filekey,    "yazi",              "file tree",       "popup", "95%"),
-    (filetabkey, "spechub-yazi-tab",  "file tree (tab)", "shell", None),
+    (diffkey,    "spechub-diff",                  "diff (diffnav)",     "popup", "90%"),
+    (difftabkey, "spechub-tab diff spechub-diff", "diff (tab)",         "shell", None),
+    (dashkey,    "spechub-dash",                  "PR dashboard",       "popup", "95%"),
+    (dashtabkey, "spechub-tab dash spechub-dash", "PR dashboard (tab)", "shell", None),
+    (filekey,    "yazi",                          "file tree",          "popup", "95%"),
+    (filetabkey, "spechub-tab yazi yazi",         "file tree (tab)",    "shell", None),
 ]
 
 def custom_blocks():

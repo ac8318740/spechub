@@ -27,6 +27,7 @@ diffnav:
   enabled: true
   # Popup that shows the most relevant diff: unstaged, else staged, else HEAD.
   popup_key: "alt+d"
+  tab_key: "alt+shift+d"   # same tool, new tab instead of a popup
 
 tuicr:
   enabled: true
@@ -52,8 +53,8 @@ yazi:
   # File manager. Markdown renders live in the preview pane through
   # spechub-md, so a document draws as the cursor moves over it, and Enter
   # opens the same renderer full width where more of a diagram fits.
-  popup_key: "alt+t"          # floating, does not change the tab layout
-  tab_key: "alt+shift+t"      # opens a real tab instead
+  popup_key: "alt+y"          # floating, does not change the tab layout
+  tab_key: "alt+shift+y"      # opens a real tab instead
   show_hidden: true
 
 markdown:
@@ -71,6 +72,7 @@ markdown:
 gh_dash:
   enabled: true
   popup_key: "alt+i"
+  tab_key: "alt+shift+i"
   # Add a section for whichever repo you are standing in, at launch.
   dynamic_repo_section: true
   sections:

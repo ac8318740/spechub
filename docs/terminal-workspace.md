@@ -29,8 +29,17 @@ Run `/spechub:terminal-workspace` to install and configure all of it from a sing
 
 | Key | What |
 |---|---|
-| `alt+t` | yazi in a popup. Floats, leaves the tab layout alone |
-| `alt+shift+t` | yazi in a new tab |
+| `alt+y` | yazi in a popup. Floats, leaves the tab layout alone |
+| `alt+shift+y` | yazi in a new tab |
+
+Every popup works this way: `alt+d` / `alt+shift+d` for diffnav, `alt+i` /
+`alt+shift+i` for gh-dash. A popup is right for a glance; a tab is right for
+something you will come back to. Both come from the same command, and the tab
+variant goes through `spechub-tab`, which creates the tab in the workspace and
+directory the key was pressed in, then sends the command with `herdr pane run`.
+Outside herdr it simply runs the command.
+
+`alt+t` is deliberately left alone: it is Claude Code's thinking toggle.
 
 yazi previews each file type with its own command, and markdown is routed to
 `spechub-md`, so a document renders **as the cursor moves over it** rather than
@@ -43,10 +52,6 @@ Font and select it in your terminal.
 tuicr was the file tree before yazi and is no longer wired to a key. It stays
 for what it is good at: reading diffs and reviewing pull requests, which
 gh-dash hands to it. `tuicr --file .` still browses a tree if you want it.
-
-herdr has no `type = "tab"` custom command, and its `tab.create` API launches a
-shell rather than a command, so `spechub-yazi-tab` creates the tab and then
-sends the command with `herdr pane run`.
 
 ### The fork build is temporary
 
