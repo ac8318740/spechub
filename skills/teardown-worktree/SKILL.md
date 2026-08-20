@@ -75,7 +75,17 @@ herdr worktree list
 herdr workspace list
 ```
 
-Skip any worktree whose workspace reports an `agent_status` of `working` or `blocked`. Another session is using it.
+Treat `working`, `blocked`, `idle` and `done` as a live agent and skip. Only `unknown` makes a worktree a candidate.
+
+`idle` does not mean empty. In herdr it means an agent is present and waiting for input, which is exactly the state a session someone left open sits in. Reading `idle` as nobody home is the quickest way to destroy a running session.
+
+`unknown` is not proof of an empty pane either, so confirm what is actually running before removing anything:
+
+```bash
+herdr pane process-info --pane <pane-id>
+```
+
+Skip the worktree when `foreground_processes` holds an agent. Skip it too when a foreground program is running with a `cwd` inside the worktree, an editor or `gh dash` for example. That is not an agent, but deleting the directory under it still breaks it. Close it deliberately or leave the worktree alone.
 
 ### Show it
 
@@ -85,14 +95,16 @@ Print one table: worktree, branch, whether the local branch goes, whether the re
 
 Do this before removing anything, and only after approval.
 
-Change the session cwd back to the main checkout:
+`EnterWorktree` cannot do this. It rejects the main checkout outright, "is the main working tree, not a linked worktree", so no tool call walks the session cwd back. `ExitWorktree` only unwinds a worktree this session entered with `EnterWorktree`, and is a no-op for a session that launched inside one.
 
-- Use `ExitWorktree` with `action: "keep"` if this session entered the worktree with `EnterWorktree`. Keep, not remove: step 3 owns the removal, and `remove` refuses on a worktree that was entered by path.
-- Otherwise target the main checkout for all further work and confirm with `pwd`.
+The removal itself is what moves the session. Run it from the main checkout against an absolute path and the harness resets the session cwd to the main checkout on its own. Confirm with `pwd` afterwards.
 
-Under herdr, move the pane back too, or the session sits in a sidebar row for a checkout that is about to disappear.
+- Entered with `EnterWorktree`: call `ExitWorktree` with `action: "keep"` first. Keep, not remove: step 3 owns the removal, and `remove` refuses on a worktree entered by path.
+- Launched inside the worktree: no call needed. Take the pane with you below, remove the checkout in step 3, then confirm the new cwd.
 
-Find the main repo's workspace in `herdr workspace list`: the one whose `worktree.repo_root` is the main checkout and whose `worktree.is_linked_worktree` is `false`. Then:
+Under herdr, move the pane out first, or step 3 deletes the checkout under a pane still sitting in that workspace.
+
+Find the main repo's workspace in `herdr workspace list`: `worktree.repo_root` is the main checkout and `worktree.is_linked_worktree` is `false`. More than one workspace can match, since any pane opened at the repo root qualifies. Prefer the one whose label is the repo name, and ask when it stays ambiguous. Then:
 
 ```bash
 herdr pane move "$HERDR_PANE_ID" --new-tab --workspace <main-workspace-id> --focus
@@ -103,6 +115,8 @@ If no such workspace exists, because it was closed earlier, create one first:
 ```bash
 herdr workspace create --cwd <main-root> --label <repo-name> --no-focus
 ```
+
+The pane's own shell keeps the deleted directory as its cwd, which `herdr pane process-info` reports as `(deleted)`. That is cosmetic, and only visible once the agent exits and hands the prompt back.
 
 ## 3. Remove the checkouts
 
@@ -117,9 +131,11 @@ herdr worktree remove --workspace <workspace-id> --force
 Without one, plain git:
 
 ```bash
-git -C <main-root> worktree remove <path>
+git -C <main-root> worktree remove --force <path>
 git -C <main-root> worktree prune
 ```
+
+`--force` is required, not a shortcut. Plain `git worktree remove` refuses on any worktree containing submodules with "working trees containing submodules cannot be moved or removed", which is every worktree in a repo that has them. Forcing is safe only because step 1 already proved the tree clean. It is never a way past uncommitted changes.
 
 The worktree this session just left usually has no workspace any more. Moving the last pane out closes the workspace but leaves the checkout on disk, so that one takes the plain git path.
 
@@ -147,7 +163,9 @@ State what went and what stayed:
 ## Never
 
 - Remove a worktree this session is standing in. Move out first.
-- Remove a worktree whose herdr workspace reports a `working` or `blocked` agent.
+- Remove a worktree whose herdr workspace reports a `working`, `blocked`, `idle` or `done` agent. `idle` means present and waiting, not absent.
+- Decide on `agent_status` alone. Confirm with `herdr pane process-info` before removing.
+- Reach for `EnterWorktree` to get back to the main checkout. It rejects the main working tree.
 - Force past uncommitted changes. Skip and report instead.
 - Reach for `git branch -D` when `-d` refuses.
 - Call a branch unmerged on the ancestor check alone. Check the pull request before deciding.
