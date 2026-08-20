@@ -341,8 +341,14 @@ fi
 # Terminal render: swap each mermaid fence for its text drawing, then page it.
 SPECHUB_COLS="$COLS" SPECHUB_PAD="$PAD" SPECHUB_ONLY="$ONLY" \
 python3 - "$FILE" <<'PY' > /tmp/spechub-md.$$ 2>/dev/null
-import os, pathlib, re, shutil, subprocess, sys, tempfile
+import os, pathlib, re, shlex, shutil, subprocess, sys, tempfile
 text = pathlib.Path(sys.argv[1]).read_text()
+# "$HOME/..." rather than the absolute path: shorter, and unlike ~'/x y'
+# it expands correctly when the path contains spaces.
+_raw = sys.argv[1]
+_home = str(pathlib.Path.home())
+SELF = ('"$HOME' + _raw[len(_home):].replace('"', '\\"') + '"'
+        if _raw.startswith(_home) else shlex.quote(_raw))
 have = shutil.which("mermaid-ascii")
 COLS = int(os.environ.get("SPECHUB_COLS") or 80)
 PAD = (os.environ.get("SPECHUB_PAD") or "").split()
@@ -400,8 +406,8 @@ def repl(m):
         return ("\n```\n"
                 f"Diagram {n}: {width} columns wide, too wide for this "
                 f"{COLS}-column terminal.\n"
-                f"  spechub-md --diagram {n} FILE   scroll it sideways\n"
-                f"  spechub-md --serve FILE         open it in a browser\n"
+                f"  spechub-md --diagram {n} {SELF}\n"
+                f"  spechub-md --serve {SELF}\n"
                 "```")
     return "```\n" + art + "\n```"
 
