@@ -69,8 +69,25 @@ if [ -n "$plugin_root" ] && [ -f "$cli_wrapper" ]; then
     link_cli "$cli_wrapper" "${HOME}/.claude/spechub/bin/spechub" "agent CLI"
 
     # Human-convenience path. Only useful when ~/.local/bin is on PATH.
+    #
+    # Defer to any other spechub that already owns the name. The usual one is a
+    # global `npm install -g spechub-cli`, which people install to drive a
+    # project from outside Claude Code. Two managers pointing one command name
+    # at different copies is a silent PATH race: whichever directory sorts
+    # first wins, and it can differ per machine. Better to let the one the user
+    # installed deliberately win, and say so.
+    #
+    # The agent path above is never affected. It is absolute, so it always
+    # reaches this plugin's own CLI no matter what is on PATH.
     human_link="${HOME}/.local/bin/spechub"
-    link_cli "$cli_wrapper" "$human_link" "human CLI"
+    on_path=$(command -v spechub 2>/dev/null || true)
+    if [ -n "$on_path" ] && [ "$on_path" != "$human_link" ] &&
+       [ "$(readlink -f "$on_path" 2>/dev/null)" != "$(readlink -f "$human_link" 2>/dev/null)" ]; then
+      echo "spechub: \`spechub\` on PATH comes from ${on_path} – leaving it alone." >&2
+      echo "spechub: agents and skills are unaffected – they use ~/.claude/spechub/bin/spechub directly." >&2
+    else
+      link_cli "$cli_wrapper" "$human_link" "human CLI"
+    fi
 
     if [ -L "$human_link" ]; then
       case ":${PATH}:" in

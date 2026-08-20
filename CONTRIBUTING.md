@@ -79,11 +79,18 @@ set -euo pipefail
 if git diff --cached --name-only | grep -q '^cli/src/'; then
   echo "pre-commit: cli/src changed – rebuilding dist/"
   (cd cli && npm run build)
-  git add cli/dist
+  git add cli/dist cli/package.json
 fi
 ```
 
-This runs `npm run build` (esbuild) only when `cli/src/` is part of the staged diff, then stages the regenerated `dist/`. If the build fails, the commit aborts.
+This runs `npm run build` only when `cli/src/` is part of the staged diff, then
+stages what the build regenerates. If the build fails, the commit aborts.
+
+`npm run build` does two things: it syncs `cli/package.json`'s version from
+`.claude-plugin/plugin.json`, then runs esbuild. The sync is why
+`cli/package.json` is staged alongside `dist/` – the CLI reads its own
+`package.json` at runtime to answer `spechub --version`, so the number has to be
+right in the copy that ships with the plugin, not only in an npm tarball.
 
 ## Releasing
 
@@ -91,6 +98,47 @@ This runs `npm run build` (esbuild) only when `cli/src/` is part of the staged d
 2. Confirm `cli/dist/` is up to date (the pre-commit hook handles this if installed).
 3. Commit via `/commit` from the marketplace repo – it handles the submodule + parent ordering.
 4. The Claude Code plugin cache only repulls when the version changes, so the bump is what triggers downstream upgrades.
+
+### The CLI on npm
+
+The CLI is also published to npm as [`spechub-cli`](https://www.npmjs.com/package/spechub-cli),
+for people driving a SpecHub project from outside Claude Code – a different
+agent harness, a script, or CI. The plugin does not depend on npm: it ships its
+own built `cli/dist/`, and the SessionStart hook points
+`~/.claude/spechub/bin/spechub` at it. npm is a second door to the same code.
+
+Because of that, **npm is not on a lock-step release cadence with the plugin.**
+Publish when the CLI itself changes, not on every plugin bump. A plugin release
+that only touches skills or docs needs no publish.
+
+To publish, from `cli/`:
+
+```sh
+npm publish
+```
+
+`prepublishOnly` runs the build, which syncs the version from `plugin.json`
+first – so the npm version always matches a real plugin version. Run
+`npm pack --dry-run` beforehand to see the exact file list.
+
+Note the package is `spechub-cli` but the command it installs is `spechub`.
+The bare `spechub` name on npm belongs to an unrelated project.
+
+#### Who owns `spechub` on PATH
+
+Two things can put a `spechub` on a user's PATH, and only one may win:
+
+- `npm install -g spechub-cli` – npm's global bin.
+- The SessionStart hook – `~/.local/bin/spechub`.
+
+The hook defers. If it finds a `spechub` on PATH that is not its own symlink, it
+leaves it alone and says so. Users who never touch npm still get the convenience
+symlink; users who installed deliberately keep the copy they chose, and
+`npm uninstall -g` genuinely removes it.
+
+Agents are outside this entirely. Skills and agents call
+`~/.claude/spechub/bin/spechub` by absolute path, which is always the plugin's
+own CLI regardless of PATH.
 
 ## Writing standards
 
