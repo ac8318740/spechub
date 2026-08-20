@@ -140,7 +140,9 @@ Continue with whatever followed the worktree request:
 
 ## Cleanup (later, not now)
 
-When the work is merged, the worktree gets torn down. Do this only after confirming the branch is merged/stale, and move your cwd out of the worktree first.
+When the work is merged, the worktree gets torn down. The `teardown-worktree` skill does all of this, including the stale siblings and the branch cleanup, so prefer it over doing the steps by hand. What follows is the shape of what it does.
+
+Do this only after confirming the branch is merged/stale, and move your cwd out of the worktree first.
 
 Inside herdr, move this pane out of the worktree workspace first, or the teardown kills the session running in it. Then remove the workspace, or the sidebar keeps a row pointing at a deleted checkout. Find the id with `herdr worktree list`, then:
 
