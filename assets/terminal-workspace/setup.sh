@@ -222,8 +222,9 @@ H
 #!/usr/bin/env bash
 # Read a markdown file in the terminal with its mermaid diagrams drawn as text.
 #
-#   spechub-md FILE.md          render to the terminal
-#   spechub-md --serve FILE.md  serve it for a real browser, print the link
+#   spechub-md FILE.md              render to the terminal
+#   spechub-md --diagram N FILE.md  one diagram alone, with horizontal scroll
+#   spechub-md --serve FILE.md      serve it for a real browser, print the link
 #
 # Text, not images, is deliberate: herdr emits the kitty graphics protocol and
 # no terminal reachable from Windows or Android renders that, and e-ink panels
@@ -231,8 +232,13 @@ H
 set -uo pipefail
 
 PORT="${SPECHUB_MD_PORT:-6419}"
-SERVE=0
+SERVE=0; ONLY=0
 [ "${1:-}" = "--serve" ] && { SERVE=1; shift; }
+[ "${1:-}" = "--diagram" ] && { ONLY="${2:-1}"; shift 2; }
+# Node labels set a diagram's width, so padding cannot rescue a wide one.
+# Tightening still buys roughly a third of the height back.
+PAD="${SPECHUB_MD_PAD:--x 2 -y 2}"
+COLS=$(tput cols 2>/dev/null || echo 80)
 FILE="${1:-}"
 [ -n "$FILE" ] && [ -f "$FILE" ] || { echo "usage: spechub-md [--serve] FILE.md" >&2; exit 1; }
 
@@ -333,10 +339,17 @@ fi
 
 
 # Terminal render: swap each mermaid fence for its text drawing, then page it.
+SPECHUB_COLS="$COLS" SPECHUB_PAD="$PAD" SPECHUB_ONLY="$ONLY" \
 python3 - "$FILE" <<'PY' > /tmp/spechub-md.$$ 2>/dev/null
-import pathlib, re, shutil, subprocess, sys, tempfile
+import os, pathlib, re, shutil, subprocess, sys, tempfile
 text = pathlib.Path(sys.argv[1]).read_text()
 have = shutil.which("mermaid-ascii")
+COLS = int(os.environ.get("SPECHUB_COLS") or 80)
+PAD = (os.environ.get("SPECHUB_PAD") or "").split()
+ONLY = int(os.environ.get("SPECHUB_ONLY") or 0)
+# glow indents and pads a fenced block, so the art has less room than the pane.
+BUDGET = max(20, COLS - 6)
+seen = 0
 
 # mermaid-ascii understands `graph`/`flowchart` with [square] nodes. It draws
 # styling directives as if they were nodes, and leaks any other shape syntax
@@ -362,25 +375,50 @@ def to_ascii(src):
         return None, f"{kind} diagrams are not supported by mermaid-ascii"
     with tempfile.NamedTemporaryFile("w", suffix=".mmd", delete=False) as f:
         f.write(body); path = f.name
-    r = subprocess.run(["mermaid-ascii", "--file", path],
+    r = subprocess.run(["mermaid-ascii", "--file", path] + PAD,
                        capture_output=True, text=True)
     if r.returncode != 0 or not r.stdout.strip():
         return None, (r.stderr.strip().splitlines() or ["could not draw it"])[0]
     return r.stdout.rstrip("\n"), None
 
 def repl(m):
+    global seen
+    seen += 1
+    n = seen
     art, err = to_ascii(m.group(1))
-    if art:
-        return "```\n" + art + "\n```"
-    # Keep the source visible rather than swallowing the diagram.
-    return f"> Diagram not drawn: {err}. Source:\n\n```\n{m.group(1).rstrip()}\n```"
+    if not art:
+        # Keep the source visible rather than swallowing the diagram.
+        return (f"\n```\nDiagram {n} not drawn: {err}\n```\n\n"
+                f"```\n{m.group(1).rstrip()}\n```")
+    lines = art.splitlines()
+    width = max((len(l) for l in lines), default=0)
+    if ONLY:
+        # Raw, unwrapped, for a pager that can scroll sideways.
+        return "\0DIAGRAM%d\0%s\0" % (n, art) if n == ONLY else ""
+    if width > BUDGET:
+        # Wrapping box-drawing art destroys it, so say what it is instead.
+        return ("\n```\n"
+                f"Diagram {n}: {width} columns wide, too wide for this "
+                f"{COLS}-column terminal.\n"
+                f"  spechub-md --diagram {n} FILE   scroll it sideways\n"
+                f"  spechub-md --serve FILE         open it in a browser\n"
+                "```")
+    return "```\n" + art + "\n```"
 
-sys.stdout.write(re.sub(r"```mermaid\n(.*?)```", repl, text, flags=re.S))
+out = re.sub(r"```mermaid\n(.*?)```", repl, text, flags=re.S)
+if ONLY:
+    hit = re.search(r"\0DIAGRAM(\d+)\0(.*?)\0", out, re.S)
+    sys.stdout.write(hit.group(2) if hit else f"no diagram {ONLY} in this file\n")
+else:
+    sys.stdout.write(out)
 PY
 
-if command -v glow >/dev/null 2>&1; then
-  glow -p "${SPECHUB_MD_STYLE:+--style=$SPECHUB_MD_STYLE}" /tmp/spechub-md.$$ 2>/dev/null \
-    || glow -p /tmp/spechub-md.$$
+if [ "$ONLY" != "0" ]; then
+  # -S chops instead of wrapping: arrow keys scroll sideways.
+  less -SR /tmp/spechub-md.$$
+elif command -v glow >/dev/null 2>&1; then
+  glow ${SPECHUB_MD_STYLE:+--style=$SPECHUB_MD_STYLE} -w "$((COLS - 2))" \
+    /tmp/spechub-md.$$ 2>/dev/null | ${PAGER:-less -R}
 else
   ${PAGER:-less -R} /tmp/spechub-md.$$
 fi

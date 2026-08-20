@@ -66,9 +66,20 @@ first - review can rename them.
 ## Reading markdown and mermaid
 
 ```bash
-spechub-md NOTES.md            # terminal, diagrams drawn as text
-spechub-md --serve NOTES.md    # browser, prints a clickable link
+spechub-md NOTES.md              # terminal, diagrams drawn as text
+spechub-md --diagram 2 NOTES.md  # one diagram alone, scrollable sideways
+spechub-md --serve NOTES.md      # browser, prints a clickable link
 ```
+
+A diagram's width comes from its node labels, so a wide one cannot be shrunk
+into a narrow pane, and wrapping box-drawing art destroys it. Anything wider
+than the terminal is therefore replaced by a note giving its size and the two
+ways to see it, rather than drawn badly. `--diagram N` prints that one diagram
+unwrapped through `less -S`, where the arrow keys scroll sideways.
+
+`SPECHUB_MD_PAD` tunes the spacing passed to `mermaid-ascii` (default
+`-x 2 -y 2`). Tighter padding buys roughly a third of the height back and very
+little width.
 
 Terminal mode replaces each mermaid fence with a box-drawing rendering.
 `mermaid-ascii` handles `graph`, `flowchart`, and `sequenceDiagram`; anything
