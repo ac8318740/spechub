@@ -113,6 +113,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 | `/spechub:bridge` | Set up and operate the Playwriter cross-device browser bridge |
 | `/spechub:visual-docs` | Write docs that lead with a diagram and derive structure from it (Minto pyramid) |
 | `/spechub:new-worktree` | Create a git worktree off the remote base branch and continue the task inside it |
+| `/spechub:pr-review` | Review a pull request, write findings to a durable file, hand off to the implementing session |
 
 ## Agents
 
