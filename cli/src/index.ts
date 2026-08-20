@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -24,6 +25,31 @@ const commands = await Promise.all([
 
 for (const mod of commands) {
   mod.register(program);
+}
+
+program.addHelpText(
+  'after',
+  '\nAny other subcommand runs `spechub-<name>` from your PATH, the way git\n' +
+    'does. The terminal workspace installs several: md, diff, dash, tab.'
+);
+
+// git-style dispatch: `spechub md x` runs `spechub-md x` when md is not a
+// built-in. Keeping those helpers as their own executables matters -
+// spechub-md --preview runs on every cursor move in a file manager, and
+// paying Node's startup for it would make previews noticeably slower.
+const first = process.argv[2];
+const known = new Set(
+  program.commands.flatMap((c) => [c.name(), ...c.aliases()])
+);
+if (first && !first.startsWith('-') && !known.has(first)) {
+  const result = spawnSync(`spechub-${first}`, process.argv.slice(3), {
+    stdio: 'inherit',
+  });
+  // ENOENT means there is no such helper, so let commander report the
+  // unknown command in its own words.
+  if (!(result.error as NodeJS.ErrnoException | undefined)?.code) {
+    process.exit(result.status ?? 0);
+  }
 }
 
 program.parse();

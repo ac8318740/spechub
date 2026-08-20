@@ -87,6 +87,12 @@ first - review can rename them.
 
 ## Reading markdown and mermaid
 
+These helpers are their own executables rather than subcommands of the
+`spechub` CLI, because `spechub-md --preview` runs on every cursor move in the
+file manager and Node's startup would roughly double it. The CLI dispatches to
+them anyway, the way git does: `spechub md` runs `spechub-md`, so either form
+works and configs can keep the fast one.
+
 ```bash
 spechub-md NOTES.md              # terminal, diagrams drawn as text
 spechub-md --diagram 2 NOTES.md  # one diagram alone, scrollable sideways

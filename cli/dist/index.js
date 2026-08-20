@@ -8033,9 +8033,9 @@ var require_resolve_block_scalar = __commonJS({
     }
     function splitLines(source) {
       const split = source.split(/\n( *)/);
-      const first = split[0];
-      const m = first.match(/^( *)/);
-      const line0 = m?.[1] ? [m[1], first.slice(m[1].length)] : ["", first];
+      const first2 = split[0];
+      const m = first2.match(/^( *)/);
+      const line0 = m?.[1] ? [m[1], first2.slice(m[1].length)] : ["", first2];
       const lines = [line0];
       for (let i = 1; i < split.length; i += 2)
         lines.push([split[i], split[i + 1]]);
@@ -8122,20 +8122,20 @@ var require_resolve_flow_scalar = __commonJS({
       return foldLines(source.slice(1, -1)).replace(/''/g, "'");
     }
     function foldLines(source) {
-      let first, line;
+      let first2, line;
       try {
-        first = new RegExp("(.*?)(?<![ 	])[ 	]*\r?\n", "sy");
+        first2 = new RegExp("(.*?)(?<![ 	])[ 	]*\r?\n", "sy");
         line = new RegExp("[ 	]*(.*?)(?:(?<![ 	])[ 	]*)?\r?\n", "sy");
       } catch {
-        first = /(.*?)[ \t]*\r?\n/sy;
+        first2 = /(.*?)[ \t]*\r?\n/sy;
         line = /[ \t]*(.*?)[ \t]*\r?\n/sy;
       }
-      let match = first.exec(source);
+      let match = first2.exec(source);
       if (!match)
         return source;
       let res = match[1];
       let sep = " ";
-      let pos = first.lastIndex;
+      let pos = first2.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
@@ -11656,9 +11656,9 @@ var init_util = __esm({
       };
     })(util || (util = {}));
     (function(objectUtil2) {
-      objectUtil2.mergeShapes = (first, second) => {
+      objectUtil2.mergeShapes = (first2, second) => {
         return {
-          ...first,
+          ...first2,
           ...second
           // second overwrites first
         };
@@ -14659,10 +14659,10 @@ var init_types = __esm({
       get element() {
         return this._def.valueType;
       }
-      static create(first, second, third) {
+      static create(first2, second, third) {
         if (second instanceof ZodType) {
           return new _ZodRecord({
-            keyType: first,
+            keyType: first2,
             valueType: second,
             typeName: ZodFirstPartyTypeKind.ZodRecord,
             ...processCreateParams(third)
@@ -14670,7 +14670,7 @@ var init_types = __esm({
         }
         return new _ZodRecord({
           keyType: ZodString.create(),
-          valueType: first,
+          valueType: first2,
           typeName: ZodFirstPartyTypeKind.ZodRecord,
           ...processCreateParams(second)
         });
@@ -15897,8 +15897,8 @@ function deriveDepths(nodes) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const depths = /* @__PURE__ */ new Map();
   function depthOf(id, trail) {
-    const known = depths.get(id);
-    if (known !== void 0) return known;
+    const known2 = depths.get(id);
+    if (known2 !== void 0) return known2;
     if (trail.has(id)) {
       throw new Error(`node ${id}: provenance cycle in answers chain`);
     }
@@ -16332,6 +16332,7 @@ var {
 } = import_index.default;
 
 // src/index.ts
+import { spawnSync } from "node:child_process";
 import { readFileSync as readFileSync6 } from "node:fs";
 import { join as join10 } from "node:path";
 var pkg = JSON.parse(
@@ -16349,5 +16350,21 @@ var commands = await Promise.all([
 ]);
 for (const mod of commands) {
   mod.register(program2);
+}
+program2.addHelpText(
+  "after",
+  "\nAny other subcommand runs `spechub-<name>` from your PATH, the way git\ndoes. The terminal workspace installs several: md, diff, dash, tab."
+);
+var first = process.argv[2];
+var known = new Set(
+  program2.commands.flatMap((c) => [c.name(), ...c.aliases()])
+);
+if (first && !first.startsWith("-") && !known.has(first)) {
+  const result = spawnSync(`spechub-${first}`, process.argv.slice(3), {
+    stdio: "inherit"
+  });
+  if (!result.error?.code) {
+    process.exit(result.status ?? 0);
+  }
 }
 program2.parse();
