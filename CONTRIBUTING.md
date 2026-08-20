@@ -8,8 +8,40 @@ agents/                      – subagent definitions
 hooks/                       – SessionStart hook (CLI symlink + orchestrator injection)
 skills/                      – slash-command skills
 cli/                         – Node.js CLI (TypeScript source + built dist/)
+assets/                      – files skills ship to the user's machine, not read by the model
+docs/                        – long-form docs a skill links to instead of inlining
 TROUBLESHOOTING.md           – downstream install diagnostics for Claude Code
 ```
+
+## Assets and helper scripts
+
+`assets/` holds things a skill installs rather than reads. Today that is
+`assets/terminal-workspace/setup.sh`, which installs the optional terminal
+workspace.
+
+Two rules for it:
+
+- **Helper scripts are named `spechub-*` and live in heredocs inside `setup.sh`**,
+  not as separate files. One script to install means one file to keep idempotent.
+  Editing a helper means editing the heredoc. `uninstall` removes them by that
+  prefix, so a helper named anything else leaks.
+- **Every edit to a user's config sits between the managed markers**
+  (`# >>> spechub terminal-workspace >>>` / `# <<< ... <<<`). Re-applying replaces
+  only that region, so hand-written config around it survives. Never write outside
+  the markers, and never assume the file is absent.
+
+After changing `setup.sh`, test it against a fake home rather than your own:
+
+```bash
+export FAKE=$(mktemp -d)
+mkdir -p "$FAKE/.config/spechub"
+cp assets/terminal-workspace/config.example.yaml "$FAKE/.config/spechub/tw.yaml"
+HOME=$FAKE SPECHUB_TW_CONFIG=$FAKE/.config/spechub/tw.yaml SPECHUB_TW_BIN=$FAKE/bin \
+  bash assets/terminal-workspace/setup.sh apply
+```
+
+Then check the generated config parses, run `apply` twice and confirm exactly one
+managed block, and run `uninstall` and confirm nothing is left behind.
 
 ## CLI build discipline
 

@@ -28,6 +28,26 @@ diffnav:
   # Popup that shows the most relevant diff: unstaged, else staged, else HEAD.
   popup_key: "alt+d"
 
+tuicr:
+  enabled: true
+  # File tree and whole-file browser, and a code review TUI.
+  popup_key: "alt+t"          # floating, does not change the tab layout
+  tab_key: "alt+shift+t"      # opens a real tab instead
+  # Starting width of the file list, as a percentage of the content area.
+  file_list_width: 30
+  # Per-file +added -removed counts in the tree.
+  show_file_line_stats: true
+  #
+  # TEMPORARY. Two upstream pull requests are still open:
+  #   agavra/tuicr#607  configurable file line stats  (antonio2368)
+  #   agavra/tuicr#633  <leader>L / <leader>H resize  (ours)
+  # Until both merge, the two settings above only exist in a fork build.
+  # `setup.sh status` checks both and tells you when to switch this off.
+  # With it false, the stock release installs and those keys are ignored.
+  build_from_fork: false
+  fork: "https://github.com/ac8318740/tuicr"
+  fork_branch: "local/daily"
+
 gh_dash:
   enabled: true
   popup_key: "alt+i"

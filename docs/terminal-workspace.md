@@ -20,6 +20,46 @@ Run `/spechub:terminal-workspace` to install and configure all of it from a sing
 | [gh-dash](https://github.com/dlvhdr/gh-dash) | Pull request dashboard | Saved searches per section, custom actions, `gh` underneath |
 | [diffnav](https://github.com/dlvhdr/diffnav) | Diff reader | File tree beside the diff, the blast-radius view a plain pager lacks |
 | [delta](https://github.com/dandavison/delta) | Pager | Syntax highlighting for every diff, and gh-dash uses it internally |
+| [tuicr](https://github.com/agavra/tuicr) | File tree and code review | Whole-file browser with a tree, vim keys, and PR review in the same tool |
+
+## tuicr and the file tree
+
+tuicr is a code review TUI. It also browses files: `tuicr --file <path>` opens a
+whole-file view with a tree beside it, no diff and no VCS required. That is what
+the two file tree keys use.
+
+| Key | What |
+|---|---|
+| `alt+t` | File tree in a popup. Floats, leaves the tab layout alone |
+| `alt+shift+t` | Same tree in a new tab |
+
+Both run `spechub-files`, which climbs to the repository root first, so a pane
+sitting deep in a subdirectory still shows the whole tree. In a linked worktree
+that means the worktree root, not the main checkout - the tree matches the branch
+the pane is on. Outside a repository it browses where it stands.
+
+herdr has no `type = "tab"` custom command, and its `tab.create` API launches a
+shell rather than a command, so `spechub-files-tab` creates the tab and then
+sends the command with `herdr pane run`.
+
+### The fork build is temporary
+
+Two upstream pull requests are still open:
+
+- [agavra/tuicr#607](https://github.com/agavra/tuicr/pull/607) by
+  [antonio2368](https://github.com/antonio2368) - configurable per-file
+  `+added -removed` counts in the tree, and the `show_file_line_stats` key
+- [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633) - move the file
+  list boundary with `<leader>L` / `<leader>H`, and the `file_list_width` key
+
+`build_from_fork: false`, the default, installs the stock release and skips both
+config keys so tuicr does not warn about unknown keys. `build_from_fork: true`
+clones the fork, builds `local/daily` with cargo, and writes the two keys plus
+`no_update_check = true` so `tuicr update` cannot replace the build.
+
+`setup.sh status` reports the state of both pull requests. When they are merged,
+set `build_from_fork: false` and re-run `apply`. Check the merged key names
+first - review can rename them.
 
 ## Install
 

@@ -148,24 +148,101 @@ PY
 gh dash --config "$GEN" "$@"
 H
   chmod +x "$BIN/spechub-dash"
-  say "helpers written: spechub-diff, spechub-dash"
+
+  cat > "$BIN/spechub-files" <<'H'
+#!/usr/bin/env bash
+# Whole file tree in tuicr, read-only. Installed by spechub.
+set -uo pipefail
+pick_checkout() {
+  local -a repos=()
+  while IFS= read -r d; do repos+=("$d"); done < <(
+    find . -mindepth 1 -maxdepth 1 -type d -exec test -e '{}/.git' \; -print 2>/dev/null | sort)
+  case ${#repos[@]} in
+    0) return 1 ;;
+    1) cd "${repos[0]}" && return 0 ;;
+    *) echo "Not a repo, but it holds ${#repos[@]} checkouts:"; echo
+       local i=1
+       for d in "${repos[@]}"; do
+         printf '  %d) %-34s %s\n' "$i" "${d#./}" "$(git -C "$d" branch --show-current 2>/dev/null)"
+         i=$((i+1))
+       done
+       echo; read -rp "Which one? [1-${#repos[@]}, q to quit] " choice
+       [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#repos[@]} ] \
+         && cd "${repos[$((choice-1))]}" && return 0
+       return 1 ;;
+  esac
+}
+# A repo shows its whole tree from the root, however deep the pane sits. In a
+# linked worktree that is the worktree root, not the main checkout - the tree
+# should match the branch the pane is on.
+if root=$(git rev-parse --show-toplevel 2>/dev/null); then cd "$root"
+else pick_checkout || true; fi
+exec tuicr --file "${1:-.}" --no-update-check
+H
+  chmod +x "$BIN/spechub-files"
+
+  cat > "$BIN/spechub-files-tab" <<'H'
+#!/usr/bin/env bash
+# spechub-files in a new herdr tab. herdr has no type = "tab" custom command,
+# and tab.create launches a shell rather than a command, so the command is
+# sent afterwards with `herdr pane run`. Installed by spechub.
+set -uo pipefail
+command -v herdr >/dev/null 2>&1 || exec spechub-files
+cwd="${HERDR_ACTIVE_PANE_CWD:-$PWD}"
+# Without --workspace the tab lands in the first workspace, not the one the
+# key was pressed in.
+ws="${HERDR_ACTIVE_WORKSPACE_ID:-${HERDR_WORKSPACE_ID:-}}"
+resp=$(herdr tab create ${ws:+--workspace "$ws"} --cwd "$cwd" --label files --focus 2>/dev/null) || exit 0
+pane=$(printf '%s' "$resp" | python3 -c \
+  'import json,sys; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])' 2>/dev/null)
+[ -n "$pane" ] || exit 0
+# The tab's shell may not have drawn its prompt yet. The pty buffers input, so
+# this settle is belt and braces rather than a correctness dependency.
+sleep 0.3
+herdr pane run "$pane" spechub-files >/dev/null 2>&1
+H
+  chmod +x "$BIN/spechub-files-tab"
+  say "helpers written: spechub-diff, spechub-dash, spechub-files, spechub-files-tab"
 }
 
 apply_herdr() {
   have herdr || { say "herdr not installed, skipping keymap"; return 0; }
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
-  local mod wt diffkey dashkey
+  local mod wt diffkey dashkey filekey filetabkey
   mod=$(cfg_get herdr.chord_modifier alt)
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
   diffkey=$(cfg_get diffnav.popup_key "alt+d")
   dashkey=$(cfg_get gh_dash.popup_key "alt+i")
+  filekey=$(cfg_get tuicr.popup_key "alt+t")
+  filetabkey=$(cfg_get tuicr.tab_key "alt+shift+t")
   [ "$(cfg_get diffnav.enabled true)" = "true" ] || diffkey=""
   [ "$(cfg_get gh_dash.enabled true)" = "true" ] || dashkey=""
+  [ "$(cfg_get tuicr.enabled true)"   = "true" ] || { filekey=""; filetabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
-mod, wt, diffkey, dashkey, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+mod, wt, diffkey, dashkey, filekey, filetabkey, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+
+# key, command, description, herdr custom-command type, popup size.
+# type "shell" takes no size: herdr rejects width/height on a non-popup.
+CUSTOM = [
+    (diffkey,    "spechub-diff",      "diff (diffnav)",  "popup", "90%"),
+    (dashkey,    "spechub-dash",      "PR dashboard",    "popup", "95%"),
+    (filekey,    "spechub-files",     "file tree",       "popup", "95%"),
+    (filetabkey, "spechub-files-tab", "file tree (tab)", "shell", None),
+]
+
+def custom_blocks():
+    out = []
+    for key, cmd, desc, typ, size in CUSTOM:
+        if not key:
+            continue
+        out += ["", "[[keys.command]]", f'key = "{key}"', f'type = "{typ}"',
+                f'command = "{cmd}"', f'description = "{desc}"']
+        if size:
+            out += [f'width = "{size}"', f'height = "{size}"']
+    return out
 text = open(path).read() if os.path.isfile(path) else ""
 # Drop any previous managed region so this is idempotent.
 text = re.sub(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", text, flags=re.S)
@@ -209,24 +286,10 @@ if keys:
         block.extend(keys)
 
 if block is not None:
-    tail = []
-    for key, cmd, desc in ((diffkey, "spechub-diff", "diff (diffnav)"),
-                           (dashkey, "spechub-dash", "PR dashboard")):
-        if key:
-            tail += ["", "[[keys.command]]", f'key = "{key}"', 'type = "popup"',
-                     f'command = "{cmd}"', f'description = "{desc}"',
-                     'width = "90%"', 'height = "90%"']
-    block += tail + ["", "[worktrees]", f'directory = "{wt}"', end]
+    block += custom_blocks() + ["", "[worktrees]", f'directory = "{wt}"', end]
     text = text.rstrip("\n") + "\n\n" + "\n".join(block) + "\n"
 else:
-    tail = [begin]
-    for key, cmd, desc in ((diffkey, "spechub-diff", "diff (diffnav)"),
-                           (dashkey, "spechub-dash", "PR dashboard")):
-        if key:
-            tail += ["", "[[keys.command]]", f'key = "{key}"', 'type = "popup"',
-                     f'command = "{cmd}"', f'description = "{desc}"',
-                     'width = "90%"', 'height = "90%"']
-    tail += ["", "[worktrees]", f'directory = "{wt}"', end]
+    tail = [begin] + custom_blocks() + ["", "[worktrees]", f'directory = "{wt}"', end]
     text = text.rstrip("\n") + "\n\n" + "\n".join(tail) + "\n"
 
 open(path, "w").write(text)
@@ -243,6 +306,74 @@ PY
   if [ "$integ" != "none" ] && [ -n "$integ" ]; then
     herdr integration install "$integ" >/dev/null 2>&1 && say "herdr $integ state hook installed"
   fi
+}
+
+build_tuicr_fork() {
+  # TEMPORARY path. Builds the two unmerged upstream pull requests the config
+  # comments name. Once both land, set build_from_fork: false and this whole
+  # function stops being reachable.
+  have cargo || { say "tuicr fork build needs cargo (see rustup.rs), skipping"; return 1; }
+  have git   || { say "tuicr fork build needs git, skipping"; return 1; }
+  local url branch dir
+  url=$(cfg_get tuicr.fork "https://github.com/ac8318740/tuicr")
+  branch=$(cfg_get tuicr.fork_branch "local/daily")
+  dir="${SPECHUB_TUICR_SRC:-$HOME/tuicr}"
+  if [ -d "$dir/.git" ]; then
+    git -C "$dir" fetch --quiet --all 2>/dev/null
+    git -C "$dir" checkout --quiet "$branch" 2>/dev/null || { say "tuicr: no branch $branch in $dir"; return 1; }
+    git -C "$dir" pull --quiet --ff-only 2>/dev/null
+  else
+    git clone --quiet -b "$branch" "$url" "$dir" || { say "tuicr: clone failed"; return 1; }
+  fi
+  say "building tuicr from $branch (a few minutes on a cold cache)"
+  ( cd "$dir" && cargo build --release ) >/dev/null 2>&1 || { say "tuicr: build failed, see $dir"; return 1; }
+  mkdir -p "$BIN"
+  # mv, not cp: cp fails with "Text file busy" when tuicr is running.
+  cp "$dir/target/release/tuicr" "$BIN/tuicr.new" && mv -f "$BIN/tuicr.new" "$BIN/tuicr"
+  say "tuicr built from $branch and installed to $BIN/tuicr"
+}
+
+apply_tuicr() {
+  local from_fork; from_fork=$(cfg_get tuicr.build_from_fork false)
+  if ! have tuicr; then
+    if [ "$from_fork" = "true" ]; then
+      build_tuicr_fork || return 0
+    else
+      install_binary tuicr agavra/tuicr x86_64-unknown-linux-gnu || return 0
+    fi
+  fi
+  have tuicr || { say "tuicr not installed, skipping config"; return 0; }
+
+  mkdir -p "$HOME/.config/tuicr"
+  # show_file_line_stats and file_list_width only exist in the fork build.
+  # Writing them against a stock release makes tuicr warn on every start.
+  SPECHUB_ARGS="$from_fork|$(cfg_get tuicr.file_list_width 30)|$(cfg_get tuicr.show_file_line_stats true)|$BEGIN|$END" \
+    py "$HOME/.config/tuicr/config.toml" <<'PY'
+import os, re, sys
+path = sys.argv[1]
+from_fork, width, stats, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+text = open(path).read() if os.path.isfile(path) else ""
+text = re.sub(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", text, flags=re.S)
+
+block = [begin]
+if from_fork == "true":
+    block += [
+        "# These two keys exist only in the fork build. See the tuicr section",
+        "# of ~/.config/spechub/terminal-workspace.yaml.",
+        f"show_file_line_stats = {stats}",
+        f"file_list_width = {width}",
+        "# A local build must not be replaced by a stock release.",
+        "no_update_check = true",
+    ]
+else:
+    block += ["# Stock release: the fork-only keys are omitted so tuicr does not",
+              "# warn about unknown config keys at startup."]
+block.append(end)
+text = text.rstrip("\n")
+text = (text + "\n\n" if text else "") + "\n".join(block) + "\n"
+open(path, "w").write(text)
+PY
+  say "tuicr config written"
 }
 
 apply_delta() {
@@ -292,11 +423,25 @@ PY
 case "$ACTION" in
   status)
     echo "config: $CFG $([ -f "$CFG" ] && echo '(found)' || echo '(missing, using defaults)')"
-    for t in herdr delta diffnav gh; do
+    for t in herdr delta diffnav tuicr gh; do
       printf '  %-8s %-14s enabled=%s\n' "$t" "$(have "$t" && echo installed || echo 'not installed')" \
         "$(cfg_get "$([ "$t" = gh ] && echo gh_dash || echo "$t").enabled" true)"
     done
     grep -q "$BEGIN" "$HERDR_CFG" 2>/dev/null && say "herdr managed block: present" || say "herdr managed block: absent"
+    if [ "$(cfg_get tuicr.build_from_fork false)" = "true" ]; then
+      echo
+      say "tuicr: local fork build - this is meant to be temporary"
+      if have gh; then
+        for pr in 607 633; do
+          state=$(gh pr view "$pr" --repo agavra/tuicr --json state -q .state 2>/dev/null || echo "unknown")
+          printf '    agavra/tuicr#%s  %s\n' "$pr" "$state"
+        done
+        say "both MERGED? set tuicr.build_from_fork: false and re-run apply"
+        say "check the merged key names first - review can rename them"
+      else
+        say "install gh to have this check agavra/tuicr#607 and #633 for you"
+      fi
+    fi
     ;;
   apply)
     require_yaml
@@ -311,6 +456,7 @@ case "$ACTION" in
     [ "$(cfg_get delta.enabled true)"   = "true" ] && install_binary delta dandavison/delta x86_64-unknown-linux-gnu
     [ "$(cfg_get diffnav.enabled true)" = "true" ] && install_binary diffnav dlvhdr/diffnav Linux_x86_64
     write_helpers
+    [ "$(cfg_get tuicr.enabled true)"   = "true" ] && apply_tuicr
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr
     [ "$(cfg_get delta.enabled true)"   = "true" ] && apply_delta
     [ "$(cfg_get gh_dash.enabled true)" = "true" ] && apply_ghdash
@@ -334,7 +480,7 @@ if os.path.isfile(p):
 PY
         say "managed block removed from herdr config"
         say "now set herdr.enabled: false in $CFG so apply does not restore it" ;;
-      diffnav|gh_dash)
+      diffnav|gh_dash|tuicr)
         # Only this component's popup goes away. Rebuild the managed block so
         # the rest of the keymap survives.
         require_yaml
@@ -351,7 +497,15 @@ PY
     ;;
   uninstall)
     "$0" disable herdr; "$0" disable delta
-    rm -f "$BIN/spechub-diff" "$BIN/spechub-dash"
+    rm -f "$BIN"/spechub-diff "$BIN"/spechub-dash "$BIN"/spechub-files "$BIN"/spechub-files-tab
+    SPECHUB_ARGS="$BEGIN|$END" py "$HOME/.config/tuicr/config.toml" <<'PY'
+import os, re, sys
+p = sys.argv[1]
+b, e = os.environ["SPECHUB_ARGS"].split("|")
+if os.path.isfile(p):
+    t = open(p).read()
+    open(p, "w").write(re.sub(re.escape(b) + r".*?" + re.escape(e) + r"\n?", "", t, flags=re.S))
+PY
     say "managed config and helpers removed. binaries left in place"
     ;;
   *) echo "usage: setup.sh [status|apply|disable <component>|uninstall]"; exit 1 ;;
