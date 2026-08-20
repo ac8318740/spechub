@@ -12,7 +12,7 @@ $ARGUMENTS
 
 Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
 
-**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and create a change proposal. You MAY create SpecHub artifacts (proposals, designs, specs) if the user asks – that's capturing thinking, not implementing.
+**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and map out the work with /spechub:map. You MAY create SpecHub artifacts (map nodes, specs, ADRs) if the user asks – that's capturing thinking, not implementing.
 
 **This is a stance, not a workflow.** There are no fixed steps, no required sequence, no mandatory outputs. You're a thinking partner helping the user explore.
 
@@ -82,23 +82,21 @@ You have full context of the SpecHub system. Use it naturally, don't force it.
 
 ### Check for context
 
-At the start, quickly check what exists:
+At the start, quickly check what exists – maps on the configured tracker
+(`ls spechub/maps/` on the files backend) and living specs
+(`~/.claude/spechub/bin/spechub list --specs --json`).
 
-```bash
-~/.claude/spechub/bin/spechub list --json
-```
-
-### When no change exists
+### When no map exists
 
 Think freely. When insights crystallize, you might offer:
-- "This feels solid enough to start a change. Want me to create a proposal?"
+- "This feels solid enough to start. Want me to chart it with /spechub:map?"
 - Or keep exploring – no pressure to formalize
 
-### When a change exists
+### When a map exists
 
-If the user mentions a change or you detect one is relevant:
+If the user mentions a map or you detect one is relevant:
 
-1. Read existing artifacts for context
+1. Orient with the packaging walk (`spechub node walk --map <name>`)
 2. Reference them naturally in conversation
 3. Offer to capture when decisions are made:
 
@@ -106,9 +104,9 @@ If the user mentions a change or you detect one is relevant:
 | -------------------------- | ---------------------------- |
 | New requirement discovered | `specs/<domain>/spec.md`     |
 | Requirement changed        | `specs/<domain>/spec.md`     |
-| Design decision made       | `design.md`                  |
-| Scope changed              | `proposal.md`                |
-| New work identified        | `tasks.md`                   |
+| Design decision made       | an ADR via `record-context`  |
+| Term pinned down           | glossary via `record-context` |
+| New work identified        | a map node (a small tracked-work record, if a map exists) |
 | Assumption invalidated     | Relevant artifact            |
 
 4. The user decides – offer and move on. Don't pressure.
@@ -133,6 +131,7 @@ If the user mentions a change or you detect one is relevant:
 - **Don't rush** - Discovery is thinking time, not task time
 - **Don't force structure** - Let patterns emerge naturally
 - **Don't auto-capture** - Offer to save insights, don't just do it
+- **Write for the reader** - Captured artifacts are read by someone with none of this conversation; use plain language, define terms of art at first use
 - **Do visualize** - A good diagram is worth many paragraphs
 - **Do explore the codebase** - Ground discussions in reality
 - **Do question assumptions** - Including the user's and your own

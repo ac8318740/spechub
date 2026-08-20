@@ -148,6 +148,7 @@ The `<br/>` line carries the file, agent, or command name. Someone who knows the
 - **Do not duplicate up the tree** – a child doc adds detail and links to its parent. If a section would restate what the parent says, cut it and link
 - **En dashes only.** Never em dashes
 - **Active voice, short sentences, no marketing register.** "The hook creates two symlinks", not "Two symlinks are created by the hook"
+- **Write for a reader without context** – plain language, terms of art defined at first use
 
 ## 5. Process
 

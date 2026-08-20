@@ -22,7 +22,7 @@ Profile:      [detected]
 Directories:  src/, tests/
 Commands:     [from profile]
 Frontend:     [if applicable]
-Workflow:     auto-select on, thorough clarification, strict TDD, strict orchestrator, spec sync on
+Workflow:     strict TDD, strict orchestrator, spec sync on, grilling via question tool
 ```
 
 ## Step 2: Ask What to Customize
@@ -47,8 +47,7 @@ Call AskUserQuestion with EXACTLY this JSON (two questions in one call):
       "header": "Workflow",
       "multiSelect": true,
       "options": [
-        {"label": "Quick path", "description": "Allow quick path for small changes (default: on)"},
-        {"label": "Clarification", "description": "How much to ask before drafting proposals, designs, and tasks"},
+        {"label": "Grilling", "description": "How grilling asks its questions – a question tool (default) or plain prose"},
         {"label": "TDD strictness", "description": "Switch from strict (test-first) to relaxed"},
         {"label": "Orchestrator", "description": "Allow direct code work instead of subagent delegation"},
         {"label": "Spec sync", "description": "Disable automatic spec sync on commit"}
@@ -67,8 +66,7 @@ For each selected item, ask one follow-up question at a time via AskUserQuestion
 - **Profile & paths**: Ask language/framework, then source/test dirs
 - **Commands**: Show proposed commands, ask to adjust
 - **Frontend**: Show frontend settings, ask to adjust
-- **Quick path**: Ask if small changes (bug fixes, typos, config tweaks) should skip the full TDD pipeline. Default: yes (auto-select on). If no, all changes go through the full pipeline.
-- **Clarification**: Ask 3 questions (one per phase) using AskUserQuestion with up to 4 questions per call. Each question asks the default clarification level for that phase (propose, design, tasks). Options: `none` (never ask), `critical` (only scope/architecture-changing), `thorough` (recommended – ask about anything ambiguous), `exhaustive` (ask about everything). Users can override per-run with flags like `--exhaustive`.
+- **Grilling**: Ask `tool` (the host's question tool, recommended) vs `inline` (prose rounds). Sets `workflow.grilling.questions`.
 - **TDD strictness**: Ask strict vs relaxed
 - **Orchestrator**: Ask strict vs relaxed
 - **Spec sync**: Ask enabled vs disabled
@@ -83,7 +81,7 @@ For each selected item, ask one follow-up question at a time via AskUserQuestion
 
 ## Step 5: Generate the Domain Map
 
-`spechub/domain-map.yaml` maps source paths to spec domains. Spec sync, `/spechub:archive`, `/spechub:bootstrap`, `/spechub:propose` and `/spechub:pre-commit-review` all read it. Without it, every spec-sync path skips silently and living specs never update – so init must always produce one.
+`spechub/domain-map.yaml` maps source paths to spec domains. Spec sync, `/spechub:archive`, `/spechub:bootstrap` and `/spechub:pre-commit-review` all read it. Without it, every spec-sync path skips silently and living specs never update – so init must always produce one.
 
 ### 5a. Propose domains
 
@@ -110,7 +108,7 @@ Write `spechub/domain-map.yaml`:
 
 ```yaml
 # Domain Map: maps source paths to spec domains
-# Read by spec sync, /spechub:archive, /spechub:bootstrap, /spechub:propose
+# Read by spec sync, /spechub:archive, /spechub:bootstrap
 
 domains:
   <domain-name>:
@@ -263,8 +261,7 @@ curl -s --max-time 3 http://localhost:19988/json/version
 Profile:      [profile]
 Source:       [source dir]
 Tests:        [tests dir]
-Workflow:     [auto-select on/off]
-Clarify:      propose=[level], design=[level], tasks=[level]
+Grilling:     [question tool/inline prose]
 TDD:          [strict/relaxed]
 Orchestrator: [strict/relaxed]
 Spec sync:    [enabled/disabled]
@@ -285,12 +282,11 @@ Note: `frontend.browser.cdp_port` defaults to `19988` when `mode: remote` (Playw
 profile: node-typescript
 
 workflow:
-  auto_select: true
   spec_sync: true
-  clarification:
-    propose: thorough    # none | critical | thorough | exhaustive
-    design: thorough
-    tasks: thorough
+  grilling:
+    questions: tool      # tool | inline
+  # maps: {tracker: github | files, persist: false} – set by /spechub:map when
+  # a map is first created; see the config skill for the key reference
   tdd:
     strict: true
     orchestrator_strict: true

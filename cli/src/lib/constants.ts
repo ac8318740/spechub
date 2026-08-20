@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 
 export const SPECHUB_DIR = 'spechub';
 export const CHANGES_DIR = 'changes';
+export const MAPS_DIR = 'maps';
 export const SPECS_DIR = 'specs';
 export const ARCHIVE_DIR = 'archive';
 export const CONFIG_FILE = 'config.yaml';

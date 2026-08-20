@@ -1,13 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { parse as parseYaml } from 'yaml';
-import { SPECHUB_DIR, CONFIG_FILE } from './constants.js';
-
-export interface ProjectConfig {
-  schema?: string;
-  context?: Record<string, string>;
-  [key: string]: unknown;
-}
+import { SPECHUB_DIR } from './constants.js';
 
 /**
  * Find the project root by walking up looking for an spechub/ directory.
@@ -20,21 +13,4 @@ export function findProjectRoot(from: string = process.cwd()): string | null {
     if (parent === dir) return null;
     dir = parent;
   }
-}
-
-/**
- * Read the project config (spechub/config.yaml).
- */
-export function readProjectConfig(root: string): ProjectConfig | null {
-  const configPath = join(root, SPECHUB_DIR, CONFIG_FILE);
-  if (!existsSync(configPath)) return null;
-  const raw = readFileSync(configPath, 'utf-8');
-  return parseYaml(raw) as ProjectConfig;
-}
-
-/**
- * Resolve the spechub directory path from a given root.
- */
-export function spechubDir(root: string): string {
-  return join(root, SPECHUB_DIR);
 }

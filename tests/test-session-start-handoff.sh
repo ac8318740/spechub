@@ -38,7 +38,7 @@ spechub_handoff: 1
 change: $1
 created: $2
 ---
-# SpecHub Handoff — $1
+# SpecHub Handoff – $1
 
 ## Next action
 Resume the $1 work.
@@ -106,6 +106,56 @@ check "leaves active handoff in place"       '[ -f spechub/HANDOFF.md ]'
 echo "Case 7: malformed payload"
 OUT="$(printf 'not json' | bash "$HOOK")"
 check "produces no output on garbage stdin"  '[ -z "$OUT" ]'
+
+# Write an active handoff with the current map: key. $1 = map, $2 = created.
+mkmap() {
+  mkdir -p spechub
+  cat > spechub/HANDOFF.md <<EOF
+---
+spechub_handoff: 1
+map: $1
+created: $2
+---
+# SpecHub Handoff – $1
+
+## Next action
+Resume the $1 work.
+EOF
+}
+
+# --- Case 8: map key routes to spechub/handoffs/<map>/ ------------------------
+echo "Case 8: map frontmatter key"
+mkmap "wayfinder" "2026-05-25T18:00:00Z"
+OUT="$(run compact)"
+check "injects the handoff body"             'printf %s "$OUT" | grep -q "Resume the wayfinder work"'
+check "archives under handoffs/<map>"        '[ -f spechub/handoffs/wayfinder/2026-05-25T18-00-00Z.md ]'
+check "active handoff consumed"              '[ ! -f spechub/HANDOFF.md ]'
+
+# --- Case 9: map wins over change when both present ---------------------------
+echo "Case 9: map key wins over change"
+mkdir -p spechub
+cat > spechub/HANDOFF.md <<'EOF'
+---
+spechub_handoff: 1
+map: newmap
+change: oldchange
+created: 2026-05-25T19:00:00Z
+---
+# SpecHub Handoff – newmap
+
+## Next action
+Continue.
+EOF
+OUT="$(run compact)"
+check "routes by map, not change"            '[ -f spechub/handoffs/newmap/2026-05-25T19-00-00Z.md ]'
+check "did not route by change"              '[ ! -d spechub/handoffs/oldchange ]'
+
+# --- Case 10: hostile map name cannot escape spechub/ -------------------------
+echo "Case 10: map name is sanitized"
+mkmap "../../escape" "2026-05-25T20:00:00Z"
+OUT="$(run compact)"
+check "no file written outside spechub"      '[ ! -e ../escape ] && [ ! -e escape ]'
+check "archived under a sanitized name"      '[ -d "spechub/handoffs/..-..-escape" ]'
 
 echo ""
 echo "----------------------------------------"

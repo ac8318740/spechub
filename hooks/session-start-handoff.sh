@@ -93,7 +93,14 @@ if not meta or "spechub_handoff" not in meta:
 if not body.strip():
     sys.exit(0)
 
-change = meta.get("change") or "ad-hoc"
+# "map" is the current key; "change" is accepted for anchors written by
+# pre-map versions of the handoff skill. The value feeds os.path.join, so
+# sanitize it the same way as the stamp – a name with "/" or ".." must not
+# route the archived handoff outside spechub/.
+change = meta.get("map") or meta.get("change") or "ad-hoc"
+change = re.sub(r"[^A-Za-z0-9._-]", "-", str(change))
+if not change.strip("."):
+    change = "ad-hoc"
 created = meta.get("created") or ""
 
 # Build a filesystem-safe stamp for the archived filename.

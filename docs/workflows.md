@@ -1,81 +1,73 @@
 # SpecHub workflows
 
-*Every request takes one of two paths, and both end by updating the living specs – the difference is only how much planning happens first.*
+*Every request ends by updating the living specs – the difference is only how much fog (what cannot yet be stated precisely) stood in the way.*
 
-SpecHub is a workflow orchestrator: it decides how much ceremony a change deserves, then delegates the work to specialised agents. The cost of getting that decision wrong is real in both directions, so the routing rule and the two paths are the first thing to understand. Everything else in this document is detail behind one of the boxes below.
+SpecHub is a workflow orchestrator. Planning structure grows only as far as the unknowns demand: a clear request is implemented directly, a broken thing gets root-cause discipline, and open decisions become a map that is worked frontier by frontier – the frontier being whatever part of the map is ready to work right now. Archiving a map checks its residue first: the durable output an effort leaves behind, meaning spec updates, decision records and glossary entries. Everything else in this document is detail behind one of the boxes below.
 
 ```mermaid
 flowchart TD
-    R["A request<br/>(feature, bug, refactor)"] --> S{"Pick a path<br/>(workflow.auto_select)"}
-    S -->|"small, clear scope"| Q["Implement directly<br/>(implement-quick)"]
-    S -->|"feature, refactor, unclear"| P["Plan in stages<br/>(propose, clarify, design, tasks)"]
-    P --> T["Build under TDD<br/>(4-phase pipeline)"]
-    Q --> C["Commit<br/>(spechub:commit)"]
+    R["A request<br/>(feature, bug, refactor)"] --> Q{"What stands<br/>in the way?"}
+    Q -->|"nothing – the way is clear"| I["Implement<br/>(implement)"]
+    Q -->|"it is broken"| F["Root-cause fix<br/>(quick-fix)"]
+    Q -->|"open decisions"| M["Map<br/>(chart, then work the frontier)"]
+    M -->|"work nodes"| I
+    I --> T["Build under TDD<br/>(4-phase pipeline)"]
+    F --> C["Commit<br/>(spechub:commit)"]
     T --> C
     C --> Y["Sync specs from the diff<br/>(domain-map.yaml)"]
-    Y --> A["Archive the change<br/>(full pipeline only)"]
     Y --> L[("Living specs<br/>spechub/specs/")]
+    M -->|"map cleared"| A["Archive<br/>(check the residue,<br/>dispose of nodes)"]
     A --> L
 ```
 
-| Step in the diagram          | Detail    |
-| ---------------------------- | --------- |
-| Pick a path                  | section 1 |
-| Implement directly           | section 2 |
-| Plan in stages               | section 3 |
-| Build under TDD              | section 4 |
-| Commit **and** sync specs    | section 5 |
-| Archive                      | section 6 |
-| Living specs                 | section 7 |
+| Step in the diagram   | Detail    |
+| --------------------- | --------- |
+| Map                   | section 1 |
+| Implement             | section 2 |
+| Grilling and records  | section 3 |
+| Build under TDD       | section 4 |
+| Commit **and** sync   | section 5 |
+| Archive               | section 6 |
+| Living specs          | section 7 |
 
-The request box is a terminal, not a step. Section 8 is about this document rather
-than the system. Section 5 covers two boxes because one command does both.
+The request box is a terminal, not a step. Section 5 covers two boxes because one command does both.
 
-## 1. Pick a path
+## 1. The map
 
-*Two paths exist because planning a typo wastes a day and building a feature blind wastes a week. The router is one config flag.*
+*One node primitive replaces the fixed proposal / design / tasks ladder – the three-document pipeline earlier versions used. The map is never stored – it is queries over the nodes.*
 
-When `workflow.auto_select` is `true` in `spechub/project.yaml`, the orchestrator judges the request and says which path it picked and why. When `false`, everything takes the full pipeline.
+A map is a set of small records called nodes. Each node is one question to settle or one piece of work to do.
 
-| Path          | Use for                                                       |
-| ------------- | ------------------------------------------------------------- |
-| Quick         | bug fixes, typos, config tweaks, small isolated changes        |
-| Full pipeline | features, refactors, multi-file changes, unclear requirements  |
+`/spechub:map` is the entry point for planned work. If no map exists it charts one: an opening grill – a round of questions – that fixes the destination (what finished looks like) and surfaces the fog. If a map exists, it works the frontier instead. Requests are never sorted into sizes, and there is nothing that picks a different process for a big one. There is one path, and the only thing that varies is how many nodes the fog produced.
 
-The deciding question is whether the scope is unambiguous. A one-line fix with a clear cause is quick; a one-line fix nobody can explain is not.
+A node carries five statuses – `fog` (cannot be stated precisely yet), `open` (ready to settle), `claimed` (being worked), `resolved` (settled), `out-of-scope` (deliberately dropped) – a `mode` (`hitl` – a human settles it – or `afk` – an agent alone), and two link types:
 
-## 2. Implement directly
+- `answers` – one provenance parent: the node whose resolution raised this one. The parent links form a tree. They give reading order, and let a handoff be packaged by walking that tree.
+- `blocked-by` – any number of blocking edges: nodes that must resolve before this one can start. They form a directed acyclic graph, meaning the edges never loop back. These edges tell you what can be worked right now.
 
-*The quick path skips planning artifacts and the TDD pipeline, but never skips spec sync.*
+Depth is derived from `answers`, never declared. The map itself is five queries: the destination is the root node, decisions so far are `resolved` in provenance order, the frontier is `open` with no unresolved blockers, not-yet-specified is `fog`, and out-of-scope is `out-of-scope`.
 
-`/spechub:implement-quick` analyses before it writes. Three explorer subagents run in parallel over the relevant code, and only then does implementation start – the point is that a short path is not an unresearched one.
+Nodes live in a tracker – the storage layer, swappable, and required to provide only four operations: create, read, update, list. GitHub issues are first-class (its sub-issues carry the provenance parent, its dependencies carry the blocking edges); files under `spechub/maps/<name>/` are the fallback. Frontier, claim and resolve are built on those four operations, so no tracker has to implement them.
 
-Nothing is written to `spechub/changes/`. There is no proposal, no task list, and no archive step. Specs still update, because that happens at commit time for every path (section 5).
+**Progressive materialisation**: structure appears only when it has to persist, so a map is created only when the fog will outlive the session. One question is grilled in conversation and leaves an architecture decision record (ADR), not a map.
 
-`/spechub:quick-fix` is the variant for something broken rather than something small. It forces root-cause analysis before any edit, on the grounds that a fix for a misunderstood cause is a new bug.
+## 2. Implement
 
-## 3. Plan in stages
+*A unit of work carries its own size. One node is a quick change, forty is a long effort, and nothing declares which.*
 
-*Four skills, each producing one artifact, each able to stop the sequence when it exposes a problem.*
+`/spechub:implement` claims `afk` work nodes from the frontier when a map exists, and treats the request itself as the work item when none does. Either way, parallel explorer subagents run over the relevant code before anything is written – paths are resolved at claim time, because a node describes behaviour and can sit on the frontier for weeks.
 
-```mermaid
-flowchart LR
-    A["Propose<br/>(proposal.md)"] --> B["Clarify<br/>(up to 5 questions)"]
-    B --> C["Design<br/>(design.md)"]
-    C --> D["Tasks<br/>(tasks.md)"]
-    A -.->|"simple feature"| D
-```
+The TDD pipeline (section 4) runs to completion inside each claim. The node only ever moves `open -> claimed -> resolved`; if work stalls, the claim is released and the node is plainly open again. Progress is a frontier query, not a checkbox file – resuming never means re-reading an effort end to end.
 
-| Skill                | Produces                                                    |
-| -------------------- | ----------------------------------------------------------- |
-| `/spechub:propose`   | `proposal.md` – user stories at P1/P2/P3, after codebase exploration |
-| `/spechub:clarify`   | a `## Clarifications` section, one question at a time, each with a recommended answer |
-| `/spechub:design`    | `design.md` – architecture and technical approach            |
-| `/spechub:tasks`     | `tasks.md` – dependency-ordered, checkbox tracked            |
+`/spechub:quick-fix` stays separate. Broken is a different axis from foggy: a bug has a root cause to find, not a decision to settle, so it never creates a node.
 
-All four write into `spechub/changes/<change-name>/`. `design` is skippable for a simple feature – `tasks` can follow `propose` directly. `clarify` is the one to add when requirements are vague rather than merely large.
+## 3. Grilling and durable records
 
-The orchestrator is told planning and verification should take roughly four times the effort of implementation, on the reasoning that subagents lack full context and are confidently wrong more often than they are stuck.
+*Two model-invoked primitives – skills the agent reaches for itself, not commands you type – carry the interviewing and the remembering.*
+
+**`grilling`** works decisions in rounds. A round asks the whole frontier – every question whose prerequisites are settled – numbered, each with a recommended answer, then recomputes and repeats. Facts are the agent's job, never the user's: a question an environment fact would answer is dispatched to explorer subagents instead. Presentation follows `workflow.grilling.questions` (the host's question tool by default, inline prose past 4 questions or for open questions), and there is no question cap – the frontier bounds itself.
+
+**`record-context`** fires when a decision lands. It writes an ADR (`docs/adr/`) only when the decision is hard to reverse *and* surprising *and* a real trade-off; a glossary term (root `CONTEXT.md` for cross-domain vocabulary, `spechub/specs/<domain>/CONTEXT.md` for domain terms) when a term got settled; both, or neither. The ADR index is generated from the files, never hand-edited.
 
 ## 4. Build under TDD
 
@@ -103,12 +95,13 @@ A FAIL routes back to the executor with the reason. Phases 1 and 4 are condition
 
 *Spec sync runs on every commit on every path. It reads the diff, so specs describe what was built rather than what was planned.*
 
-`/spechub:commit` groups changes into MECE commits, then before writing them:
+`/spechub:commit` groups changes into MECE commits – mutually exclusive, collectively exhaustive, so no change appears twice and none is left out – then before writing them:
 
 1. Reads `spechub/domain-map.yaml` to map each changed file to a domain
 2. For each affected domain that already has a `spec.md`, works out what the diff adds, modifies or removes
 3. Writes those entries into the domain's spec and stages them in the same commit
 4. Flags source files that match no domain
+5. Checks the glossaries: if the diff renames or deletes an identifier matching a glossary term, it says so – and never edits the glossary. For specs the code wins; for the glossary the human wins
 
 Sync is skipped when `workflow.spec_sync` is `false`, when no domain map exists, when nothing matches a domain, or when the change is docs and config only.
 
@@ -116,46 +109,25 @@ Sync is skipped when `workflow.spec_sync` is `false`, when no domain map exists,
 
 ## 6. Archive
 
-*Full pipeline only. Folds the change's deltas into the living specs and clears the working directory.*
+*A map is scaffolding. Archive verifies the residue – the durable output: spec updates, decision records, glossary entries – was extracted, then disposes of the nodes.*
 
-`/spechub:archive` reads the completed change, applies its ADDED, MODIFIED and REMOVED entries to each affected domain spec, writes a `delta.md` into `spechub/archive/<date>-<change-name>/`, and removes the change from `spechub/changes/`.
+`/spechub:archive` checks the map is cleared (empty frontier, no fog, no claims), spot-checks that living specs, ADRs and glossary entries captured what the effort settled, then disposes of the nodes: deleted by default, or moved to `spechub/archive/<date>-<name>/nodes/` when `workflow.maps.persist` is `true`. Keeping nodes is off by default because a kept map is a second copy of every decision, and the two drift. On the GitHub tracker there is nothing to dispose – closed issues are already the archive.
 
-The quick path has no archive step because it produced no change directory. Its specs were already updated at commit time.
+Legacy `spechub/changes/` directories from the pre-map workflow still archive the old way, so an upgrade never strands work.
 
 ## 7. Living specs
 
-*The durable output. Everything in `spechub/changes/` is scaffolding; `spechub/specs/` is what the project keeps.*
+*The durable output. Maps are scaffolding; `spechub/specs/` is what the project keeps.*
 
-Specs live at `spechub/specs/<domain>/spec.md`, organised by the domains in `domain-map.yaml`, written as `FR-NNN` requirements in Given/When/Then form. They are cumulative and describe only what is implemented – a roadmap item in a living spec is a bug in the spec.
+Specs live at `spechub/specs/<domain>/spec.md`, organised by the domains in `domain-map.yaml`, written as numbered functional requirements (`FR-NNN`) in Given/When/Then form. They are cumulative and describe only what is implemented – a roadmap item in a living spec is a bug in the spec.
 
 Two rules keep them honest:
 
-- **Two writers, one target.** Commit-time sync handles incremental change; archive handles a completed pipeline. Both write the same files
+- **Two writers, one target.** Commit-time sync handles incremental change; archive verifies a completed map left nothing behind. Both converge on the same files
 - **Fix it when you see it.** Any agent that finds a spec contradicting the code corrects the spec immediately – wrong behaviour gets rewritten, missing requirements get appended, stale references get deleted
 
 `/spechub:bootstrap` generates the first set from an existing codebase, so a project does not have to start from an empty directory.
 
-## 8. What the redesign changes
+## Design record
 
-*This describes what ships today. A redesign in progress replaces sections 1 to 3 and leaves 4 to 7 standing.*
-
-The plan lives in the issues labelled `wayfinder` on this repository, not in this
-repo's files. Each issue is one decision with its reasoning, and the implementation
-works against them.
-
-| Section              | What happens to it                                                     |
-| -------------------- | ---------------------------------------------------------------------- |
-| 1. Pick a path       | **removed.** No router. Deciding whether SpecHub applied was itself a decision, and that is part of why it went unused |
-| 2. Implement directly | **`implement-quick` is deleted.** `implement` absorbs it – a unit of work carries its own size, so one small item is a quick change and forty is a long effort. Nothing declares which. `quick-fix` is unaffected and stays |
-| 3. Plan in stages    | **the three documents become one primitive.** `propose`, `design`, `tasks` and `verify` all go. Planning grows only as far as the unknowns demand |
-| 4. Build under TDD   | unchanged                                                              |
-| 5. Commit, sync specs | unchanged                                                              |
-| 6. Archive           | rewired – it extracts the durable result rather than moving documents   |
-| 7. Living specs      | unchanged, and still the durable output                                 |
-
-Nothing above is built yet. Every skill named here is installed and working, and
-none is removed until its replacement is.
-
-This document deliberately describes current behaviour rather than the plan, on the
-same principle the living specs follow: document what is implemented, never the
-roadmap.
+The reasoning behind this design – why one node type, why four tracker operations, why no tiers – lives in the issues labelled `wayfinder` on this repository. Each issue is one decision with the reasoning that produced it.

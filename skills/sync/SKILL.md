@@ -43,6 +43,9 @@ For each affected domain:
    - Modified signatures or behavior -> MODIFIED requirements
    - Deleted functions/endpoints -> REMOVED requirements
 
+FR entries are written for a reader who has not seen the diff – plain behaviour
+statements, no internal shorthand.
+
 ## Step 4: Apply Deltas
 
 For each affected domain:
@@ -51,7 +54,28 @@ For each affected domain:
 - If no spec exists: create minimal spec with ADDED entries and a comment:
   `<!-- Auto-generated from code changes. Run /bootstrap for full spec. -->`
 
-## Step 5: Report
+Write each merged FR for a reader who has not seen the diff – plain behaviour
+statements, no internal shorthand.
+
+## Step 5: Glossary Check
+
+Glossaries live in `CONTEXT.md` at the repo root (cross-domain terms) and
+`spechub/specs/[domain]/CONTEXT.md` (domain terms). If neither exists, skip.
+
+For each glossary term, check whether the diff renames or deletes an
+identifier matching it (function, class, table, config key, route). If so,
+surface it in the report:
+
+```
+Glossary: 'ticket' may be stale – the diff renames Ticket to WorkItem
+```
+
+**Never edit the glossary and never block the commit.** For specs the code
+wins; for the glossary the human wins – it records vocabulary humans agreed
+on, so only a human decision changes it. Surfacing the drift is the whole
+job.
+
+## Step 6: Report
 
 ```
 Spec sync: [N] domains updated
