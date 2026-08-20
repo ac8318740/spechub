@@ -239,7 +239,8 @@ Prefix is `ctrl+b`. Everything below is a direct chord that needs no prefix.
 | `h` / `l` | Previous / next section |
 | `p` | Toggle the preview pane |
 | `[` / `]` | Previous / next preview tab: Overview, Activity, Commits, Checks, Files Changed |
-| `ctrl+d` / `ctrl+u` | Scroll the preview |
+| `PageDown` / `PageUp` | Scroll the preview |
+| `ctrl+d` / `ctrl+u` | Scroll the preview, vim style |
 | `e` | Expand the description |
 | `d` | Built-in diff |
 | `D` | diffnav, with the file tree |

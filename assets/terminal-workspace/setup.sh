@@ -278,7 +278,12 @@ if kb.get("tree_diff"):
 if kb.get("agent_review"):
     prs.append({"key": kb["agent_review"], "name": "agent review",
                 "command": 'cd {{.RepoPath}} && claude "/code-review {{.PrNumber}}"\n'})
-cfg.setdefault("keybindings", {})["prs"] = prs
+kbs = cfg.setdefault("keybindings", {})
+kbs["prs"] = prs
+if tw.get("page_keys", True):
+    uni = [k for k in kbs.get("universal", []) if k.get("builtin") not in ("pageUp", "pageDown")]
+    uni += [{"key": "pgup", "builtin": "pageUp"}, {"key": "pgdown", "builtin": "pageDown"}]
+    kbs["universal"] = uni
 yaml.safe_dump(cfg, open(dst, "w"), sort_keys=False, default_flow_style=False, width=200)
 print("  gh-dash config written")
 PY

@@ -42,6 +42,9 @@ gh_dash:
       filters: "is:open author:@me status:failure"
   # Local clones. Needed for checkout and for {{.RepoPath}} in keybindings.
   repo_paths: {}
+  # Bind PageUp and PageDown to scroll the preview. gh-dash uses ctrl+u and
+  # ctrl+d by default, which is fine in vim and awkward everywhere else.
+  page_keys: true
   keybindings:
     # Pipe the selected pull request into diffnav.
     tree_diff: "D"
