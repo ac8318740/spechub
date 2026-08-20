@@ -11,6 +11,12 @@ set -uo pipefail
 
 CFG="${SPECHUB_TW_CONFIG:-$HOME/.config/spechub/terminal-workspace.yaml}"
 BIN="${SPECHUB_TW_BIN:-$HOME/.local/bin}"
+# Everything installs into $BIN, and the config steps then ask `have <tool>`
+# whether it worked. On a fresh machine $BIN is not on PATH yet, so without
+# this every tool installs and every config step is skipped.
+# herdr's own installer always targets ~/.local/bin, which is only the same
+# as $BIN when SPECHUB_TW_BIN is left alone. Cover both.
+PATH="$BIN:$HOME/.local/bin:$PATH"
 HERDR_CFG="$HOME/.config/herdr/config.toml"
 GHDASH_CFG="$HOME/.config/gh-dash/config.yml"
 BEGIN="# >>> spechub terminal-workspace >>>"
@@ -74,7 +80,8 @@ try:
 except ValueError:
     raise SystemExit
 for a in d.get("assets", []):
-    if sys.argv[1] in a["name"] and a["name"].endswith((".tar.gz", ".tgz")):
+    # yazi publishes .zip only; delta and glow publish .tar.gz. Take either.
+    if sys.argv[1] in a["name"] and a["name"].endswith((".tar.gz", ".tgz", ".zip")):
         print(a["browser_download_url"]); break
 PY
 )
@@ -82,10 +89,16 @@ PY
   # Explicit cleanup rather than `trap ... RETURN`: a RETURN trap stays
   # registered for every later function return in this shell, where $tmp is
   # gone and `set -u` then aborts the run.
-  local tmp found; tmp=$(mktemp -d)
-  if ! curl -sL "$url" -o "$tmp/a.tgz" || ! tar xzf "$tmp/a.tgz" -C "$tmp"; then
+  local tmp found ar; tmp=$(mktemp -d)
+  case "$url" in *.zip) ar="$tmp/a.zip" ;; *) ar="$tmp/a.tgz" ;; esac
+  if ! curl -sL "$url" -o "$ar"; then
     rm -rf "$tmp"; say "$name: download failed"; return 1
   fi
+  case "$ar" in
+    *.zip) have unzip || { rm -rf "$tmp"; say "$name: needs unzip"; return 1; }
+           unzip -qo "$ar" -d "$tmp" || { rm -rf "$tmp"; say "$name: unzip failed"; return 1; } ;;
+    *)     tar xzf "$ar" -C "$tmp" || { rm -rf "$tmp"; say "$name: untar failed"; return 1; } ;;
+  esac
   found=$(find "$tmp" -type f -name "$name" | head -1)
   if [ -z "$found" ]; then
     rm -rf "$tmp"; say "$name: binary not found in archive"; return 1
@@ -97,6 +110,9 @@ PY
 
 write_helpers() {
   mkdir -p "$BIN"
+  # Helpers this script used to write and no longer does. Upgrading otherwise
+  # leaves them on PATH, shadowing nothing but confusing everything.
+  rm -f "$BIN"/spechub-files "$BIN"/spechub-files-tab "$BIN"/spechub-open
   cat > "$BIN/spechub-diff" <<'H'
 #!/usr/bin/env bash
 # Show the most relevant diff in diffnav. Installed by spechub.
@@ -163,77 +179,6 @@ PY
 gh dash --config "$GEN" "$@"
 H
   chmod +x "$BIN/spechub-dash"
-
-  cat > "$BIN/spechub-files" <<'H'
-#!/usr/bin/env bash
-# Full file tree in tuicr pristine mode. Bound to alt+t as a herdr popup.
-# Installed by spechub.
-set -uo pipefail
-
-pick_checkout() {
-  # herdr groups worktrees as <root>/<repo>/<branch-slug>, so a pane often
-  # sits in the parent of several checkouts rather than in one.
-  local -a repos=()
-  while IFS= read -r d; do repos+=("$d"); done < <(
-    find . -mindepth 1 -maxdepth 1 -type d -exec test -e '{}/.git' \; -print 2>/dev/null | sort)
-  case ${#repos[@]} in
-    0) return 1 ;;
-    1) cd "${repos[0]}" && return 0 ;;
-    *) echo "Not a repo, but it holds ${#repos[@]} checkouts:"; echo
-       local i=1
-       for d in "${repos[@]}"; do
-         printf '  %d) %-34s %s\n' "$i" "${d#./}" "$(git -C "$d" branch --show-current 2>/dev/null)"
-         i=$((i+1))
-       done
-       echo; read -rp "Which one? [1-${#repos[@]}, q to quit] " choice
-       [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#repos[@]} ] \
-         && cd "${repos[$((choice-1))]}" && return 0
-       return 1 ;;
-  esac
-}
-
-# A repo shows its whole tree from the root, however deep the pane sits.
-# Anything else browses where it stands - tuicr --file needs no VCS.
-if root=$(git rev-parse --show-toplevel 2>/dev/null); then
-  cd "$root"
-else
-  pick_checkout || true
-fi
-
-# `e` in tuicr opens the focused file in $EDITOR. Point that at the shim so
-# markdown opens in the reader with its diagrams drawn, and everything else
-# still goes to the real editor. Capture the real one first, or the shim's
-# fallback resolves back to itself.
-if command -v spechub-open >/dev/null 2>&1; then
-  export SPECHUB_REAL_EDITOR="${SPECHUB_REAL_EDITOR:-${EDITOR:-${VISUAL:-vi}}}"
-  export EDITOR=spechub-open
-fi
-
-exec tuicr --file "${1:-.}" --no-update-check
-H
-  chmod +x "$BIN/spechub-files"
-
-  cat > "$BIN/spechub-files-tab" <<'H'
-#!/usr/bin/env bash
-# spechub-files in a new herdr tab. herdr has no type = "tab" custom command,
-# and tab.create launches a shell rather than a command, so the command is
-# sent afterwards with `herdr pane run`. Installed by spechub.
-set -uo pipefail
-command -v herdr >/dev/null 2>&1 || exec spechub-files
-cwd="${HERDR_ACTIVE_PANE_CWD:-$PWD}"
-# Without --workspace the tab lands in the first workspace, not the one the
-# key was pressed in.
-ws="${HERDR_ACTIVE_WORKSPACE_ID:-${HERDR_WORKSPACE_ID:-}}"
-resp=$(herdr tab create ${ws:+--workspace "$ws"} --cwd "$cwd" --label files --focus 2>/dev/null) || exit 0
-pane=$(printf '%s' "$resp" | python3 -c \
-  'import json,sys; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])' 2>/dev/null)
-[ -n "$pane" ] || exit 0
-# The tab's shell may not have drawn its prompt yet. The pty buffers input, so
-# this settle is belt and braces rather than a correctness dependency.
-sleep 0.3
-herdr pane run "$pane" spechub-files >/dev/null 2>&1
-H
-  chmod +x "$BIN/spechub-files-tab"
 
   cat > "$BIN/spechub-md" <<'H'
 #!/usr/bin/env bash
@@ -496,21 +441,32 @@ rm -f /tmp/spechub-md.$$.md
 H
   chmod +x "$BIN/spechub-md"
 
-  cat > "$BIN/spechub-open" <<'H'
+  cat > "$BIN/spechub-yazi-tab" <<'H'
 #!/usr/bin/env bash
-# $EDITOR shim for tuicr: markdown opens in the reader, everything else in the
-# real editor. Scoped to spechub-files, so the shell's own $EDITOR is untouched.
-# Installed by spechub.
+# Open the file tree in a new herdr tab, focused on the calling pane's cwd.
+# herdr's tab.create API launches a shell, not a command, so the command is
+# sent afterwards with `herdr pane run`. Installed by spechub.
 set -uo pipefail
-# tuicr may pass +LINE or a file:line argument; the path is the last one.
-for last; do :; done
-case "${last,,}" in
-  *.md|*.markdown|*.mdx) exec spechub-md "$last" ;;
-  *) exec "${SPECHUB_REAL_EDITOR:-${VISUAL:-${EDITOR:-vi}}}" "$@" ;;
-esac
+
+command -v herdr >/dev/null 2>&1 || exec yazi
+cwd="${HERDR_ACTIVE_PANE_CWD:-$PWD}"
+# Without --workspace the tab lands in the first workspace, not the one the
+# key was pressed in.
+ws="${HERDR_ACTIVE_WORKSPACE_ID:-${HERDR_WORKSPACE_ID:-}}"
+
+resp=$(herdr tab create ${ws:+--workspace "$ws"} --cwd "$cwd" --label yazi --focus 2>/dev/null) || exit 0
+pane=$(printf '%s' "$resp" | python3 -c \
+  'import json,sys; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])' 2>/dev/null)
+[ -n "$pane" ] || exit 0
+
+# The tab's shell may not have drawn its prompt yet. The pty buffers input, so
+# a short settle is enough - this is not a correctness dependency.
+sleep 0.3
+herdr pane run "$pane" yazi >/dev/null 2>&1
 H
-  chmod +x "$BIN/spechub-open"
-  say "helpers written: spechub-diff, spechub-dash, spechub-files, spechub-files-tab, spechub-md, spechub-open"
+  chmod +x "$BIN/spechub-yazi-tab"
+
+  say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-yazi-tab"
 }
 
 apply_herdr() {
@@ -521,11 +477,11 @@ apply_herdr() {
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
   diffkey=$(cfg_get diffnav.popup_key "alt+d")
   dashkey=$(cfg_get gh_dash.popup_key "alt+i")
-  filekey=$(cfg_get tuicr.popup_key "alt+t")
-  filetabkey=$(cfg_get tuicr.tab_key "alt+shift+t")
+  filekey=$(cfg_get yazi.popup_key "alt+t")
+  filetabkey=$(cfg_get yazi.tab_key "alt+shift+t")
   [ "$(cfg_get diffnav.enabled true)" = "true" ] || diffkey=""
   [ "$(cfg_get gh_dash.enabled true)" = "true" ] || dashkey=""
-  [ "$(cfg_get tuicr.enabled true)"   = "true" ] || { filekey=""; filetabkey=""; }
+  [ "$(cfg_get yazi.enabled true)"    = "true" ] || { filekey=""; filetabkey=""; }
 
   SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
@@ -537,8 +493,8 @@ mod, wt, diffkey, dashkey, filekey, filetabkey, begin, end = os.environ["SPECHUB
 CUSTOM = [
     (diffkey,    "spechub-diff",      "diff (diffnav)",  "popup", "90%"),
     (dashkey,    "spechub-dash",      "PR dashboard",    "popup", "95%"),
-    (filekey,    "spechub-files",     "file tree",       "popup", "95%"),
-    (filetabkey, "spechub-files-tab", "file tree (tab)", "shell", None),
+    (filekey,    "yazi",              "file tree",       "popup", "95%"),
+    (filetabkey, "spechub-yazi-tab",  "file tree (tab)", "shell", None),
 ]
 
 def custom_blocks():
@@ -684,6 +640,64 @@ PY
   say "tuicr config written"
 }
 
+apply_yazi() {
+  [ "$(cfg_get yazi.enabled true)" = "true" ] || return 0
+  if ! have yazi; then
+    install_binary yazi sxyazi/yazi x86_64-unknown-linux-gnu || return 0
+    install_binary ya   sxyazi/yazi x86_64-unknown-linux-gnu || true
+  fi
+  have yazi || { say "yazi not installed, skipping config"; return 0; }
+
+  # piper turns any shell command into a previewer, which is how spechub-md
+  # gets to draw markdown in the preview pane.
+  if have ya && ! ya pkg list 2>/dev/null | grep -q "plugins:piper"; then
+    ya pkg add yazi-rs/plugins:piper >/dev/null 2>&1 \
+      && say "yazi piper plugin installed" \
+      || say "piper install failed; markdown will preview as plain text"
+  fi
+
+  mkdir -p "$HOME/.config/yazi"
+  SPECHUB_ARGS="$(cfg_get yazi.show_hidden true)|$BEGIN|$END" \
+    py "$HOME/.config/yazi/yazi.toml" <<'PY'
+import os, re, sys
+path = sys.argv[1]
+hidden, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+text = open(path).read() if os.path.isfile(path) else ""
+text = re.sub(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", text, flags=re.S)
+block = f"""{begin}
+[[plugin.prepend_previewers]]
+url = "*.md"
+run = 'piper -- COLUMNS=$w spechub-md --preview "$1"'
+
+[[plugin.prepend_previewers]]
+url = "*.markdown"
+run = 'piper -- COLUMNS=$w spechub-md --preview "$1"'
+
+# The preview pane is narrow, so a wide diagram shows its placeholder there.
+# Enter opens the same renderer full width, where more of them fit.
+[opener]
+markdown = [
+  {{ run = 'spechub-md "$@"', block = true, desc = "Read (spechub-md)" }},
+  {{ run = '${{EDITOR:-vi}} "$@"', block = true, desc = "Edit" }},
+]
+
+[[open.prepend_rules]]
+url = "*.md"
+use = "markdown"
+
+[[open.prepend_rules]]
+url = "*.markdown"
+use = "markdown"
+
+[mgr]
+show_hidden = {hidden}
+{end}"""
+text = text.rstrip("\n")
+open(path, "w").write((text + "\n\n" if text else "") + block + "\n")
+PY
+  say "yazi config written"
+}
+
 apply_markdown() {
   [ "$(cfg_get markdown.enabled true)" = "true" ] || return 0
   install_binary mermaid-ascii AlexanderGrooff/mermaid-ascii Linux_x86_64
@@ -750,7 +764,7 @@ PY
 case "$ACTION" in
   status)
     echo "config: $CFG $([ -f "$CFG" ] && echo '(found)' || echo '(missing, using defaults)')"
-    for t in herdr delta diffnav tuicr glow mermaid-ascii gh; do
+    for t in herdr delta diffnav tuicr yazi glow mermaid-ascii gh; do
       case "$t" in
         gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; *) k="$t" ;;
       esac
@@ -787,6 +801,7 @@ case "$ACTION" in
     [ "$(cfg_get diffnav.enabled true)" = "true" ] && install_binary diffnav dlvhdr/diffnav Linux_x86_64
     write_helpers
     [ "$(cfg_get tuicr.enabled true)"   = "true" ] && apply_tuicr
+    apply_yazi
     apply_markdown
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr
     [ "$(cfg_get delta.enabled true)"   = "true" ] && apply_delta
@@ -828,8 +843,9 @@ PY
     ;;
   uninstall)
     "$0" disable herdr; "$0" disable delta
-    rm -f "$BIN"/spechub-diff "$BIN"/spechub-dash "$BIN"/spechub-files \
-          "$BIN"/spechub-files-tab "$BIN"/spechub-md
+    # By prefix, which is why helpers are named spechub-*: anything this
+    # script ever wrote goes, including helpers retired in an older version.
+    rm -f "$BIN"/spechub-*
     SPECHUB_ARGS="$BEGIN|$END" py "$HOME/.config/tuicr/config.toml" <<'PY'
 import os, re, sys
 p = sys.argv[1]

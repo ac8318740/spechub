@@ -30,9 +30,8 @@ diffnav:
 
 tuicr:
   enabled: true
-  # File tree and whole-file browser, and a code review TUI.
-  popup_key: "alt+t"          # floating, does not change the tab layout
-  tab_key: "alt+shift+t"      # opens a real tab instead
+  # Code review TUI. gh-dash hands pull requests to it; it is not the file
+  # browser, which is yazi below.
   # Starting width of the file list, as a percentage of the content area.
   file_list_width: 30
   # Per-file +added -removed counts in the tree.
@@ -47,6 +46,15 @@ tuicr:
   build_from_fork: false
   fork: "https://github.com/ac8318740/tuicr"
   fork_branch: "local/daily"
+
+yazi:
+  enabled: true
+  # File manager. Markdown renders live in the preview pane through
+  # spechub-md, so a document draws as the cursor moves over it, and Enter
+  # opens the same renderer full width where more of a diagram fits.
+  popup_key: "alt+t"          # floating, does not change the tab layout
+  tab_key: "alt+shift+t"      # opens a real tab instead
+  show_hidden: true
 
 markdown:
   enabled: true

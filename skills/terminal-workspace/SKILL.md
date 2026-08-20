@@ -23,7 +23,8 @@ Nothing here is required to use SpecHub. Offer it, do not assume it.
 | delta | Syntax-highlighted diffs everywhere | `delta.enabled` |
 | diffnav | Diff with a file tree, on one key | `diffnav.enabled` |
 | gh-dash | Pull request triage without a browser | `gh_dash.enabled` |
-| tuicr | File tree and whole-file browser, plus code review | `tuicr.enabled` |
+| tuicr | Code review, which gh-dash hands pull requests to | `tuicr.enabled` |
+| yazi | File manager, with markdown previewed live by spechub-md | `yazi.enabled` |
 | spechub-md | Markdown with mermaid diagrams, as text or in a browser | `markdown.enabled` |
 
 Background and full key tables: [docs/terminal-workspace.md](../../docs/terminal-workspace.md).

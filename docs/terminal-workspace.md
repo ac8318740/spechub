@@ -20,28 +20,32 @@ Run `/spechub:terminal-workspace` to install and configure all of it from a sing
 | [gh-dash](https://github.com/dlvhdr/gh-dash) | Pull request dashboard | Saved searches per section, custom actions, `gh` underneath |
 | [diffnav](https://github.com/dlvhdr/diffnav) | Diff reader | File tree beside the diff, the blast-radius view a plain pager lacks |
 | [delta](https://github.com/dandavison/delta) | Pager | Syntax highlighting for every diff, and gh-dash uses it internally |
-| [tuicr](https://github.com/agavra/tuicr) | File tree and code review | Whole-file browser with a tree, vim keys, and PR review in the same tool |
+| [tuicr](https://github.com/agavra/tuicr) | Code review | Vim keys, and PR review in the same tool gh-dash hands work to |
+| [yazi](https://github.com/sxyazi/yazi) | File manager | Live preview per file type, so markdown renders as the cursor moves |
 | [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) | Diagram renderer | Draws mermaid flowcharts as box-drawing text |
 | [glow](https://github.com/charmbracelet/glow) | Markdown pager | Readable markdown in the terminal |
 
-## tuicr and the file tree
-
-tuicr is a code review TUI. It also browses files: `tuicr --file <path>` opens a
-whole-file view with a tree beside it, no diff and no VCS required. That is what
-the two file tree keys use.
+## The file tree
 
 | Key | What |
 |---|---|
-| `alt+t` | File tree in a popup. Floats, leaves the tab layout alone |
-| `alt+shift+t` | Same tree in a new tab |
+| `alt+t` | yazi in a popup. Floats, leaves the tab layout alone |
+| `alt+shift+t` | yazi in a new tab |
 
-Both run `spechub-files`, which climbs to the repository root first, so a pane
-sitting deep in a subdirectory still shows the whole tree. In a linked worktree
-that means the worktree root, not the main checkout - the tree matches the branch
-the pane is on. Outside a repository it browses where it stands.
+yazi previews each file type with its own command, and markdown is routed to
+`spechub-md`, so a document renders **as the cursor moves over it** rather than
+needing a keypress. `Enter` opens the same renderer full width, where more of a
+wide diagram fits than the preview pane allows. `~` or `F1` opens yazi's help.
+
+Icons come from a Nerd Font. Without one they render as tofu; install any Nerd
+Font and select it in your terminal.
+
+tuicr was the file tree before yazi and is no longer wired to a key. It stays
+for what it is good at: reading diffs and reviewing pull requests, which
+gh-dash hands to it. `tuicr --file .` still browses a tree if you want it.
 
 herdr has no `type = "tab"` custom command, and its `tab.create` API launches a
-shell rather than a command, so `spechub-files-tab` creates the tab and then
+shell rather than a command, so `spechub-yazi-tab` creates the tab and then
 sends the command with `herdr pane run`.
 
 ### The fork build is temporary
