@@ -89,6 +89,39 @@ Removes every managed block and the helper scripts, and leaves the binaries.
   few minutes to build. Tell them it is temporary and that `status` tracks both PRs
 - **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
 
+## Free the client's keys
+
+The keymap is bound on **this** machine, but the chords are intercepted by the
+terminal emulator on the machine the user types on. Windows Terminal binds
+`alt+shift+d` to "duplicate pane" by default, so it splits the local tab *and*
+opens a tab here. Other emulators claim other chords.
+
+After `apply`, work out which case you are in.
+
+**Running on the user's own desktop** (macOS, or Linux with a desktop session):
+the terminal emulator is right here. Read
+[assets/terminal-workspace/client-keybindings.md](../../assets/terminal-workspace/client-keybindings.md)
+and do it yourself: find the emulator's config, back it up, unbind only the
+chords that are actually bound, show the diff, and verify.
+
+**Running on a remote or headless host** (no `DISPLAY`, or an `SSH_CONNECTION`
+in the environment): you cannot reach the emulator from here. Ask first:
+
+> Do you SSH into this machine from a Windows, macOS, or Linux desktop? If so
+> I can give you a prompt to hand to an agent there, which frees the keys their
+> terminal is swallowing.
+
+Only if they say yes, print the contents of `client-keybindings.md` verbatim
+for them to paste. Do not summarise it and do not rewrite it for their
+emulator: it already covers the common ones, and the agent on that machine can
+see which is actually installed.
+
+If they say no, or the terminal is on this machine, say nothing further about
+it. A user on a plain Linux console has nothing to fix.
+
+**Never** try to edit a client-side terminal config from a remote host, and
+never ask the user to paste their local config here so you can rewrite it.
+
 ## Safety
 
 - Every edit sits between `# >>> spechub terminal-workspace >>>` markers. Hand-written config around them survives, and re-applying replaces only the managed region

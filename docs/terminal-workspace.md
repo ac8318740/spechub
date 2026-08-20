@@ -44,10 +44,15 @@ Outside herdr it simply runs the command.
 Two collisions to know about. herdr hosts a `type = "shell"` command in a real
 pane for as long as the process runs, so `spechub-tab` creates the tab and then
 hands the wait to a detached child, returning in about 100ms rather than three
-and a half seconds; without that a stray pane sits in the current tab. And
-Windows Terminal binds `alt+shift+d` to "duplicate pane" by default, which
-splits the local tab as well as sending the key on. Unbind it there with
-`{"command": "unbound", "keys": "alt+shift+d"}` in `settings.json`.
+and a half seconds; without that a stray pane sits in the current tab. And the
+terminal emulator you type in may claim the same chords: Windows Terminal binds
+`alt+shift+d` to "duplicate pane" by default, so it splits the local tab as well
+as sending the key on.
+
+That has to be fixed where the emulator runs, not here.
+[assets/terminal-workspace/client-keybindings.md](../assets/terminal-workspace/client-keybindings.md)
+lists every chord this workspace uses and how to unbind them in the common
+emulators. Hand it to an agent on that machine, or follow it yourself.
 
 yazi previews each file type with its own command, and markdown is routed to
 `spechub-md`, so a document renders **as the cursor moves over it** rather than
