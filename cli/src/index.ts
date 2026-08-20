@@ -1,16 +1,11 @@
 import { Command } from 'commander';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-const pkg = JSON.parse(
-  readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')
-);
+import { resolveVersion } from './lib/version.js';
 
 const program = new Command()
   .name('spechub')
   .description('CLI for spec-driven development')
-  .version(pkg.version);
+  .version(resolveVersion(import.meta.dirname));
 
 // Commands are registered by their own modules
 const commands = await Promise.all([

@@ -240,7 +240,7 @@ split_horizontal = ["prefix+minus", "alt+minus"]
 [[keys.command]]
 key = "alt+d"
 type = "popup"
-command = "hdiff"
+command = "spechub-diff"
 description = "diff (diffnav)"
 width = "90%"
 height = "90%"
@@ -248,7 +248,7 @@ height = "90%"
 [[keys.command]]
 key = "alt+i"
 type = "popup"
-command = "hdash"
+command = "spechub-dash"
 description = "PR dashboard"
 width = "95%"
 height = "95%"
@@ -312,9 +312,9 @@ keybindings:
 
 Any GitHub search string works as a section filter, so anything you can type into GitHub's search box becomes a tab. Avoid binding `R`: it is the built-in refresh-all.
 
-### Two helper scripts
+### The diff and dashboard helpers
 
-`hdiff` picks the most relevant diff, so one key always shows something useful. It also resolves the case where a pane sits in herdr's `<root>/<repo>/` grouping directory rather than in a checkout, which happens often:
+`spechub-diff` picks the most relevant diff, so one key always shows something useful. It also resolves the case where a pane sits in herdr's `<root>/<repo>/` grouping directory rather than in a checkout, which happens often:
 
 ```bash
 #!/usr/bin/env bash
@@ -331,7 +331,7 @@ else
 fi
 ```
 
-`hdash` adds a section for whichever repository you are standing in, then hands a generated config to gh-dash:
+`spechub-dash` adds a section for whichever repository you are standing in, then hands a generated config to gh-dash:
 
 ```bash
 #!/usr/bin/env bash

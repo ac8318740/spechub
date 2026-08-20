@@ -10666,7 +10666,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse(src, reviver, options) {
+    function parse2(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -10707,7 +10707,7 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports.parse = parse;
+    exports.parse = parse2;
     exports.parseAllDocuments = parseAllDocuments;
     exports.parseDocument = parseDocument;
     exports.stringify = stringify;
@@ -11283,7 +11283,7 @@ var init_source = __esm({
 });
 
 // src/lib/constants.ts
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 import { homedir } from "node:os";
 var SPECHUB_DIR, CHANGES_DIR, MAPS_DIR, SPECS_DIR, ARCHIVE_DIR, CONFIG_FILE, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE, GLOBAL_DATA_DIR;
 var init_constants = __esm({
@@ -11295,31 +11295,31 @@ var init_constants = __esm({
     SPECS_DIR = "specs";
     ARCHIVE_DIR = "archive";
     CONFIG_FILE = "config.yaml";
-    GLOBAL_CONFIG_DIR = join(
-      process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+    GLOBAL_CONFIG_DIR = join2(
+      process.env.XDG_CONFIG_HOME ?? join2(homedir(), ".config"),
       "spechub"
     );
-    GLOBAL_CONFIG_FILE = join(GLOBAL_CONFIG_DIR, "config.json");
-    GLOBAL_DATA_DIR = join(
-      process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
+    GLOBAL_CONFIG_FILE = join2(GLOBAL_CONFIG_DIR, "config.json");
+    GLOBAL_DATA_DIR = join2(
+      process.env.XDG_DATA_HOME ?? join2(homedir(), ".local", "share"),
       "spechub"
     );
   }
 });
 
 // src/lib/utils.ts
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
-import { join as join2 } from "node:path";
+import { existsSync, mkdirSync, readFileSync as readFileSync2, readdirSync } from "node:fs";
+import { join as join3 } from "node:path";
 function ensureDir(path) {
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
 }
 function listChanges(root) {
-  const dir = join2(root, SPECHUB_DIR, CHANGES_DIR);
+  const dir = join3(root, SPECHUB_DIR, CHANGES_DIR);
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== ARCHIVE_DIR).map((e) => e.name);
 }
 function listSpecs(root) {
-  const dir = join2(root, SPECHUB_DIR, SPECS_DIR);
+  const dir = join3(root, SPECHUB_DIR, SPECS_DIR);
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 }
@@ -11348,20 +11348,20 @@ __export(init_exports, {
   register: () => register
 });
 import { existsSync as existsSync2, writeFileSync } from "node:fs";
-import { join as join3, resolve } from "node:path";
+import { join as join4, resolve } from "node:path";
 function register(program3) {
   program3.command("init").description("Initialize SpecHub in a project").argument("[path]", "project directory", ".").option("--force", "overwrite existing configuration").action((path, opts) => {
     const root = resolve(path);
-    const dir = join3(root, SPECHUB_DIR);
+    const dir = join4(root, SPECHUB_DIR);
     if (existsSync2(dir) && !opts.force) {
       console.error(source_default.yellow(`${SPECHUB_DIR}/ already exists. Use --force to overwrite.`));
       process.exit(1);
     }
-    ensureDir(join3(dir, SPECS_DIR));
+    ensureDir(join4(dir, SPECS_DIR));
     const config = {
       context: {}
     };
-    writeFileSync(join3(dir, CONFIG_FILE), (0, import_yaml2.stringify)(config), "utf-8");
+    writeFileSync(join4(dir, CONFIG_FILE), (0, import_yaml2.stringify)(config), "utf-8");
     console.log(source_default.green("Initialized SpecHub project:"));
     console.log(`  ${SPECHUB_DIR}/`);
     console.log(`  ${SPECHUB_DIR}/${SPECS_DIR}/`);
@@ -11381,11 +11381,11 @@ var init_init = __esm({
 
 // src/lib/project.ts
 import { existsSync as existsSync3 } from "node:fs";
-import { join as join4, resolve as resolve2 } from "node:path";
+import { join as join5, resolve as resolve2 } from "node:path";
 function findProjectRoot(from = process.cwd()) {
   let dir = resolve2(from);
   while (true) {
-    if (existsSync3(join4(dir, SPECHUB_DIR))) return dir;
+    if (existsSync3(join5(dir, SPECHUB_DIR))) return dir;
     const parent = resolve2(dir, "..");
     if (parent === dir) return null;
     dir = parent;
@@ -11404,7 +11404,7 @@ __export(list_exports, {
   register: () => register2
 });
 import { existsSync as existsSync4, readdirSync as readdirSync2, statSync } from "node:fs";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 function register2(program3) {
   program3.command("list").description("List active changes or specs").option("--specs", "list specs instead of changes").option("--changes", "list changes (default)").option("--json", "output as JSON").option("--sort <order>", "sort order: name or recent", "recent").action((opts) => {
     const root = findProjectRoot();
@@ -11413,8 +11413,8 @@ function register2(program3) {
     const items = [];
     if (showSpecs) {
       for (const name of listSpecs(root)) {
-        const specDir = join5(root, SPECHUB_DIR, SPECS_DIR, name);
-        const specFile = join5(specDir, "spec.md");
+        const specDir = join6(root, SPECHUB_DIR, SPECS_DIR, name);
+        const specFile = join6(specDir, "spec.md");
         items.push({
           name,
           type: "spec",
@@ -11424,7 +11424,7 @@ function register2(program3) {
       }
     } else {
       for (const name of listChanges(root)) {
-        const changeDir = join5(root, SPECHUB_DIR, CHANGES_DIR, name);
+        const changeDir = join6(root, SPECHUB_DIR, CHANGES_DIR, name);
         const artifacts = existsSync4(changeDir) ? readdirSync2(changeDir).filter((f) => f.endsWith(".md")).map((f) => f.replace(".md", "")) : [];
         items.push({
           name,
@@ -11474,8 +11474,8 @@ var show_exports = {};
 __export(show_exports, {
   register: () => register3
 });
-import { existsSync as existsSync5, readFileSync as readFileSync2, readdirSync as readdirSync3 } from "node:fs";
-import { join as join6 } from "node:path";
+import { existsSync as existsSync5, readFileSync as readFileSync3, readdirSync as readdirSync3 } from "node:fs";
+import { join as join7 } from "node:path";
 function register3(program3) {
   program3.command("show").description("Display a change or spec").argument("[name]", "change or spec name").option("--json", "output as JSON").option("--type <type>", "force type: change or spec").action((name, opts) => {
     const root = findProjectRoot();
@@ -11484,8 +11484,8 @@ function register3(program3) {
       console.error(source_default.red("Provide a change or spec name."));
       process.exit(1);
     }
-    const changeDir = join6(root, SPECHUB_DIR, CHANGES_DIR, name);
-    const specDir = join6(root, SPECHUB_DIR, SPECS_DIR, name);
+    const changeDir = join7(root, SPECHUB_DIR, CHANGES_DIR, name);
+    const specDir = join7(root, SPECHUB_DIR, SPECS_DIR, name);
     let type;
     let targetDir;
     if (opts.type === "spec" || !opts.type && !existsSync5(changeDir) && existsSync5(specDir)) {
@@ -11502,12 +11502,12 @@ function register3(program3) {
       process.exit(1);
     }
     if (type === "spec") {
-      const specFile = join6(targetDir, "spec.md");
+      const specFile = join7(targetDir, "spec.md");
       if (!existsSync5(specFile)) {
         console.error(source_default.red(`Spec '${name}' has no spec.md file.`));
         process.exit(1);
       }
-      const content = readFileSync2(specFile, "utf-8");
+      const content = readFileSync3(specFile, "utf-8");
       if (opts.json) {
         console.log(JSON.stringify({ name, type: "spec", content }, null, 2));
       } else {
@@ -11518,7 +11518,7 @@ function register3(program3) {
     const files = readdirSync3(targetDir).filter((f) => f.endsWith(".md"));
     const artifacts = {};
     for (const file of files) {
-      artifacts[file.replace(".md", "")] = readFileSync2(join6(targetDir, file), "utf-8");
+      artifacts[file.replace(".md", "")] = readFileSync3(join7(targetDir, file), "utf-8");
     }
     if (opts.json) {
       console.log(JSON.stringify({ name, type: "change", artifacts }, null, 2));
@@ -11547,7 +11547,7 @@ __export(archive_exports, {
   register: () => register4
 });
 import { existsSync as existsSync6, cpSync, rmSync } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 function register4(program3) {
   program3.command("archive").description("Archive a completed change").argument("[name]", "change name").option("-y, --yes", "skip confirmation").option("--skip-specs", "skip living spec updates").action((name, opts) => {
     const root = findProjectRoot();
@@ -11565,14 +11565,14 @@ function register4(program3) {
       console.log(source_default.dim("\nRun: spechub archive <name>"));
       return;
     }
-    const changeDir = join7(root, SPECHUB_DIR, CHANGES_DIR, name);
+    const changeDir = join8(root, SPECHUB_DIR, CHANGES_DIR, name);
     if (!existsSync6(changeDir)) {
       console.error(source_default.red(`Change '${name}' not found.`));
       process.exit(1);
     }
     const archiveName = `${formatDate()}-${name}`;
-    const archiveDir = join7(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR, archiveName);
-    ensureDir(join7(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR));
+    const archiveDir = join8(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR, archiveName);
+    ensureDir(join8(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR));
     cpSync(changeDir, archiveDir, { recursive: true });
     rmSync(changeDir, { recursive: true });
     console.log(source_default.green(`Archived: ${name}`));
@@ -15700,15 +15700,15 @@ var init_zod = __esm({
 });
 
 // src/lib/nodes.ts
-import { existsSync as existsSync7, readFileSync as readFileSync3, readdirSync as readdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join8 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync4, readdirSync as readdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
+import { join as join9 } from "node:path";
 function normalizeId(id) {
   const trimmed = id.trim();
   if (!/^\d+$/.test(trimmed)) return trimmed;
   return trimmed.padStart(3, "0");
 }
 function mapDir(root, map) {
-  return join8(root, SPECHUB_DIR, MAPS_DIR, map);
+  return join9(root, SPECHUB_DIR, MAPS_DIR, map);
 }
 function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/, "") || "node";
@@ -15727,7 +15727,7 @@ function compareIds(a, b) {
   return parseInt(a, 10) - parseInt(b, 10);
 }
 function parseNodeFile(dir, file) {
-  const raw = readFileSync3(join8(dir, file), "utf-8").replace(/\r\n/g, "\n");
+  const raw = readFileSync4(join9(dir, file), "utf-8").replace(/\r\n/g, "\n");
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
@@ -15800,7 +15800,7 @@ function serializeNode(node) {
 function writeNode(root, map, node) {
   const dir = mapDir(root, map);
   ensureDir(dir);
-  writeFileSync2(join8(dir, node.file), serializeNode(node), "utf-8");
+  writeFileSync2(join9(dir, node.file), serializeNode(node), "utf-8");
 }
 function requireExisting(nodes, id, role) {
   if (!nodes.some((n) => n.id === id)) {
@@ -15985,8 +15985,8 @@ var node_exports = {};
 __export(node_exports, {
   register: () => register5
 });
-import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join9 } from "node:path";
+import { readFileSync as readFileSync5 } from "node:fs";
+import { join as join10 } from "node:path";
 function fail(message) {
   console.error(source_default.red(message));
   process.exit(1);
@@ -16012,8 +16012,8 @@ function readBody(body, bodyFile) {
   }
   if (body !== void 0) return body;
   if (bodyFile === void 0) return void 0;
-  if (bodyFile === "-") return readFileSync4(0, "utf-8");
-  return readFileSync4(bodyFile, "utf-8");
+  if (bodyFile === "-") return readFileSync5(0, "utf-8");
+  return readFileSync5(bodyFile, "utf-8");
 }
 function toJson(node) {
   return {
@@ -16075,7 +16075,7 @@ function register5(program3) {
       if (opts.json) {
         console.log(JSON.stringify({ ...toJson(node), body: node.body }, null, 2));
       } else {
-        console.log(readFileSync4(join9(mapDir(root, opts.map), node.file), "utf-8"));
+        console.log(readFileSync5(join10(mapDir(root, opts.map), node.file), "utf-8"));
       }
     } catch (err) {
       fail(err.message);
@@ -16222,10 +16222,10 @@ var config_exports = {};
 __export(config_exports, {
   register: () => register6
 });
-import { existsSync as existsSync8, readFileSync as readFileSync5, writeFileSync as writeFileSync3 } from "node:fs";
+import { existsSync as existsSync8, readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
 function readGlobalConfig() {
   if (!existsSync8(GLOBAL_CONFIG_FILE)) return {};
-  return JSON.parse(readFileSync5(GLOBAL_CONFIG_FILE, "utf-8"));
+  return JSON.parse(readFileSync6(GLOBAL_CONFIG_FILE, "utf-8"));
 }
 function writeGlobalConfig(config) {
   ensureDir(GLOBAL_CONFIG_DIR);
@@ -16333,12 +16333,35 @@ var {
 
 // src/index.ts
 import { spawnSync } from "node:child_process";
-import { readFileSync as readFileSync6 } from "node:fs";
-import { join as join10 } from "node:path";
-var pkg = JSON.parse(
-  readFileSync6(join10(import.meta.dirname, "..", "package.json"), "utf-8")
-);
-var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(pkg.version);
+
+// src/lib/version.ts
+import { readFileSync } from "node:fs";
+import { dirname, join, parse } from "node:path";
+function resolveVersion(startDir) {
+  const candidates = [join(".claude-plugin", "plugin.json"), "package.json"];
+  for (const relative of candidates) {
+    let dir = startDir;
+    const { root } = parse(dir);
+    while (true) {
+      try {
+        const parsed = JSON.parse(
+          readFileSync(join(dir, relative), "utf-8")
+        );
+        const version = parsed.version;
+        if (typeof version === "string" && version.length > 0) {
+          return version;
+        }
+      } catch {
+      }
+      if (dir === root) break;
+      dir = dirname(dir);
+    }
+  }
+  return "0.0.0-unknown";
+}
+
+// src/index.ts
+var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(resolveVersion(import.meta.dirname));
 var commands = await Promise.all([
   Promise.resolve().then(() => (init_init(), init_exports)),
   Promise.resolve().then(() => (init_list(), list_exports)),

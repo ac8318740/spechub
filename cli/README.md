@@ -4,14 +4,9 @@ The command-line half of [SpecHub](https://github.com/ac8318740/spechub) – a
 spec-driven development workflow where an agent plans changes as a graph of
 nodes before writing code.
 
-Most people get this CLI by installing the SpecHub plugin for Claude Code, which
-bundles it. Install it from npm when you want to drive a SpecHub project from
-somewhere else: a different agent harness, a script, or CI.
-
-```sh
-npm install -g spechub-cli
-spechub init
-```
+**This is not published to npm, and does not need to be installed.** It ships
+inside the SpecHub plugin as a prebuilt bundle, and the plugin's SessionStart
+hook links it into place. See [CONTRIBUTING.md](../CONTRIBUTING.md) for why.
 
 ## What it does
 
@@ -32,18 +27,17 @@ network.
 
 Run `spechub --help`, or `spechub <command> --help`, for the full surface.
 
-## Using it without the Claude Code plugin
+Any other subcommand runs `spechub-<name>` from PATH, the way git does.
 
-The CLI gives you the graph operations. It does not carry the instructions that
-tell an agent *how* to use them – those ship with the plugin as skills and
-agent definitions. To drive SpecHub from another harness you need both: this
-package, and a copy of the orchestrator guidance from the repository.
+## Using it from another agent harness
+
+Nothing stops you. The binary is on PATH at `~/.local/bin/spechub` on any
+machine with the plugin installed, and it has no Claude Code dependency.
+
+What it does not give you is the *method*: the instructions that tell an agent
+how to use these commands ship with the plugin as skills and agent definitions.
+The CLI is the substrate, not the workflow.
 
 ## Requirements
 
-Node 20 or newer. The published bundle is self-contained and installs no
-runtime dependencies.
-
-## Licence
-
-MIT.
+Node 20 or newer. The bundle is self-contained and installs no dependencies.
