@@ -491,7 +491,95 @@ exit 0
 H
   chmod +x "$BIN/spechub-tab"
 
-  say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-tab"
+  cat > "$BIN/spechub-renumber" <<'H'
+#!/usr/bin/env python3
+"""Make the herdr sidebar numbers match prefix+1..9.
+
+herdr draws a workspace's position in its stored list, but prefix+N targets the
+row's position in the grouped sidebar, where worktrees sit indented under their
+parent repo. The two agree until you create or tear down a worktree: new ones
+append to the end of the list but appear mid-sidebar under their parent, so the
+numbers you read stop being the numbers you press.
+
+This rewrites the stored order to match the grouped order, so both agree again.
+Run it after adding or removing a worktree. Safe to run repeatedly. Installed
+by spechub.
+"""
+import json
+import os
+import socket
+import sys
+
+
+def socket_path():
+    override = os.environ.get("HERDR_SOCKET_PATH")
+    if override:
+        return override
+    config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(config, "herdr", "herdr.sock")
+
+
+def call(method, params=None):
+    try:
+        conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        conn.connect(socket_path())
+    except OSError as err:
+        sys.exit(f"spechub-renumber: no herdr server at {socket_path()} ({err})")
+    with conn:
+        conn.sendall((json.dumps({"id": "renumber", "method": method,
+                                  "params": params or {}}) + "\n").encode())
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = conn.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+    lines = buf.decode().strip().splitlines()
+    if not lines:
+        sys.exit(f"spechub-renumber: herdr closed the connection during {method}")
+    reply = json.loads(lines[0])
+    if "error" in reply:
+        sys.exit(f"spechub-renumber: {method} failed: {reply['error']}")
+    return reply
+
+
+def workspaces():
+    return call("workspace.list")["result"]["workspaces"]
+
+
+def grouped_order(spaces):
+    """The order the sidebar draws: every repo's rows contiguous, each group
+    anchored where its first member sits, stored order within a group."""
+    groups, anchors = {}, {}
+    for position, space in enumerate(spaces):
+        root = (space.get("worktree") or {}).get("repo_root") or space["workspace_id"]
+        groups.setdefault(root, []).append(space["workspace_id"])
+        anchors.setdefault(root, position)
+    order = []
+    for root in sorted(groups, key=lambda key: anchors[key]):
+        order.extend(groups[root])
+    return order
+
+
+def main():
+    before = workspaces()
+    target = grouped_order(before)
+    if [space["workspace_id"] for space in before] == target:
+        print("already aligned")
+    else:
+        for index, workspace_id in enumerate(target):
+            call("workspace.move", {"workspace_id": workspace_id, "insert_index": index})
+    for space in workspaces():
+        indent = "  " if (space.get("worktree") or {}).get("is_linked_worktree") else ""
+        print(f"{space['number']:>3}  {indent}{space['label']}")
+
+
+if __name__ == "__main__":
+    main()
+H
+  chmod +x "$BIN/spechub-renumber"
+
+  say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-tab, spechub-renumber"
 }
 
 apply_herdr() {
@@ -555,6 +643,11 @@ if mod != "none":
         f'previous_tab = ["prefix+p", "{m}+left"]',
         f'next_workspace = ["{m}+down"]',
         f'previous_workspace = ["{m}+up"]',
+        # Jump to a workspace or tab by number. herdr leaves switch_workspace
+        # unbound by default and puts switch_tab on prefix+1..9, so without
+        # this there is no way to reach a workspace by number at all.
+        'switch_workspace = "prefix+1..9"',
+        f'switch_tab = "prefix+{m}+1..9"',
         f'toggle_sidebar = ["prefix+b", "{m}+s"]',
         f'goto = ["prefix+g", "{m}+g"]',
         f'zoom = ["prefix+z", "{m}+z"]',

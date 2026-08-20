@@ -217,6 +217,11 @@ previous_tab = ["prefix+p", "alt+left"]
 next_workspace = ["alt+.", "alt+down"]
 previous_workspace = ["alt+,", "alt+up"]
 
+# By number. herdr leaves switch_workspace unbound and puts switch_tab on
+# prefix+1..9, so without these there is no way to reach a workspace by number.
+switch_workspace = "prefix+1..9"
+switch_tab = "prefix+alt+1..9"
+
 # Overlays and movement.
 toggle_sidebar = ["prefix+b", "alt+s"]
 goto = ["prefix+g", "alt+g"]
@@ -355,11 +360,13 @@ Each tool has its own help: `prefix+?` in herdr (press `/` to filter), `?` in gh
 
 ### herdr
 
-Prefix is `ctrl+b`. Everything below is a direct chord that needs no prefix.
+Prefix is `ctrl+b`. Chords without it are direct and need no prefix.
 
 | Key | Action |
 |---|---|
 | `alt+1`..`alt+9` | Focus agent by row |
+| `prefix+1`..`prefix+9` | Switch workspace by row |
+| `prefix+alt+1`..`prefix+alt+9` | Switch tab by position |
 | `alt+n` / `alt+u` | Next / previous agent |
 | `alt+left` / `alt+right` | Previous / next tab |
 | `alt+up` / `alt+down` | Previous / next workspace |
@@ -378,6 +385,38 @@ Prefix is `ctrl+b`. Everything below is a direct chord that needs no prefix.
 | `prefix+x` / `prefix+shift+x` / `prefix+shift+d` | Close pane / tab / workspace |
 | `prefix+[` | Copy mode |
 | `prefix+w` | Navigate mode, a persistent movement surface |
+
+Three separate lists answer to `1..9`, and they are not the same list. `alt+N`
+walks agents, `prefix+N` walks workspaces, `prefix+alt+N` walks the tabs of the
+workspace you are in. An agent row and a workspace row that share a number are
+a coincidence.
+
+`ctrl` and `shift` are not options for a fourth. Terminals cannot encode
+`ctrl+<digit>`, and `shift+<digit>` arrives as punctuation, so herdr accepts the
+binding and then never sees the key. These three are what a terminal can carry.
+
+#### When the sidebar numbers stop matching
+
+Collapse the sidebar with `alt+s` and each workspace shows a number. That number
+is its position in herdr's stored list. `prefix+N` uses something else: the row's
+position in the grouped sidebar, where worktrees sit indented under their parent
+repo.
+
+They agree until you touch a worktree. A new one appends to the end of the
+stored list but appears mid-sidebar under its parent, so everything below it
+shifts and the number you read stops being the number you press.
+
+```bash
+spechub-renumber
+```
+
+That rewrites the stored order to match the grouped order, so both agree again.
+Run it after creating or tearing down a worktree. It prints the result and is
+safe to run repeatedly.
+
+Two things it cannot fix. Only rows 1 to 9 are reachable, so a tenth workspace
+needs `alt+g` or `alt+up`/`alt+down`. And `prefix+N` stays positional: it is a
+row, not a name, so it still moves when the rows move.
 
 ### gh-dash
 
