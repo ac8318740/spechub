@@ -61,22 +61,37 @@ PY
 install_binary() {  # install_binary <name> <repo> <asset-match>
   local name="$1" repo="$2" match="$3"
   have "$name" && { say "$name already installed"; return 0; }
-  local url
-  url=$(curl -s "https://api.github.com/repos/$repo/releases/latest" \
-    | py "$match" <<'PY'
-import json, sys
-d = json.load(sys.stdin)
+  local url json
+  # py reads its script from stdin, so the release JSON has to arrive by
+  # environment rather than by pipe: a pipe here is silently swallowed by
+  # the heredoc and python then reads an empty stdin.
+  json=$(curl -sSf "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null)
+  [ -z "$json" ] && { say "$name: could not reach the GitHub release API"; return 1; }
+  url=$(SPECHUB_JSON="$json" py "$match" <<'PY'
+import json, os, sys
+try:
+    d = json.loads(os.environ["SPECHUB_JSON"])
+except ValueError:
+    raise SystemExit
 for a in d.get("assets", []):
     if sys.argv[1] in a["name"] and a["name"].endswith((".tar.gz", ".tgz")):
         print(a["browser_download_url"]); break
 PY
 )
   [ -z "$url" ] && { say "$name: no matching release asset, install manually"; return 1; }
-  local tmp; tmp=$(mktemp -d); trap 'rm -rf "$tmp"' RETURN
-  curl -sL "$url" -o "$tmp/a.tgz" && tar xzf "$tmp/a.tgz" -C "$tmp" || { say "$name: download failed"; return 1; }
-  local found; found=$(find "$tmp" -type f -name "$name" | head -1)
-  [ -z "$found" ] && { say "$name: binary not found in archive"; return 1; }
+  # Explicit cleanup rather than `trap ... RETURN`: a RETURN trap stays
+  # registered for every later function return in this shell, where $tmp is
+  # gone and `set -u` then aborts the run.
+  local tmp found; tmp=$(mktemp -d)
+  if ! curl -sL "$url" -o "$tmp/a.tgz" || ! tar xzf "$tmp/a.tgz" -C "$tmp"; then
+    rm -rf "$tmp"; say "$name: download failed"; return 1
+  fi
+  found=$(find "$tmp" -type f -name "$name" | head -1)
+  if [ -z "$found" ]; then
+    rm -rf "$tmp"; say "$name: binary not found in archive"; return 1
+  fi
   mkdir -p "$BIN"; cp "$found" "$BIN/$name"; chmod +x "$BIN/$name"
+  rm -rf "$tmp"
   say "$name installed to $BIN/$name"
 }
 
@@ -202,7 +217,151 @@ sleep 0.3
 herdr pane run "$pane" spechub-files >/dev/null 2>&1
 H
   chmod +x "$BIN/spechub-files-tab"
-  say "helpers written: spechub-diff, spechub-dash, spechub-files, spechub-files-tab"
+
+  cat > "$BIN/spechub-md" <<'H'
+#!/usr/bin/env bash
+# Read a markdown file in the terminal with its mermaid diagrams drawn as text.
+#
+#   spechub-md FILE.md          render to the terminal
+#   spechub-md --serve FILE.md  serve it for a real browser, print the link
+#
+# Text, not images, is deliberate: herdr emits the kitty graphics protocol and
+# no terminal reachable from Windows or Android renders that, and e-ink panels
+# render text far better than bitmaps anyway. Installed by spechub.
+set -uo pipefail
+
+PORT="${SPECHUB_MD_PORT:-6419}"
+SERVE=0
+[ "${1:-}" = "--serve" ] && { SERVE=1; shift; }
+FILE="${1:-}"
+[ -n "$FILE" ] && [ -f "$FILE" ] || { echo "usage: spechub-md [--serve] FILE.md" >&2; exit 1; }
+
+if [ "$SERVE" = "1" ]; then
+  exec python3 - "$FILE" "$PORT" <<'PY'
+import html, http.server, pathlib, re, socketserver, sys
+import markdown
+
+src, port = pathlib.Path(sys.argv[1]), int(sys.argv[2])
+VENDOR = pathlib.Path.home() / ".local/share/spechub/mermaid.min.js"
+
+CSS = """*{box-sizing:border-box}body{max-width:54rem;margin:0 auto;padding:2rem 1.25rem;
+font:16px/1.65 -apple-system,Segoe UI,system-ui,sans-serif;color:#1a1a1a;background:#fff}
+h1,h2,h3{line-height:1.25;margin:2rem 0 .75rem}h1{font-size:1.9rem}h2{font-size:1.45rem}
+code{font:14px/1.5 ui-monospace,Consolas,monospace;background:#f2f2f2;padding:.15em .35em;border-radius:3px}
+pre{background:#f7f7f7;padding:1rem;border-radius:6px;overflow-x:auto}pre code{background:none;padding:0}
+pre.mermaid{background:none;text-align:center}table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:.4rem .6rem;text-align:left}
+blockquote{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid #ccc;color:#555}
+img{max-width:100%}
+@media(prefers-color-scheme:dark){body{background:#151515;color:#e6e6e6}
+code{background:#242424}pre{background:#1d1d1d}th,td{border-color:#333}
+blockquote{border-color:#444;color:#aaa}}"""
+
+def render():
+    body = markdown.markdown(src.read_text(),
+        extensions=["fenced_code", "tables", "toc", "sane_lists"])
+    # mermaid.js wants <pre class="mermaid">, not a highlighted code block.
+    body = re.sub(r'<pre><code class="language-mermaid">(.*?)</code></pre>',
+                  lambda m: '<pre class="mermaid">' + html.unescape(m.group(1)) + "</pre>",
+                  body, flags=re.S)
+    js = ('<script src="/mermaid.js"></script>' if VENDOR.exists() else
+          '<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>')
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{html.escape(src.name)}</title><style>{CSS}</style></head><body>
+{body}
+{js}
+<script>mermaid.initialize({{startOnLoad:true,securityLevel:"loose",
+theme:matchMedia("(prefers-color-scheme:dark)").matches?"dark":"default"}});</script>
+</body></html>""".encode()
+
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/mermaid.js" and VENDOR.exists():
+            body, ctype = VENDOR.read_bytes(), "application/javascript"
+        else:
+            body, ctype = render(), "text/html; charset=utf-8"   # re-read: edits show on reload
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a): pass
+
+socketserver.TCPServer.allow_reuse_address = True
+try:
+    srv = socketserver.TCPServer(("127.0.0.1", port), H)
+except OSError as e:
+    sys.exit(f"port {port} is busy: {e}")
+url = f"http://localhost:{port}"
+# OSC 8 makes it ctrl+clickable; the bare URL below covers terminals without it.
+sys.stderr.write(f"\033]8;;{url}\033\\{src.name}\033]8;;\033\\  {url}\n")
+sys.stderr.write("  reload the page after editing. ctrl+C to stop.\n")
+if not VENDOR.exists():
+    sys.stderr.write("  note: mermaid.js not vendored, falling back to CDN\n")
+try: srv.serve_forever()
+except KeyboardInterrupt: pass
+PY
+fi
+
+
+# Terminal render: swap each mermaid fence for its text drawing, then page it.
+python3 - "$FILE" <<'PY' > /tmp/spechub-md.$$ 2>/dev/null
+import pathlib, re, shutil, subprocess, sys, tempfile
+text = pathlib.Path(sys.argv[1]).read_text()
+have = shutil.which("mermaid-ascii")
+
+# mermaid-ascii understands `graph`/`flowchart` with [square] nodes. It draws
+# styling directives as if they were nodes, and leaks any other shape syntax
+# into the label, so both are normalised away before it sees the source.
+DROP = re.compile(r"^\s*(style|classDef|class|linkStyle|click|%%)\b")
+SHAPES = [
+    (re.compile(r"(\w+)\{\{(.+?)\}\}"), r"\1[\2]"),   # {{hexagon}}
+    (re.compile(r"(\w+)\(\((.+?)\)\)"), r"\1[\2]"),   # ((circle))
+    (re.compile(r"(\w+)\(\[(.+?)\]\)"), r"\1[\2]"),   # ([stadium])
+    (re.compile(r"(\w+)\[\((.+?)\)\]"), r"\1[\2]"),   # [(database)]
+    (re.compile(r"(\w+)\{(.+?)\}"),     r"\1[\2]"),   # {decision}
+    (re.compile(r"(\w+)\((.+?)\)"),     r"\1[\2]"),   # (rounded)
+]
+
+def to_ascii(src):
+    if not have:
+        return None, "mermaid-ascii not installed"
+    body = "\n".join(l for l in src.splitlines() if not DROP.match(l))
+    for pat, rep in SHAPES:
+        body = pat.sub(rep, body)
+    if not re.match(r"\s*(graph|flowchart|sequenceDiagram)\b", body):
+        kind = (body.strip().split(None, 1) or ["?"])[0]
+        return None, f"{kind} diagrams are not supported by mermaid-ascii"
+    with tempfile.NamedTemporaryFile("w", suffix=".mmd", delete=False) as f:
+        f.write(body); path = f.name
+    r = subprocess.run(["mermaid-ascii", "--file", path],
+                       capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip():
+        return None, (r.stderr.strip().splitlines() or ["could not draw it"])[0]
+    return r.stdout.rstrip("\n"), None
+
+def repl(m):
+    art, err = to_ascii(m.group(1))
+    if art:
+        return "```\n" + art + "\n```"
+    # Keep the source visible rather than swallowing the diagram.
+    return f"> Diagram not drawn: {err}. Source:\n\n```\n{m.group(1).rstrip()}\n```"
+
+sys.stdout.write(re.sub(r"```mermaid\n(.*?)```", repl, text, flags=re.S))
+PY
+
+if command -v glow >/dev/null 2>&1; then
+  glow -p "${SPECHUB_MD_STYLE:+--style=$SPECHUB_MD_STYLE}" /tmp/spechub-md.$$ 2>/dev/null \
+    || glow -p /tmp/spechub-md.$$
+else
+  ${PAGER:-less -R} /tmp/spechub-md.$$
+fi
+rm -f /tmp/spechub-md.$$
+H
+  chmod +x "$BIN/spechub-md"
+  say "helpers written: spechub-diff, spechub-dash, spechub-files, spechub-files-tab, spechub-md"
 }
 
 apply_herdr() {
@@ -376,6 +535,25 @@ PY
   say "tuicr config written"
 }
 
+apply_markdown() {
+  [ "$(cfg_get markdown.enabled true)" = "true" ] || return 0
+  install_binary mermaid-ascii AlexanderGrooff/mermaid-ascii Linux_x86_64
+  install_binary glow charmbracelet/glow Linux_x86_64
+  # Vendored so the preview page pulls nothing from a CDN: it works offline,
+  # and on a managed laptop there is no third-party fetch to explain.
+  local share="$HOME/.local/share/spechub"
+  mkdir -p "$share"
+  if [ ! -s "$share/mermaid.min.js" ]; then
+    curl -fsSL -o "$share/mermaid.min.js" \
+      "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js" \
+      && say "mermaid.js vendored to $share" \
+      || say "mermaid.js download failed, the preview will fall back to a CDN"
+  fi
+  python3 -c 'import markdown' 2>/dev/null \
+    || say "spechub-md --serve needs python markdown: pip install --user markdown"
+  have chafa || say "optional: apt install chafa, to draw images as text"
+}
+
 apply_delta() {
   have delta || { say "delta not installed, skipping git pager"; return 0; }
   [ "$(cfg_get delta.set_git_pager true)" = "true" ] || { say "delta: git pager left alone"; return 0; }
@@ -423,9 +601,12 @@ PY
 case "$ACTION" in
   status)
     echo "config: $CFG $([ -f "$CFG" ] && echo '(found)' || echo '(missing, using defaults)')"
-    for t in herdr delta diffnav tuicr gh; do
-      printf '  %-8s %-14s enabled=%s\n' "$t" "$(have "$t" && echo installed || echo 'not installed')" \
-        "$(cfg_get "$([ "$t" = gh ] && echo gh_dash || echo "$t").enabled" true)"
+    for t in herdr delta diffnav tuicr glow mermaid-ascii gh; do
+      case "$t" in
+        gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; *) k="$t" ;;
+      esac
+      printf '  %-13s %-14s enabled=%s\n' "$t" "$(have "$t" && echo installed || echo 'not installed')" \
+        "$(cfg_get "$k.enabled" true)"
     done
     grep -q "$BEGIN" "$HERDR_CFG" 2>/dev/null && say "herdr managed block: present" || say "herdr managed block: absent"
     if [ "$(cfg_get tuicr.build_from_fork false)" = "true" ]; then
@@ -457,6 +638,7 @@ case "$ACTION" in
     [ "$(cfg_get diffnav.enabled true)" = "true" ] && install_binary diffnav dlvhdr/diffnav Linux_x86_64
     write_helpers
     [ "$(cfg_get tuicr.enabled true)"   = "true" ] && apply_tuicr
+    apply_markdown
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr
     [ "$(cfg_get delta.enabled true)"   = "true" ] && apply_delta
     [ "$(cfg_get gh_dash.enabled true)" = "true" ] && apply_ghdash
@@ -497,7 +679,8 @@ PY
     ;;
   uninstall)
     "$0" disable herdr; "$0" disable delta
-    rm -f "$BIN"/spechub-diff "$BIN"/spechub-dash "$BIN"/spechub-files "$BIN"/spechub-files-tab
+    rm -f "$BIN"/spechub-diff "$BIN"/spechub-dash "$BIN"/spechub-files \
+          "$BIN"/spechub-files-tab "$BIN"/spechub-md
     SPECHUB_ARGS="$BEGIN|$END" py "$HOME/.config/tuicr/config.toml" <<'PY'
 import os, re, sys
 p = sys.argv[1]

@@ -48,6 +48,18 @@ tuicr:
   fork: "https://github.com/ac8318740/tuicr"
   fork_branch: "local/daily"
 
+markdown:
+  enabled: true
+  # spechub-md reads a markdown file with its mermaid diagrams drawn as text,
+  # and can serve the same file to a real browser for the ones worth studying.
+  #
+  # Text rather than inline images is deliberate. herdr emits the kitty
+  # graphics protocol, and no terminal reachable over SSH from Windows or
+  # Android renders it, so an image never arrives. e-ink panels also render
+  # text far better than bitmaps: the fast refresh modes an interactive
+  # terminal needs are the ones that drop the greyscale depth an image needs.
+  preview_port: 6419
+
 gh_dash:
   enabled: true
   popup_key: "alt+i"

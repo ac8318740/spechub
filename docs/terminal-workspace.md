@@ -21,6 +21,8 @@ Run `/spechub:terminal-workspace` to install and configure all of it from a sing
 | [diffnav](https://github.com/dlvhdr/diffnav) | Diff reader | File tree beside the diff, the blast-radius view a plain pager lacks |
 | [delta](https://github.com/dandavison/delta) | Pager | Syntax highlighting for every diff, and gh-dash uses it internally |
 | [tuicr](https://github.com/agavra/tuicr) | File tree and code review | Whole-file browser with a tree, vim keys, and PR review in the same tool |
+| [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) | Diagram renderer | Draws mermaid flowcharts as box-drawing text |
+| [glow](https://github.com/charmbracelet/glow) | Markdown pager | Readable markdown in the terminal |
 
 ## tuicr and the file tree
 
@@ -60,6 +62,45 @@ clones the fork, builds `local/daily` with cargo, and writes the two keys plus
 `setup.sh status` reports the state of both pull requests. When they are merged,
 set `build_from_fork: false` and re-run `apply`. Check the merged key names
 first - review can rename them.
+
+## Reading markdown and mermaid
+
+```bash
+spechub-md NOTES.md            # terminal, diagrams drawn as text
+spechub-md --serve NOTES.md    # browser, prints a clickable link
+```
+
+Terminal mode replaces each mermaid fence with a box-drawing rendering.
+`mermaid-ascii` handles `graph`, `flowchart`, and `sequenceDiagram`; anything
+else keeps its source visible with a note rather than disappearing.
+
+Two things it normalises first, because `mermaid-ascii` handles neither:
+
+- `style`, `classDef`, `class`, `linkStyle` and `click` lines, which it would
+  otherwise draw as if each were a node
+- node shapes other than `[square]` - `{decision}`, `((circle))`, `([stadium])`,
+  `[(database)]`, `{{hexagon}}` - whose syntax would otherwise leak into the label
+
+Serve mode renders the file with python-markdown and draws diagrams with a
+**locally vendored** mermaid.js, so the page fetches nothing from a CDN. It
+binds `127.0.0.1` only, re-reads the file on every request, and prints an
+OSC 8 hyperlink. herdr rebuilds OSC 8 into the frame it sends the client, so
+ctrl+click opens the page in the browser on your own machine - as long as
+`preview_port` is forwarded from there. The bare URL prints underneath for
+terminals without OSC 8.
+
+### Why text and not inline images
+
+herdr embeds libghostty and emits the **kitty graphics protocol**. It contains
+no sixel at all. Windows Terminal renders sixel and has never supported kitty
+([microsoft/terminal#8389](https://github.com/microsoft/terminal/issues/8389) is
+still open), and no Google Play terminal supports either protocol. The
+intersection is empty, so an inline image never arrives no matter which terminal
+you pick. Text also suits e-ink, where the fast refresh modes an interactive
+terminal needs are the ones that discard the greyscale depth an image needs.
+
+`chafa` is worth adding by hand (`apt install chafa`) if you want images drawn
+as text. It ships source-only, so the setup script does not install it.
 
 ## Install
 

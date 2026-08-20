@@ -24,6 +24,7 @@ Nothing here is required to use SpecHub. Offer it, do not assume it.
 | diffnav | Diff with a file tree, on one key | `diffnav.enabled` |
 | gh-dash | Pull request triage without a browser | `gh_dash.enabled` |
 | tuicr | File tree and whole-file browser, plus code review | `tuicr.enabled` |
+| spechub-md | Markdown with mermaid diagrams, as text or in a browser | `markdown.enabled` |
 
 Background and full key tables: [docs/terminal-workspace.md](../../docs/terminal-workspace.md).
 
@@ -80,6 +81,8 @@ Removes every managed block and the helper scripts, and leaves the binaries.
 - **`herdr.worktrees_directory`**: keep it absolute. A relative value resolves against the herdr session's base directory rather than the repository being branched, so worktrees for a second repository land inside the first
 - **`herdr.integration`**: which agent reports its state to herdr. Set it to the agent the user actually runs, or `none`. Without it, herdr infers state by reading the screen
 - **`gh_dash.repo_paths`**: map each repo to its local clone. Without it, checkout and any keybinding using `{{.RepoPath}}` fail
+- **`markdown.preview_port`**: must match a port the user forwards from their
+  laptop, or `spechub-md --serve` is unreachable. Say so rather than assuming
 - **`tuicr.build_from_fork`**: leave `false` unless the user wants the two unmerged
   upstream pull requests (#607 stats, #633 resize). `true` needs cargo and takes a
   few minutes to build. Tell them it is temporary and that `status` tracks both PRs
