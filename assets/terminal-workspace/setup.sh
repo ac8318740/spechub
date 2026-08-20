@@ -110,9 +110,21 @@ pick_checkout() {
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   pick_checkout || { echo "No git checkout here: $PWD"; echo "Press any key..."; read -rsn1; exit 0; }
 fi
-if ! git diff --quiet; then git diff | diffnav
-elif ! git diff --cached --quiet; then echo "(staged)"; git diff --cached | diffnav
-else echo "(no pending changes - last commit)"; git show HEAD | diffnav; fi
+show() {  # show <label> <git-args...>; refuses to launch on an empty diff
+  local label="$1"; shift
+  local tmp; tmp=$(mktemp); git "$@" > "$tmp" 2>/dev/null
+  if grep -q '^diff --git' "$tmp"; then
+    [ -n "$label" ] && echo "$label"; diffnav < "$tmp"
+  else
+    echo "Nothing to show: $label"; echo "  $(git log -1 --format='%h %s' 2>/dev/null)"
+    echo; echo "Press any key..."; read -rsn1
+  fi
+  rm -f "$tmp"
+}
+if ! git diff --quiet; then show "" diff
+elif ! git diff --cached --quiet; then show "(staged)" diff --cached
+# -m --first-parent so a merge commit shows its diff instead of just a header
+else show "(no pending changes - last commit)" show HEAD -m --first-parent; fi
 H
   chmod +x "$BIN/spechub-diff"
 
