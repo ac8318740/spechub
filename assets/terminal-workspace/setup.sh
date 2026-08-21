@@ -798,7 +798,11 @@ bridge_attached() {
   # browser as a side effect of asking a question, which is how the stray
   # headless Chrome got there in the first place.
   [ -S "$HOME/.agent-browser/default.sock" ] || return 1
-  curl -fsS -m 2 "$BRIDGE/json/version" >/dev/null 2>&1 || return 1
+  # A second of patience, not two: the tunnel stays bound on this side after
+  # the relay at the far end stops answering, so an unhealthy bridge connects
+  # and then hangs rather than refusing. Every one of those seconds is spent
+  # in front of someone who just pressed a key.
+  curl -fsS --connect-timeout 1 -m 1 "$BRIDGE/json/version" >/dev/null 2>&1 || return 1
   case "$(timeout 10 agent-browser --cdp "$BRIDGE" get cdp-url 2>/dev/null)" in
     *"${BRIDGE##*/}"*) return 0 ;;
   esac
