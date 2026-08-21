@@ -113,7 +113,7 @@ write_helpers() {
   # Helpers this script used to write and no longer does. Upgrading otherwise
   # leaves them on PATH, shadowing nothing but confusing everything.
   rm -f "$BIN"/spechub-files "$BIN"/spechub-files-tab "$BIN"/spechub-open \
-        "$BIN"/spechub-yazi-tab
+        "$BIN"/spechub-yazi-tab "$BIN"/spechub-tab "$BIN"/spechub-renumber
   cat > "$BIN/spechub-diff" <<'H'
 #!/usr/bin/env bash
 # Show the most relevant diff in diffnav. Installed by spechub.
@@ -644,10 +644,8 @@ if mod != "none":
         f'previous_tab = ["prefix+p", "{m}+left"]',
         f'next_workspace = ["{m}+down"]',
         f'previous_workspace = ["{m}+up"]',
-        # Jump to a workspace or tab by number. herdr leaves switch_workspace
-        # unbound by default and puts switch_tab on prefix+1..9, so without
-        # this there is no way to reach a workspace by number at all.
-        'switch_workspace = "prefix+1..9"',
+        # herdr puts switch_tab on prefix+1..9 by default. Move it aside so
+        # switch_workspace below can have the plain digits.
         f'switch_tab = "prefix+{m}+1..9"',
         f'toggle_sidebar = ["prefix+b", "{m}+s"]',
         f'goto = ["prefix+g", "{m}+g"]',
@@ -659,6 +657,52 @@ if mod != "none":
         f'split_vertical = ["prefix+v", "{m}+e"]',
         f'split_horizontal = ["prefix+minus", "{m}+minus"]',
     ]
+
+# herdr leaves switch_workspace unbound, so without this there is no way to
+# reach a workspace by number at all. It is prefix-only, so it is written even
+# when the chord family is off: opting out of alt chords should not cost you
+# workspace numbers.
+keys.append('switch_workspace = "prefix+1..9"')
+
+# TOML forbids a duplicate key, so a hand-written keymap that already sets
+# something this script manages would make the merged file unparseable and
+# herdr would reject the lot. Drop our own keys from the user's [keys] table,
+# and any [[keys.command]] bound to a key we are about to claim, before
+# inserting. Anything we do not manage is left exactly as it was.
+managed = {k.split("=", 1)[0].strip() for k in keys if "=" in k}
+claimed = {key for key, *_ in CUSTOM if key}
+
+
+def tables(lines):
+    current = []
+    for line in lines:
+        if line.strip().startswith("[") and current:
+            yield current
+            current = []
+        current.append(line)
+    if current:
+        yield current
+
+
+kept = []
+for table in tables(text.splitlines()):
+    header = table[0].strip()
+    # The managed block re-declares [worktrees] in full, and TOML forbids
+    # declaring a table twice.
+    if header == "[worktrees]":
+        continue
+    if header == "[[keys.command]]":
+        bound = re.search(r'(?m)^\s*key\s*=\s*"([^"]+)"', "\n".join(table))
+        if bound and bound.group(1) in claimed:
+            continue
+    if header == "[keys]":
+        table = [ln for ln in table
+                 if not (not ln.strip().startswith("#") and "=" in ln
+                         and ln.split("=", 1)[0].strip() in managed)]
+    kept.extend(table)
+text = "\n".join(kept)
+if text and not text.endswith("\n"):
+    text += "\n"
 
 block = [begin]
 if keys:
@@ -776,6 +820,61 @@ text = (text + "\n\n" if text else "") + "\n".join(block) + "\n"
 open(path, "w").write(text)
 PY
   say "tuicr config written"
+}
+
+# The sidebar draws a workspace's position in herdr's stored list, but
+# prefix+1..9 targets its row in the grouped sidebar. Creating or removing a
+# worktree moves one and not the other, so the numbers you read stop being the
+# numbers you press. This links a tiny herdr plugin that reruns the alignment
+# on every event that can move a row, so it never needs remembering.
+apply_herdr_numbers() {
+  have herdr || return 0
+  [ "$(cfg_get herdr.renumber_plugin true)" = "true" ] || return 0
+
+  local dir="$HOME/.config/spechub/herdr-numbers"
+  mkdir -p "$dir"
+  # An absolute command: herdr runs argv without a shell and resolves relative
+  # commands from the plugin root, not from PATH.
+  cat > "$dir/herdr-plugin.toml" <<H
+id = "spechub.herdr-numbers"
+name = "SpecHub workspace numbers"
+version = "1.0.0"
+min_herdr_version = "0.8.0"
+description = "Keep the sidebar numbers matching prefix+1..9"
+platforms = ["linux", "macos", "windows"]
+
+# Every event that can move a sidebar row. workspace.moved and
+# workspace.reordered are deliberately absent: the realignment emits both, so
+# hooking them would loop forever. The helper is idempotent, so the overlap
+# between the workspace and worktree events costs nothing.
+[[events]]
+on = "workspace.created"
+command = ["$BIN/spechub-herdr-renumber"]
+
+[[events]]
+on = "workspace.closed"
+command = ["$BIN/spechub-herdr-renumber"]
+
+[[events]]
+on = "worktree.created"
+command = ["$BIN/spechub-herdr-renumber"]
+
+[[events]]
+on = "worktree.opened"
+command = ["$BIN/spechub-herdr-renumber"]
+
+[[events]]
+on = "worktree.removed"
+command = ["$BIN/spechub-herdr-renumber"]
+H
+
+  if herdr plugin list 2>/dev/null | grep -q "spechub.herdr-numbers"; then
+    say "herdr numbers plugin already linked"
+  elif herdr plugin link "$dir" >/dev/null 2>&1; then
+    say "herdr numbers plugin linked, sidebar numbers stay aligned"
+  else
+    say "herdr plugin link failed; run spechub-herdr-renumber by hand"
+  fi
 }
 
 apply_yazi() {
@@ -942,6 +1041,7 @@ case "$ACTION" in
     apply_yazi
     apply_markdown
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr
+    [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr_numbers
     [ "$(cfg_get delta.enabled true)"   = "true" ] && apply_delta
     [ "$(cfg_get gh_dash.enabled true)" = "true" ] && apply_ghdash
     echo "done. open a herdr session and press prefix+? to see the keymap"
@@ -983,6 +1083,8 @@ PY
     "$0" disable herdr; "$0" disable delta
     # By prefix, which is why helpers are named spechub-*: anything this
     # script ever wrote goes, including helpers retired in an older version.
+    herdr plugin unlink spechub.herdr-numbers >/dev/null 2>&1 || true
+    rm -rf "$HOME/.config/spechub/herdr-numbers"
     rm -f "$BIN"/spechub-*
     SPECHUB_ARGS="$BEGIN|$END" py "$HOME/.config/tuicr/config.toml" <<'PY'
 import os, re, sys

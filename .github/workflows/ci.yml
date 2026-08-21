@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  cli:
+    name: CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+
+      - run: npm ci
+        working-directory: cli
+
+      - run: npm run typecheck
+        working-directory: cli
+
+      - run: npm test
+        working-directory: cli
+
+      # Generated files are committed so the plugin installs with no build step.
+      # That only holds if they are actually current. The pre-commit hook in
+      # CONTRIBUTING is opt-in and easy to not have installed, so this is the
+      # check that really enforces it.
+      - name: Generated files are current
+        run: |
+          npm --prefix cli run build
+          if ! git diff --exit-code -- cli/dist cli/package.json; then
+            echo "::error::cli/dist or cli/package.json is stale. Run 'npm run build' in cli/ and commit the result."
+            exit 1
+          fi
+
+  wiring:
+    name: Plugin wiring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hooks parse
+        run: for f in hooks/*.sh; do bash -n "$f"; done
+
+      # The orchestrator payload is loaded by path, so a rename or move breaks
+      # injection silently - nothing else reads that file.
+      - name: Orchestrator payload is where the hook looks for it
+        run: |
+          path=$(grep -oP '(?<=^claude_md="\$\{plugin_root\}/).*(?=")' hooks/session-start.sh)
+          echo "hook reads: $path"
+          test -n "$path" || { echo "::error::could not find the payload path in session-start.sh"; exit 1; }
+          test -f "$path" || { echo "::error::session-start.sh points at $path, which does not exist"; exit 1; }
+
+      - name: Root AGENTS.md is contributor guidance, not the payload
+        run: |
+          if grep -qi 'you are a coordinator' AGENTS.md; then
+            echo "::error::the orchestrator payload is back in the root AGENTS.md - it belongs in orchestrator/"
+            exit 1
+          fi
+
+      - name: Plugin manifest version is valid semver
+        run: |
+          v=$(python3 -c "import json;print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+          echo "version: $v"
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::bad version: $v"; exit 1; }

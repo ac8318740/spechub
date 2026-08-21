@@ -86,6 +86,11 @@ fi
 This runs `npm run build` only when `cli/src/` is part of the staged diff, then
 stages what the build regenerates. If the build fails, the commit aborts.
 
+The hook is optional and easy to forget to install. CI is what actually enforces
+it: `.github/workflows/ci.yml` rebuilds and fails the run if `cli/dist` or
+`cli/package.json` differs from what the build produces. Treat the hook as a
+convenience that saves you a red run, not as the guarantee.
+
 `npm run build` syncs `cli/package.json`'s version from
 `.claude-plugin/plugin.json`, then runs esbuild, which is why `cli/package.json`
 is staged alongside `dist/`.
