@@ -137,7 +137,7 @@ function parseLines(lines: string[]): TranscriptRecord[] {
     try {
       const parsed: unknown = JSON.parse(trimmed);
       if (parsed !== null && typeof parsed === 'object') {
-        records.push(parsed as TranscriptRecord);
+        records.push(parsed);
       }
     } catch {
       // Truncated or garbage line – ignore it and keep going.
