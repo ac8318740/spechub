@@ -113,6 +113,8 @@ Sync is skipped when `workflow.spec_sync` is `false`, when no domain map exists,
 
 `/spechub:archive` checks the map is cleared (empty frontier, no fog, no claims), spot-checks that living specs, ADRs and glossary entries captured what the effort settled, then disposes of the nodes: deleted by default, or moved to `spechub/archive/<date>-<name>/nodes/` when `workflow.maps.persist` is `true`. Keeping nodes is off by default because a kept map is a second copy of every decision, and the two drift. On the GitHub tracker there is nothing to dispose – closed issues are already the archive.
 
+Archive runs either way – the user types `/spechub:archive`, or `/spechub:map` hands off to it once the frontier empties. The disposal step asks first when the agent got there on its own.
+
 Legacy `spechub/changes/` directories from the pre-map workflow still archive the old way, so an upgrade never strands work.
 
 ## 7. Living specs
