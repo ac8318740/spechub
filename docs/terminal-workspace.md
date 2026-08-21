@@ -424,17 +424,40 @@ on the remote host. The client is a thin attach: it sends input and draws what
 the server sends back. Both helpers are written for that shape and need no
 change.
 
-`spechub-clip` still works, because herdr carries a pane's clipboard write
-across the link rather than acting on it locally: the server stages the
-payload and hands it to the attached client, which writes it to the terminal
-in front of you. Paste travels the other way for the same reason.
+`spechub-clip` should still work, and the reason is worth stating precisely
+because it is inference rather than a tested result. herdr's binary carries a
+server-to-client clipboard path - the client handles a `clipboard payload from
+server`, and the server stages one - which is the direction a pane's OSC 52
+write has to travel. herdr's own documentation never mentions OSC 52 at all,
+only OSC 7 and OSC 8, so nothing there confirms it. Attach once and check
+before believing it:
+
+```bash
+spechub-clip "herdr-remote-clipboard-test"   # then paste on the client machine
+```
+
+If it turns out not to cross, nothing is lost. herdr's client copies a
+drag-selection, and a double-click copies a token, both without any escape
+sequence, so a URL on screen is still one gesture from your clipboard.
 
 `spechub-open` runs on the server host, which is the honest answer for routes
 1 to 4: an override, a display, WSL or a bridge tunnel all have to exist
-*there*. In practice none does, so it falls to route 5 - and route 5 is the
-one that does not care, because herdr re-emits hyperlinks when it renders, so
-the link arrives at whichever terminal you attached from and ctrl+click opens
-the browser on that machine. Which is where you are sitting.
+*there*. In practice none does, so it falls to route 5, which is the one built
+for this. herdr tracks hyperlinks per cell and re-emits them when it renders,
+so the link is drawn by the client rather than shipped as raw bytes, and
+ctrl+click opens the browser on the machine you attached from.
+
+Route 5 also degrades further than the others. Even with no OSC 8 and no OSC
+52 at all, the URL is on screen as plain text, which drag-select copies. That
+is why the link is its own text rather than a label over it.
+
+One thing that does change under `--remote` belongs to herdr, not to these
+helpers. With the default `--remote-keybindings local`, chords resolve from
+the *client's* config, so the `[keys]` block `setup.sh` writes on the server
+is ignored and every chord it configured looks broken. Attach with
+`--remote-keybindings server` to keep the server config as the single source.
+gh-dash keybindings are unaffected either way: gh-dash reads its own config on
+the server, where it runs.
 
 ### On a machine with none of this
 

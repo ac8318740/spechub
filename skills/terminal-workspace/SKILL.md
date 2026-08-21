@@ -143,11 +143,22 @@ Do not suggest installing a browser or an X server on the VM to fix this. The
 browser belongs on the machine the user is sitting at.
 
 Under `herdr --remote`, panes run on the remote host, so `spechub-open` looks
-for a browser there and normally finds none. That is fine and needs no
-configuration: herdr carries clipboard writes and hyperlinks across the link,
-so the copy and the clickable link both arrive at the terminal you attached
-from. Do not add per-host browser configuration to make it "work" - it already
-does.
+for a browser there and normally finds none. That is expected, not broken: it
+falls to the link route, which the client draws. Do not add per-host browser
+configuration to "fix" it.
+
+Two things to be accurate about rather than assume:
+
+- Whether a pane's OSC 52 write crosses the remote link is inferred from
+  herdr's binary, not from its documentation, which never mentions OSC 52.
+  Have the user run `spechub-clip test-string` after attaching and paste on
+  the client. If it does not cross, say so plainly - the link is still on
+  screen and herdr's own drag-select copies it
+- With the default `--remote-keybindings local`, herdr resolves chords from
+  the client config, so the `[keys]` block `setup.sh` writes on the server is
+  ignored. That is a herdr attach flag, not something to fix in the config:
+  attach with `--remote-keybindings server`. gh-dash keybindings are
+  unaffected, because gh-dash reads its own config where it runs
 
 ### When o claims it opened something nobody saw
 
