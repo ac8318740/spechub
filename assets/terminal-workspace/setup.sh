@@ -1536,8 +1536,8 @@ kbs = cfg.setdefault("keybindings", {})
 # o built into gh-dash opens through $BROWSER, whose output it discards. That
 # is enough for a machine with a desktop and nothing at all for one without,
 # where the only way to reach a browser is to hand the terminal a link. Take
-# the key so spechub-open gets a terminal to draw on. GH_HOST covers GitHub
-# Enterprise, whose URLs are the same shape on a different host.
+# the key so spechub-open gets a terminal to draw on. GH_HOST covers
+# GitHub Enterprise, whose URLs are the same shape on a different host.
 open_key = (tw.get("remote", {}) or {}).get("open_key", "o")
 if open_key:
     host = "https://${GH_HOST:-github.com}"
