@@ -1,6 +1,6 @@
 ---
 name: visual-docs
-description: Write or restructure documentation that leads with a diagram and derives its structure from it. Use whenever the user asks for docs, a README, an architecture or workflow write-up, an explainer, or says existing docs are hard to follow, confusing, or a wall of text – and whenever you are about to write more than two paragraphs explaining how something works. Applies the Minto pyramid: answer first, then support.
+description: "Write or restructure documentation that leads with a diagram and derives its structure from it. Use whenever the user asks for docs, a README, an architecture or workflow write-up, an explainer, or says existing docs are hard to follow, confusing, or a wall of text – and whenever you are about to write more than two paragraphs explaining how something works. Applies the Minto pyramid: answer first, then support."
 ---
 
 # visual-docs
