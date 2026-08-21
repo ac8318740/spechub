@@ -164,9 +164,6 @@ H
 #!/usr/bin/env bash
 # gh-dash with a section for the repo you are standing in. Installed by spechub.
 set -uo pipefail
-# o on a pull request opens it through $BROWSER. A dev VM has no desktop
-# for xdg-open to draw on, so gh-dash's default fails with exit status 1.
-export BROWSER=spechub-open
 # Every action gh-dash takes shells out to gh and discards its stderr, so a
 # refusal from GitHub reaches you as "exit status 1" for two seconds. spechub-gh
 # goes in front of the real gh under that name and speaks the refusal aloud.
@@ -747,19 +744,37 @@ H
 # Open a URL from a machine that has no browser of its own.
 #
 #   spechub-open https://github.com/owner/repo/pull/1
+#   spechub-open --why      which route this machine will take, without taking it
 #
-# Set as $BROWSER by spechub-dash, so o on a pull request reaches a real
-# browser instead of failing on an xdg-open with no display to draw on. gh's
-# browser module discards whatever this prints, so nothing here is written to
-# be read - the herdr notification is the only message that gets through.
+# gh-dash binds o to this. It is bound as a keybinding rather than left to
+# $BROWSER because gh-dash runs $BROWSER with its output discarded and the
+# dashboard still drawn: a route that needs to say anything, or to hand you a
+# link to click, has nowhere to put it. As a keybinding gh-dash steps aside
+# and gives us the terminal.
 #
 # In order: an explicit override, a desktop on this machine, WSL, the
-# Playwriter bridge to Chrome on the laptop, and last the clipboard.
+# Playwriter bridge to Chrome on the laptop, and last a link you can click.
 # Installed by spechub.
 set -uo pipefail
 
+LOG="${XDG_CACHE_HOME:-$HOME/.cache}/spechub/open.log"
+# An ambient $AGENT_BROWSER_CDP is a hint, never the thing we rely on. See
+# the bridge branch below for what happened when it was.
+BRIDGE="${SPECHUB_BRIDGE_URL:-${AGENT_BROWSER_CDP:-http://127.0.0.1:19988}}"
+
+WHY=0
+[ "${1:-}" = "--why" ] && { WHY=1; shift; }
 URL="${1:-}"
-[ -n "$URL" ] || { echo "usage: spechub-open <url>" >&2; exit 2; }
+[ -n "$URL" ] || [ "$WHY" = 1 ] \
+  || { echo "usage: spechub-open [--why] <url>" >&2; exit 2; }
+
+log() {  # the only record of what happened when the caller discards output
+  mkdir -p "$(dirname "$LOG")"
+  printf '%s %s\n' "$(date -Is)" "$*" >> "$LOG"
+  if [ "$(wc -l < "$LOG" 2>/dev/null || echo 0)" -gt 400 ]; then
+    tail -n 200 "$LOG" > "$LOG.trim" && mv "$LOG.trim" "$LOG"
+  fi
+}
 
 note() {  # say something a suspended TUI cannot print for us
   command -v herdr >/dev/null 2>&1 \
@@ -767,46 +782,116 @@ note() {  # say something a suspended TUI cannot print for us
   return 0
 }
 
-# 1. Whatever the user named, no questions asked.
-if [ -n "${SPECHUB_OPEN_CMD:-}" ]; then
-  exec ${SPECHUB_OPEN_CMD} "$URL"
-fi
+# Not [ -t 1 ]: route() runs inside a command substitution for --why, which
+# makes stdout a pipe even when the terminal is right there.
+has_tty() { { : > /dev/tty; } 2>/dev/null; }
 
-# 2. A desktop on this machine. $BROWSER is cleared first: xdg-open reads it
-# too, and $BROWSER is how gh-dash called us, so leaving it set loops.
-if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null 2>&1; then
-  BROWSER= exec xdg-open "$URL"
-fi
+# The relay answering on its HTTP port is not the same as the browser being
+# reachable through it. agent-browser quietly launches a headless Chrome on
+# this machine when it cannot attach, and that Chrome navigates happily and
+# shows nobody anything - which is how o came to report a page it had opened
+# where no one could see it. So ask what it is actually attached to.
+bridge_attached() {
+  [ "${SPECHUB_OPEN_BRIDGE:-auto}" != "off" ] || return 1
+  command -v agent-browser >/dev/null 2>&1 || return 1
+  # Only when a session is already running. Probing otherwise starts a
+  # browser as a side effect of asking a question, which is how the stray
+  # headless Chrome got there in the first place.
+  [ -S "$HOME/.agent-browser/default.sock" ] || return 1
+  curl -fsS -m 2 "$BRIDGE/json/version" >/dev/null 2>&1 || return 1
+  case "$(timeout 10 agent-browser --cdp "$BRIDGE" get cdp-url 2>/dev/null)" in
+    *"${BRIDGE##*/}"*) return 0 ;;
+  esac
+  return 1
+}
 
-# 3. WSL. The Windows half of the same machine holds the browser.
-for opener in wslview wsl-open; do
-  command -v "$opener" >/dev/null 2>&1 && exec "$opener" "$URL"
-done
-if command -v explorer.exe >/dev/null 2>&1; then
-  # explorer.exe reports failure even when it opened the page. Ignore it.
-  explorer.exe "$URL" >/dev/null 2>&1
-  exit 0
-fi
+route() {  # the route this machine will take, decided without taking it
+  [ -n "${SPECHUB_OPEN_CMD:-}" ] && { echo "command"; return; }
+  [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null 2>&1 \
+    && { echo "xdg-open"; return; }
+  local opener
+  for opener in wslview wsl-open explorer.exe; do
+    command -v "$opener" >/dev/null 2>&1 && { echo "$opener"; return; }
+  done
+  bridge_attached && { echo "bridge"; return; }
+  has_tty && { echo "link"; return; }
+  echo "clipboard"
+}
 
-# 4. The Playwriter bridge: a reverse SSH tunnel to Chrome on the laptop.
-# A new tab first, so this never navigates a page an agent is working in.
-BRIDGE="${SPECHUB_BRIDGE_URL:-http://127.0.0.1:19988}"
-if [ "${SPECHUB_OPEN_BRIDGE:-auto}" != "off" ] \
-   && command -v agent-browser >/dev/null 2>&1 \
-   && curl -fsS -m 2 "$BRIDGE/json/version" >/dev/null 2>&1; then
-  if timeout 20 agent-browser tab new >/dev/null 2>&1 \
-     && timeout 30 agent-browser open "$URL" >/dev/null 2>&1; then
+# A clickable link, on the terminal you are actually sitting at. OSC 8 is a
+# hyperlink the terminal draws itself, so ctrl+click reaches the browser on
+# your own machine with nothing installed anywhere in between. The bare URL
+# on the next line covers terminals that ignore OSC 8, and the clipboard
+# copy covers not wanting to click at all.
+link_screen() {
+  printf '%s' "$URL" | spechub-clip
+  {
+    printf '\n  Open on GitHub\n\n  '
+    printf '\033]8;;%s\033\\%s\033]8;;\033\\\n' "$URL" "$URL"
+    printf '  ctrl+click the link, or paste it - it is on your clipboard\n\n'
+    printf '  Press any key to go back.'
+  } > /dev/tty
+  read -rsn1 < /dev/tty
+  printf '\n' > /dev/tty
+}
+
+ROUTE="$(route)"
+[ "$WHY" = 1 ] && { echo "$ROUTE"; exit 0; }
+
+case "$ROUTE" in
+  command)
+    log "override: $SPECHUB_OPEN_CMD $URL"
+    exec ${SPECHUB_OPEN_CMD} "$URL"
+    ;;
+  xdg-open)
+    # $BROWSER is cleared first: xdg-open reads it too, and $BROWSER may well
+    # be pointing back here, which would loop.
+    log "xdg-open: $URL"
+    BROWSER= exec xdg-open "$URL"
+    ;;
+  explorer.exe)
+    # explorer.exe reports failure even when it opened the page. Ignore it.
+    log "explorer.exe: $URL"
+    explorer.exe "$URL" >/dev/null 2>&1
     exit 0
-  fi
-  note "Browser bridge failed" "$URL"
-fi
+    ;;
+  wslview|wsl-open)
+    log "$ROUTE: $URL"
+    exec "$ROUTE" "$URL"
+    ;;
+  bridge)
+    # Name the endpoint rather than inheriting one. Leaning on an ambient
+    # $AGENT_BROWSER_CDP made this launch a headless Chrome on the VM when
+    # run from a herdr popup, which reported success and opened nothing
+    # anybody could see.
+    #
+    # The default session, deliberately: the relay takes one CDP client at a
+    # time, so a session of our own cannot connect while an agent holds it.
+    # That also means the new tab becomes the active one for any agent
+    # driving that browser. SPECHUB_OPEN_BRIDGE=off trades the one-key open
+    # for never touching it.
+    if timeout 20 agent-browser --cdp "$BRIDGE" tab new >/dev/null 2>&1 \
+       && timeout 30 agent-browser --cdp "$BRIDGE" open "$URL" >/dev/null 2>&1; then
+      log "bridge $BRIDGE: $URL"
+      exit 0
+    fi
+    log "bridge $BRIDGE unavailable, handing over the link: $URL"
+    if has_tty; then link_screen; exit 0; fi
+    ;;
+esac
 
-# 5. Nothing here can open it. Put it on the terminal's clipboard instead,
-# which is one paste away from the browser on the machine you are sitting at.
+[ "$ROUTE" = link ] && { log "link: $URL"; link_screen; exit 0; }
+
+# No terminal to draw on and no browser to reach. The clipboard is still one
+# paste from the browser on the machine you are sitting at, which beats
+# nothing, but report failure anyway: a silent success here is what left
+# gh-dash saying "Opened in browser" about a page that never opened.
 if printf '%s' "$URL" | spechub-clip; then
-  note "URL copied, not opened" "No browser reachable from this machine. Paste: $URL"
-  exit 0
+  log "copied, not opened: $URL"
+  note "URL copied, not opened" "No browser reachable from here. Paste: $URL"
+  exit 3
 fi
+log "no route: $URL"
 note "Cannot open URL" "$URL"
 exit 1
 H
@@ -1269,8 +1354,9 @@ if tw.get("sections"):
 if tw.get("repo_paths"):
     cfg["repoPaths"] = tw["repo_paths"]
 kb = tw.get("keybindings", {}) or {}
+MANAGED = ("tree diff", "agent review", "open in browser")
 prs = [k for k in (cfg.get("keybindings", {}) or {}).get("prs", [])
-       if k.get("name") not in ("tree diff", "agent review")]
+       if k.get("name") not in MANAGED]
 if kb.get("tree_diff"):
     prs.append({"key": kb["tree_diff"], "name": "tree diff",
                 "command": "gh pr diff {{.PrNumber}} --repo {{.RepoName}} | diffnav\n"})
@@ -1278,6 +1364,21 @@ if kb.get("agent_review"):
     prs.append({"key": kb["agent_review"], "name": "agent review",
                 "command": 'cd {{.RepoPath}} && claude "/code-review {{.PrNumber}}"\n'})
 kbs = cfg.setdefault("keybindings", {})
+# o built into gh-dash opens through $BROWSER, whose output it discards. That
+# is enough for a machine with a desktop and nothing at all for one without,
+# where the only way to reach a browser is to hand the terminal a link. Take
+# the key so spechub-open gets a terminal to draw on. GH_HOST covers GitHub
+# Enterprise, whose URLs are the same shape on a different host.
+open_key = (tw.get("remote", {}) or {}).get("open_key", "o")
+if open_key:
+    host = "https://${GH_HOST:-github.com}"
+    prs.append({"key": open_key, "name": "open in browser",
+                "command": f'spechub-open "{host}/{{{{.RepoName}}}}/pull/{{{{.PrNumber}}}}"\n'})
+    issues = [k for k in (cfg.get("keybindings", {}) or {}).get("issues", [])
+              if k.get("name") not in MANAGED]
+    issues.append({"key": open_key, "name": "open in browser",
+                   "command": f'spechub-open "{host}/{{{{.RepoName}}}}/issues/{{{{.IssueNumber}}}}"\n'})
+    kbs["issues"] = issues
 kbs["prs"] = prs
 if tw.get("page_keys", True):
     uni = [k for k in kbs.get("universal", []) if k.get("builtin") not in ("pageUp", "pageDown")]
@@ -1309,17 +1410,21 @@ case "$ACTION" in
     else
       say "clipboard: none - run apply, or copy will fail in gh-dash and friends"
     fi
-    if [ -n "${SPECHUB_OPEN_CMD:-}" ]; then
-      say "browser: \$SPECHUB_OPEN_CMD = $SPECHUB_OPEN_CMD"
-    elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
-      say "browser: xdg-open on this machine"
-    elif have wslview || have explorer.exe; then
-      say "browser: the Windows side of this machine"
-    elif have agent-browser && curl -fsS -m 2 "${SPECHUB_BRIDGE_URL:-http://127.0.0.1:19988}/json/version" >/dev/null 2>&1; then
-      say "browser: Chrome on your laptop, through the Playwriter bridge"
-    else
-      say "browser: none reachable - o will copy the URL instead of opening it"
-    fi
+    # Ask the opener itself rather than repeating its rules here. Two copies
+    # of this decision drifting apart is exactly how o came to claim it had
+    # opened a page it had not.
+    case "$(spechub-open --why 2>/dev/null)" in
+      command)      say "browser: \$SPECHUB_OPEN_CMD = $SPECHUB_OPEN_CMD" ;;
+      xdg-open)     say "browser: xdg-open on this machine" ;;
+      wslview|wsl-open|explorer.exe)
+                    say "browser: the Windows side of this machine" ;;
+      bridge)       say "browser: Chrome on your laptop, through the Playwriter bridge" ;;
+      link)         say "browser: none - o hands you a ctrl+clickable link and copies it" ;;
+      clipboard)    say "browser: none, and no terminal either - o copies and reports failure" ;;
+      *)            say "browser: unknown - run apply" ;;
+    esac
+    [ -f "$HOME/.cache/spechub/open.log" ] \
+      && say "last open: $(tail -1 "$HOME/.cache/spechub/open.log")"
     if [ "$(cfg_get tuicr.build_from_fork false)" = "true" ]; then
       echo
       say "tuicr: local fork build - this is meant to be temporary"

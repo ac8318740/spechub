@@ -241,11 +241,63 @@ else
   no "the xclip stand-in speaks the flags gh-dash passes it"
 fi
 
-# o reaches a browser only because spechub-dash names one.
-if grep -q '^export BROWSER=spechub-open$' "$(extract spechub-dash)"; then
-  ok "spechub-dash points \$BROWSER at spechub-open"
+# o is a gh-dash keybinding, not a $BROWSER setting: gh-dash runs $BROWSER
+# with its output discarded and the dashboard still drawn, so the link route
+# would have nowhere to draw. Run the real config writer and read the result.
+GHKB="$WORK/ghdash.py"
+awk "/^  SPECHUB_CFG=.*py \"\\\$GHDASH_CFG\" <<'PY'\$/{f=1; next} f && /^PY\$/{exit} f" \
+  "$SETUP" > "$GHKB"
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  : > "$WORK/gh-tw.yaml"
+  printf 'prSections:\n- {title: Mine, filters: "is:open"}\n' > "$WORK/gh-dash.yml"
+  SPECHUB_CFG="$WORK/gh-tw.yaml" python3 "$GHKB" "$WORK/gh-dash.yml" >/dev/null 2>&1
+  if python3 - "$WORK/gh-dash.yml" <<'GHCHK'
+import sys, yaml
+kb = (yaml.safe_load(open(sys.argv[1])) or {}).get("keybindings", {})
+for view, path in (("prs", "/pull/"), ("issues", "/issues/")):
+    binds = [k for k in kb.get(view, []) if k.get("key") == "o"]
+    assert len(binds) == 1, (view, kb.get(view))
+    cmd = binds[0]["command"]
+    assert cmd.startswith("spechub-open "), cmd
+    assert path in cmd, (view, cmd)
+GHCHK
+  then ok "apply_ghdash binds o to spechub-open for prs and issues"
+  else no "apply_ghdash binds o to spechub-open for prs and issues"; fi
 else
-  no "spechub-dash points \$BROWSER at spechub-open"
+  ok "apply_ghdash keybindings skipped (no PyYAML)"
+fi
+
+# Re-applying must replace that binding, never stack a second o on top of it.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  SPECHUB_CFG="$WORK/gh-tw.yaml" python3 "$GHKB" "$WORK/gh-dash.yml" >/dev/null 2>&1
+  if [ "$(python3 -c '
+import sys, yaml
+kb = (yaml.safe_load(open(sys.argv[1])) or {}).get("keybindings", {})
+print(sum(1 for v in ("prs", "issues") for k in kb.get(v, []) if k.get("key") == "o"))
+' "$WORK/gh-dash.yml")" = "2" ]; then
+    ok "re-applying does not stack a second o binding"
+  else
+    no "re-applying does not stack a second o binding"
+  fi
+fi
+
+# The route that always works: a terminal, and nothing else. script gives the
+# helper a pty, which is what tells it to draw a link rather than give up.
+screen=$(printf x | bare script -qec 'SPECHUB_OPEN_BRIDGE=off spechub-open https://example.com/pr/9' /dev/null 2>/dev/null)
+if printf '%s' "$screen" | grep -q $'\033]8;;https://example.com/pr/9\033' \
+   && [ "$(bare spechub-clip --out 2>/dev/null)" = "https://example.com/pr/9" ]; then
+  ok "with a terminal and no browser, o draws a clickable link and copies it"
+else
+  no "with a terminal and no browser, o draws a clickable link and copies it"
+fi
+
+# The bridge is only taken once it has proved what it is attached to. With no
+# agent-browser session running, it must not even be asked - probing starts a
+# browser as a side effect.
+if [ "$(bare spechub-open --why 2>/dev/null)" != "bridge" ]; then
+  ok "the bridge route is skipped when nothing has attached to it"
+else
+  no "the bridge route is skipped when nothing has attached to it"
 fi
 
 if [ "$(bare env SPECHUB_OPEN_CMD=echo spechub-open https://example.com 2>/dev/null)" \

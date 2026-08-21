@@ -396,19 +396,30 @@ To reach programs that only know how to shell out, `apply` also writes an `xclip
 
 ### spechub-open: the browser
 
-`spechub-dash` exports `BROWSER=spechub-open`, so `o` runs it. It tries, in order:
+`o` is a gh-dash keybinding rather than a `$BROWSER` setting, and that is deliberate. gh-dash runs `$BROWSER` with its output discarded while the dashboard is still drawn, so a route that needs to say anything, or to hand you a link to click, has nowhere to put it. As a keybinding gh-dash steps aside and gives `spechub-open` the terminal.
+
+It tries, in order:
 
 1. `$SPECHUB_OPEN_CMD`, if you set one. The escape hatch
 2. `xdg-open`, when this machine has a display after all
 3. `wslview` or `explorer.exe`, when the Windows half of the machine holds the browser
-4. Chrome on your laptop, through the [Playwriter bridge](../skills/bridge/SKILL.md), if the tunnel is up. It opens a new tab first, so it never navigates a page an agent is working in
-5. Failing all of that, the URL goes on your clipboard and a herdr notification says so. One paste away, rather than nothing
+4. Chrome on your laptop through the [Playwriter bridge](../skills/bridge/SKILL.md), but only once it has proved the browser is really reachable that way. See below
+5. A link you can click: the URL as an OSC 8 hyperlink, which the terminal you are sitting at draws itself, so ctrl+click reaches your own browser with nothing installed in between. The bare URL sits under it for terminals that ignore OSC 8, and it goes on your clipboard either way
+6. With no terminal to draw on either, the URL still goes on the clipboard, but the command reports failure. Silent success is what left gh-dash claiming it had opened a page that never opened
 
-`setup.sh status` prints which of those a machine will use, which is the first thing to check when `o` or `y` misbehaves.
+`setup.sh status` prints which route a machine will take, and the last line of `~/.cache/spechub/open.log` says what the last press actually did.
+
+### Why the bridge has to prove itself
+
+`agent-browser` launches a headless Chrome on the local machine when it cannot attach to the endpoint you gave it. That Chrome navigates perfectly happily, reports success, and shows nobody anything: the page opens on the VM, several hops from the screen you are looking at.
+
+Nothing about the relay answering on port 19988 rules that out either. Ours answered `/json/version` while refusing every CDP connection with `Multiple extensions connected. Specify extensionId.`, so every open landed in a headless Chrome for hours without one error message.
+
+So the bridge route asks `agent-browser get cdp-url` what it is actually attached to, and takes the route only when the answer is the bridge. It also skips the question entirely unless a session is already running, because asking it otherwise starts a browser as a side effect.
 
 ### On a machine with none of this
 
-Only tier 5 is guaranteed. A VM with no bridge and no WSL copies the URL and tells you; it cannot conjure a browser. If you want a real one-key open there, give `spechub-open` something to call:
+Route 5 needs only a terminal, so it is the one that always works: over SSH, through herdr, and under `herdr --remote`. If you want a real one-key open instead, give `spechub-open` something that can do it:
 
 ```bash
 export SPECHUB_OPEN_CMD="ssh laptop open"   # or any command taking a URL

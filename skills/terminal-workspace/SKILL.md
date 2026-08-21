@@ -102,15 +102,21 @@ A dev VM has no display and no clipboard. Three gh-dash keys land on that:
 
 ```bash
 bash "$SETUP" apply
-bash "$SETUP" status     # read the last two lines
+bash "$SETUP" status     # read the last lines
 ```
 
-The last two `status` lines say where a copy and an open will actually land on
+`y` and `Y` keep gh-dash's own behaviour, backed by an `xclip` stand-in that
+copies over OSC 52. `o` becomes a keybinding running `spechub-open`, because
+gh-dash runs `$BROWSER` with its output discarded and the dashboard still
+drawn, which leaves a route that needs to hand you a link nowhere to draw it.
+
+The last lines of `status` say where a copy and an open will actually land on
 **this** machine:
 
 ```
 clipboard: xclip stand-in, copying to your terminal over OSC 52
-browser: Chrome on your laptop, through the Playwriter bridge
+browser: none - o hands you a ctrl+clickable link and copies it
+last open: 2026-08-21T03:23:07+00:00 link: https://github.com/owner/repo/pull/30
 ```
 
 Read them before debugging anything else. What each means:
@@ -120,12 +126,14 @@ Read them before debugging anything else. What each means:
 | `clipboard: xclip stand-in` | Copy reaches your terminal over OSC 52 | Nothing |
 | `clipboard: this machine has a display` | It has a real clipboard | Nothing |
 | `clipboard: none` | `apply` has not run, or `remote.clipboard_shim` is false | Run `apply` |
-| `browser: Chrome on your laptop` | The bridge tunnel is up | Nothing |
-| `browser: none reachable` | `o` copies the URL instead of opening it | Below |
+| `browser: Chrome on your laptop` | The bridge is up and proven attached | Nothing |
+| `browser: none - o hands you a link` | The normal case over SSH. ctrl+click it | Nothing |
+| `browser: none, and no terminal either` | `o` copies and reports failure | Below |
 
-`browser: none reachable` is honest, not broken: nothing on that machine can
-open a page. `o` puts the URL on the clipboard and raises a herdr notification
-saying so. To make it a real one-key open, give it a command that can:
+`browser: none` is not a fault. Nothing on that machine can open a page, so
+`o` hands the terminal a link instead, which is the one route that works over
+any number of SSH hops. To make it a real one-key open, give it a command
+that can:
 
 ```bash
 export SPECHUB_OPEN_CMD="ssh laptop open"   # any command taking a URL
@@ -133,6 +141,26 @@ export SPECHUB_OPEN_CMD="ssh laptop open"   # any command taking a URL
 
 Do not suggest installing a browser or an X server on the VM to fix this. The
 browser belongs on the machine the user is sitting at.
+
+### When o claims it opened something nobody saw
+
+`agent-browser` launches a headless Chrome on the local machine when it cannot
+attach to the CDP endpoint it was given. That Chrome navigates, reports
+success, and shows nobody anything. A bridge relay answering on its HTTP port
+does not rule this out: ours answered `/json/version` while refusing every CDP
+connection with `Multiple extensions connected. Specify extensionId.`
+
+Diagnose it by asking what is really on the other end, never by trusting a
+successful open:
+
+```bash
+agent-browser get cdp-url          # the endpoint actually attached to
+curl -s 127.0.0.1:9555/json/list   # a headless Chrome on the VM holds the tabs
+```
+
+`spechub-open` runs that check itself before taking the bridge route. If you
+find a stray headless Chrome holding pages, say so - it is a leftover, and
+killing it is the user's call, not yours.
 
 Detail, and why OSC 52 rather than a clipboard daemon:
 [docs/terminal-workspace.md](../../docs/terminal-workspace.md).
