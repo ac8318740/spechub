@@ -164,6 +164,30 @@ if parses "$WORK/none.toml" && grep -q 'switch_workspace' "$WORK/none.toml"
 then ok "switch_workspace is bound even when the chord family is off"
 else no "switch_workspace is bound even when the chord family is off"; fi
 
+# A comment that introduces a managed binding has to leave with it. Dropping the
+# key but keeping its comment strands a heading over nothing, and a hand-written
+# keymap ends up a run of bare headings describing keys that are gone.
+cat > "$WORK/commented.toml" <<'T'
+[keys]
+# Panes - same vim letters as the prefix bindings.
+focus_pane_left  = ["prefix+h", "alt+h"]
+focus_pane_down  = ["prefix+j", "alt+j"]
+
+# Agents.
+next_agent = "alt+n"
+
+# Mine, and nothing to do with this script.
+my_own_setting = "untouched"
+T
+run_keymap alt "$WORK/commented.toml"
+if parses "$WORK/commented.toml" \
+  && ! grep -q 'vim letters' "$WORK/commented.toml" \
+  && ! grep -q '^# Agents\.' "$WORK/commented.toml" \
+  && grep -q 'Mine, and nothing to do' "$WORK/commented.toml" \
+  && grep -q 'my_own_setting' "$WORK/commented.toml"
+then ok "a comment introducing a managed binding leaves with it"
+else no "a comment introducing a managed binding leaves with it"; fi
+
 echo "yazi merge safety"
 # apply_yazi has the same shape of bug as the keymap writer above, but worse:
 # it only ever strips and rewrites its OWN marked region, so a `[opener]` or

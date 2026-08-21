@@ -1075,9 +1075,24 @@ for table in tables(text.splitlines()):
         if bound and bound.group(1) in claimed:
             continue
     if header == "[keys]":
-        table = [ln for ln in table
-                 if not (not ln.strip().startswith("#") and "=" in ln
-                         and ln.split("=", 1)[0].strip() in managed)]
+        # Drop the bindings this script manages, and the comment block that
+        # introduced each one. Removing the binding alone strands its comment:
+        # the user is left with a run of bare headings describing keys that are
+        # no longer there, which reads as a broken config.
+        out, pending = [], []
+        for ln in table:
+            stripped = ln.strip()
+            if stripped.startswith("#") or not stripped:
+                pending.append(ln)
+                continue
+            if "=" in ln and ln.split("=", 1)[0].strip() in managed:
+                pending = []
+                continue
+            out.extend(pending)
+            pending = []
+            out.append(ln)
+        out.extend(pending)
+        table = out
     kept.extend(table)
 text = "\n".join(kept)
 if text and not text.endswith("\n"):
