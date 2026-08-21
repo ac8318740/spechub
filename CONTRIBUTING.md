@@ -53,6 +53,10 @@ fi
 
 This runs `npm run build` (esbuild) only when `cli/src/` is part of the staged diff, then stages the regenerated `dist/`. If the build fails, the commit aborts.
 
+## Testing
+
+The repo has two test layers: `cd cli && npm test` for the CLI, and `bash tests/run-all.sh` for the hook suites.
+
 ## Releasing
 
 1. Bump `.claude-plugin/plugin.json` version. Use semver – patch for fixes, minor for features, major for breaking changes.
