@@ -6,6 +6,20 @@
 
 enabled: true
 
+remote:
+  enabled: true
+  # Copy and open, on a machine you reach over SSH.
+  #
+  # A dev VM has no display and no clipboard, so anything that shells out to
+  # xclip fails and xdg-open exits 1. Two helpers close the gap: spechub-clip
+  # sends text to your own terminal's clipboard with OSC 52, and spechub-open
+  # finds whatever browser is actually reachable.
+  #
+  # Install an xclip stand-in backed by spechub-clip. Programs that only know
+  # how to shell out - gh-dash's y and Y among them - then copy correctly.
+  # Skipped when the machine has a real xclip or a display of its own.
+  clipboard_shim: true
+
 herdr:
   enabled: true
   # Direct chords that need no prefix. Use "alt" if you work over SSH:

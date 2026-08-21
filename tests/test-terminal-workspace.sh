@@ -164,5 +164,46 @@ if parses "$WORK/none.toml" && grep -q 'switch_workspace' "$WORK/none.toml"
 then ok "switch_workspace is bound even when the chord family is off"
 else no "switch_workspace is bound even when the chord family is off"; fi
 
+echo "sidebar grouping"
+# The renumber's whole job is to reproduce the order the sidebar draws. Get the
+# grouping wrong and it writes a worse order than it found, so pin the two rules
+# that are not obvious from reading it.
+RENUM="$WORK/renumber"
+awk "/^  cat > \"\\\$BIN\/spechub-herdr-renumber\" <<'H'\$/{f=1; next} f && /^H\$/{exit} f" \
+  "$SETUP" > "$RENUM"
+if python3 - "$RENUM" <<'PYCHK'
+import sys, types
+mod = types.ModuleType("r")
+src = open(sys.argv[1]).read().replace('if __name__ == "__main__":\n    main()', '')
+exec(compile(src, "r", "exec"), mod.__dict__)
+
+
+def ws(wid, root, linked):
+    return {"workspace_id": wid,
+            "worktree": {"repo_root": root, "is_linked_worktree": linked}}
+
+
+# A worktree stored above its parent must not drag the parent below it, and
+# must not pull its whole group to the top either.
+scrambled = [ws("wT", "/spechub", True), ws("w1", "/plug", False),
+             ws("wQ", "/spechub", False), ws("wS", "/spechub", True)]
+got = mod.grouped_order(scrambled)
+assert got.index("wQ") < got.index("wT"), got
+assert got.index("wQ") < got.index("wS"), got
+assert got[0] == "w1", got
+
+# Rows of one repo stay contiguous.
+mixed = [ws("a", "/x", False), ws("b", "/y", False),
+         ws("c", "/x", True), ws("d", "/y", True)]
+got = mod.grouped_order(mixed)
+assert got == ["a", "c", "b", "d"], got
+
+# A group whose repo checkout was never opened still anchors somewhere sane.
+orphan = [ws("only", "/z", True), ws("root", "/w", False)]
+assert mod.grouped_order(orphan) == ["only", "root"], mod.grouped_order(orphan)
+PYCHK
+then ok "grouping puts a repo above its worktrees and keeps groups contiguous"
+else no "grouping puts a repo above its worktrees and keeps groups contiguous"; fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

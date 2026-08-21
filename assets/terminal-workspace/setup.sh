@@ -112,7 +112,7 @@ write_helpers() {
   mkdir -p "$BIN"
   # Helpers this script used to write and no longer does. Upgrading otherwise
   # leaves them on PATH, shadowing nothing but confusing everything.
-  rm -f "$BIN"/spechub-files "$BIN"/spechub-files-tab "$BIN"/spechub-open \
+  rm -f "$BIN"/spechub-files "$BIN"/spechub-files-tab \
         "$BIN"/spechub-yazi-tab "$BIN"/spechub-tab "$BIN"/spechub-renumber
   cat > "$BIN/spechub-diff" <<'H'
 #!/usr/bin/env bash
@@ -164,6 +164,9 @@ H
 #!/usr/bin/env bash
 # gh-dash with a section for the repo you are standing in. Installed by spechub.
 set -uo pipefail
+# o on a pull request opens it through $BROWSER. A dev VM has no desktop
+# for xdg-open to draw on, so gh-dash's default fails with exit status 1.
+export BROWSER=spechub-open
 BASE="$HOME/.config/gh-dash/config.yml"
 REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)"
 [ -z "$REPO" ] && exec gh dash "$@"
@@ -548,16 +551,25 @@ def workspaces():
 
 
 def grouped_order(spaces):
-    """The order the sidebar draws: every repo's rows contiguous, each group
-    anchored where its first member sits, stored order within a group."""
+    """The order the sidebar draws: every repo's rows contiguous, the repo
+    checkout above the worktrees indented under it, stored order within each
+    of those two parts. A group sits where its repo checkout sits, not where
+    its first row happens to sit, so a worktree cannot drag its parent up."""
     groups, anchors = {}, {}
     for position, space in enumerate(spaces):
-        root = (space.get("worktree") or {}).get("repo_root") or space["workspace_id"]
-        groups.setdefault(root, []).append(space["workspace_id"])
-        anchors.setdefault(root, position)
+        tree = space.get("worktree") or {}
+        root = tree.get("repo_root") or space["workspace_id"]
+        groups.setdefault(root, []).append((bool(tree.get("is_linked_worktree")),
+                                            position, space["workspace_id"]))
+        if not tree.get("is_linked_worktree") and root not in anchors:
+            anchors[root] = position
+    # A group of nothing but worktrees, its repo checkout never opened, anchors
+    # on its first row instead.
+    for root, members in groups.items():
+        anchors.setdefault(root, min(position for _, position, _ in members))
     order = []
     for root in sorted(groups, key=lambda key: anchors[key]):
-        order.extend(groups[root])
+        order.extend(wid for _, _, wid in sorted(groups[root]))
     return order
 
 
@@ -579,7 +591,170 @@ if __name__ == "__main__":
 H
   chmod +x "$BIN/spechub-herdr-renumber"
 
+  cat > "$BIN/spechub-clip" <<'H'
+#!/usr/bin/env bash
+# Put text on the clipboard of the machine your terminal is on.
+#
+#   spechub-clip "text"      copy the arguments
+#   ... | spechub-clip       copy stdin
+#   spechub-clip --out       print what was copied last
+#
+# A dev VM reached over SSH has no display and no clipboard of its own, so
+# xclip and friends have nothing to talk to. OSC 52 is the escape sequence
+# that asks the terminal at the far end - Windows Terminal, iTerm2, kitty -
+# to put text on its own clipboard. It is only bytes in the terminal stream,
+# so it crosses SSH for free, and herdr forwards it from a pane to whatever
+# terminal is hosting it.
+#
+# Reading back is not symmetrical. Windows Terminal refuses OSC 52 reads on
+# purpose, so --out replays a local cache instead. Installed by spechub.
+set -uo pipefail
+
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/spechub/clipboard"
+
+# A real clipboard beats an escape sequence when one exists. Anything sitting
+# in this script's own directory is skipped, so the xclip shim installed
+# beside it can never call back into here in a loop.
+native() {  # native <tool>; prints the path of a real one, if any
+  local tool="$1" self candidate
+  self="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+  while IFS= read -r candidate; do
+    [ "$(cd "$(dirname "$candidate")" 2>/dev/null && pwd)" = "$self" ] && continue
+    printf '%s' "$candidate"; return 0
+  done < <(type -ap "$tool" 2>/dev/null)
+  return 1
+}
+
+has_display() { [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; }
+
+if [ "${1:-}" = "--out" ] || [ "${1:-}" = "-o" ]; then
+  if has_display; then
+    for tool in wl-paste xclip xsel; do
+      real="$(native "$tool")" || continue
+      case "$tool" in
+        wl-paste) exec "$real" --no-newline ;;
+        xclip)    exec "$real" -out -selection clipboard ;;
+        xsel)     exec "$real" --output --clipboard ;;
+      esac
+    done
+  fi
+  [ -f "$CACHE" ] || { echo "spechub-clip: nothing copied yet" >&2; exit 1; }
+  cat "$CACHE"
+  exit 0
+fi
+
+if [ $# -gt 0 ]; then text="$*"; else text="$(cat)"; fi
+
+mkdir -p "$(dirname "$CACHE")"
+printf '%s' "$text" > "$CACHE"
+chmod 600 "$CACHE" 2>/dev/null
+
+if has_display; then
+  for tool in wl-copy xclip xsel; do
+    real="$(native "$tool")" || continue
+    case "$tool" in
+      wl-copy) printf '%s' "$text" | "$real" && exit 0 ;;
+      xclip)   printf '%s' "$text" | "$real" -in -selection clipboard && exit 0 ;;
+      xsel)    printf '%s' "$text" | "$real" --input --clipboard && exit 0 ;;
+    esac
+  done
+fi
+
+b64="$(printf '%s' "$text" | base64 | tr -d '\n')"
+# 74994 bytes is the ceiling tmux puts on an OSC 52 payload, and the lowest
+# of anything in this path. Past it the sequence is dropped without a word,
+# so say so rather than report a copy that did not happen.
+if [ ${#b64} -gt 74994 ]; then
+  echo "spechub-clip: too large for the terminal clipboard (${#b64} bytes encoded)" >&2
+  exit 1
+fi
+
+esc=$'\033]52;c;'"$b64"$'\a'
+# tmux drops escape sequences it does not recognise unless they are wrapped
+# for passthrough. herdr needs no wrapping - it forwards OSC 52 itself.
+if [ -n "${TMUX:-}" ]; then
+  esc=$'\033Ptmux;'"${esc//$'\033'/$'\033\033'}"$'\033\\'
+fi
+
+# The controlling terminal, not stdout. Callers are usually TUIs that have
+# redirected both streams, and OSC 52 has to reach the terminal itself.
+if { printf '%s' "$esc" > /dev/tty; } 2>/dev/null; then exit 0; fi
+printf '%s' "$esc" >&2
+H
+  chmod +x "$BIN/spechub-clip"
+
+  cat > "$BIN/spechub-open" <<'H'
+#!/usr/bin/env bash
+# Open a URL from a machine that has no browser of its own.
+#
+#   spechub-open https://github.com/owner/repo/pull/1
+#
+# Set as $BROWSER by spechub-dash, so o on a pull request reaches a real
+# browser instead of failing on an xdg-open with no display to draw on. gh's
+# browser module discards whatever this prints, so nothing here is written to
+# be read - the herdr notification is the only message that gets through.
+#
+# In order: an explicit override, a desktop on this machine, WSL, the
+# Playwriter bridge to Chrome on the laptop, and last the clipboard.
+# Installed by spechub.
+set -uo pipefail
+
+URL="${1:-}"
+[ -n "$URL" ] || { echo "usage: spechub-open <url>" >&2; exit 2; }
+
+note() {  # say something a suspended TUI cannot print for us
+  command -v herdr >/dev/null 2>&1 \
+    && herdr notification show "$1" --body "$2" >/dev/null 2>&1
+  return 0
+}
+
+# 1. Whatever the user named, no questions asked.
+if [ -n "${SPECHUB_OPEN_CMD:-}" ]; then
+  exec ${SPECHUB_OPEN_CMD} "$URL"
+fi
+
+# 2. A desktop on this machine. $BROWSER is cleared first: xdg-open reads it
+# too, and $BROWSER is how gh-dash called us, so leaving it set loops.
+if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null 2>&1; then
+  BROWSER= exec xdg-open "$URL"
+fi
+
+# 3. WSL. The Windows half of the same machine holds the browser.
+for opener in wslview wsl-open; do
+  command -v "$opener" >/dev/null 2>&1 && exec "$opener" "$URL"
+done
+if command -v explorer.exe >/dev/null 2>&1; then
+  # explorer.exe reports failure even when it opened the page. Ignore it.
+  explorer.exe "$URL" >/dev/null 2>&1
+  exit 0
+fi
+
+# 4. The Playwriter bridge: a reverse SSH tunnel to Chrome on the laptop.
+# A new tab first, so this never navigates a page an agent is working in.
+BRIDGE="${SPECHUB_BRIDGE_URL:-http://127.0.0.1:19988}"
+if [ "${SPECHUB_OPEN_BRIDGE:-auto}" != "off" ] \
+   && command -v agent-browser >/dev/null 2>&1 \
+   && curl -fsS -m 2 "$BRIDGE/json/version" >/dev/null 2>&1; then
+  if timeout 20 agent-browser tab new >/dev/null 2>&1 \
+     && timeout 30 agent-browser open "$URL" >/dev/null 2>&1; then
+    exit 0
+  fi
+  note "Browser bridge failed" "$URL"
+fi
+
+# 5. Nothing here can open it. Put it on the terminal's clipboard instead,
+# which is one paste away from the browser on the machine you are sitting at.
+if printf '%s' "$URL" | spechub-clip; then
+  note "URL copied, not opened" "No browser reachable from this machine. Paste: $URL"
+  exit 0
+fi
+note "Cannot open URL" "$URL"
+exit 1
+H
+  chmod +x "$BIN/spechub-open"
+
   say "helpers written: spechub-diff, spechub-dash, spechub-md"
+  say "remote helpers written: spechub-clip, spechub-open"
   say "herdr helpers written: spechub-herdr-tab, spechub-herdr-renumber"
 }
 
@@ -965,6 +1140,61 @@ apply_delta() {
   say "delta set as git pager"
 }
 
+apply_remote() {
+  # A dev VM reached over SSH has no display and no clipboard of its own, so
+  # anything that shells out to xclip fails. Put an xclip on PATH that speaks
+  # OSC 52 to the terminal at the far end instead.
+  [ "$(cfg_get remote.clipboard_shim true)" = "true" ] || {
+    say "clipboard: xclip stand-in not installed"; return 0; }
+  local real
+  # Only when the machine has neither a real xclip nor a display for one to
+  # talk to. Shadowing a working clipboard would be a downgrade.
+  real="$(command -v xclip 2>/dev/null)"
+  if [ -n "$real" ] && [ "$real" != "$BIN/xclip" ]; then
+    say "clipboard: real xclip at $real, stand-in not installed"
+    return 0
+  fi
+  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    say "clipboard: this machine has a display, stand-in not installed"
+    return 0
+  fi
+  cat > "$BIN/xclip" <<'H'
+#!/usr/bin/env bash
+# xclip, for a machine whose clipboard is at the other end of an SSH session.
+# spechub installs this only when no real xclip is present.
+#
+# It exists for programs that reach for xclip directly instead of offering a
+# setting. gh-dash copies pull request URLs through a Go library that looks
+# only for xclip, xsel, wl-copy and termux-clipboard-set, and gives up when
+# none is on PATH. This puts one there, and spechub-clip sends the text to
+# the terminal's own clipboard with OSC 52.
+#
+# Hands over to a real xclip if one turns up on PATH with a display to talk
+# to. Remove it with `setup.sh uninstall`. Installed by spechub.
+set -uo pipefail
+
+PATH="$(cd "$(dirname "$0")" 2>/dev/null && pwd):$PATH"
+
+# A real xclip, anywhere on PATH except beside this script.
+if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+  self="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+  while IFS= read -r candidate; do
+    [ "$(cd "$(dirname "$candidate")" 2>/dev/null && pwd)" = "$self" ] && continue
+    exec "$candidate" "$@"
+  done < <(type -ap xclip 2>/dev/null)
+fi
+
+for arg in "$@"; do
+  case "$arg" in
+    -o|-out|-output) exec spechub-clip --out ;;
+  esac
+done
+exec spechub-clip
+H
+  chmod +x "$BIN/xclip"
+  say "clipboard: xclip stand-in written, copying over OSC 52"
+}
+
 apply_ghdash() {
   have gh || { say "gh not installed, skipping dashboard"; return 0; }
   gh extension list 2>/dev/null | grep -q gh-dash || gh extension install dlvhdr/gh-dash >/dev/null 2>&1
@@ -1009,6 +1239,27 @@ case "$ACTION" in
         "$(cfg_get "$k.enabled" true)"
     done
     grep -q "$BEGIN" "$HERDR_CFG" 2>/dev/null && say "herdr managed block: present" || say "herdr managed block: absent"
+    echo
+    # Where a copy and an open actually land, which is the first thing to
+    # check when o or y misbehaves on a machine reached over SSH.
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+      say "clipboard: this machine has a display, using its own"
+    elif [ -x "$BIN/xclip" ]; then
+      say "clipboard: xclip stand-in, copying to your terminal over OSC 52"
+    else
+      say "clipboard: none - run apply, or copy will fail in gh-dash and friends"
+    fi
+    if [ -n "${SPECHUB_OPEN_CMD:-}" ]; then
+      say "browser: \$SPECHUB_OPEN_CMD = $SPECHUB_OPEN_CMD"
+    elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+      say "browser: xdg-open on this machine"
+    elif have wslview || have explorer.exe; then
+      say "browser: the Windows side of this machine"
+    elif have agent-browser && curl -fsS -m 2 "${SPECHUB_BRIDGE_URL:-http://127.0.0.1:19988}/json/version" >/dev/null 2>&1; then
+      say "browser: Chrome on your laptop, through the Playwriter bridge"
+    else
+      say "browser: none reachable - o will copy the URL instead of opening it"
+    fi
     if [ "$(cfg_get tuicr.build_from_fork false)" = "true" ]; then
       echo
       say "tuicr: local fork build - this is meant to be temporary"
@@ -1043,6 +1294,7 @@ case "$ACTION" in
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr_numbers
     [ "$(cfg_get delta.enabled true)"   = "true" ] && apply_delta
+    [ "$(cfg_get remote.enabled true)" = "true" ] && apply_remote
     [ "$(cfg_get gh_dash.enabled true)" = "true" ] && apply_ghdash
     echo "done. open a herdr session and press prefix+? to see the keymap"
     ;;
@@ -1086,6 +1338,8 @@ PY
     herdr plugin unlink spechub.herdr-numbers >/dev/null 2>&1 || true
     rm -rf "$HOME/.config/spechub/herdr-numbers"
     rm -f "$BIN"/spechub-*
+    # The xclip stand-in is the one managed file without the prefix.
+    grep -q "Installed by spechub" "$BIN/xclip" 2>/dev/null && rm -f "$BIN/xclip"
     SPECHUB_ARGS="$BEGIN|$END" py "$HOME/.config/tuicr/config.toml" <<'PY'
 import os, re, sys
 p = sys.argv[1]
