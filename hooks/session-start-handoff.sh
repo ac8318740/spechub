@@ -2,8 +2,8 @@
 # SpecHub handoff reload (consume-once, change-aware).
 #
 # When a session resumes after compaction (SessionStart source == "compact"),
-# re-inject the handoff anchor written by /spechub:handoff, then retire it so it
-# can never be injected twice.
+# re-inject the handoff anchor written by /spechub:compact-and-continue, then
+# retire it so it can never be injected twice.
 #
 # The compaction summary carries the conversation narrative; this anchor carries
 # the load-bearing state the summary may have compressed away (next action, task
@@ -45,6 +45,9 @@ import json, os, re, shutil, sys
 try:
     data = json.loads(os.environ.get("SPECHUB_HOOK_INPUT", ""))
 except Exception:
+    sys.exit(0)
+
+if not isinstance(data, dict):
     sys.exit(0)
 
 if data.get("source") != "compact":
