@@ -39,6 +39,16 @@ jobs:
             exit 1
           fi
 
+      # The markdown in agents/ is the source; agents/codex/*.toml is generated
+      # from it and committed so the hook can install it with no build step.
+      - name: Codex agent definitions are current
+        run: |
+          node scripts/gen-codex-agents.mjs
+          if ! git diff --exit-code -- agents/codex; then
+            echo "::error::agents/codex is stale. Run 'node scripts/gen-codex-agents.mjs' and commit the result."
+            exit 1
+          fi
+
   shell:
     name: Shell suites
     runs-on: ubuntu-latest
@@ -80,6 +90,34 @@ jobs:
             echo "::error::the orchestrator payload is back in the root AGENTS.md - it belongs in orchestrator/"
             exit 1
           fi
+
+      # Codex parses agent files with deny_unknown_fields: one unrecognised key
+      # and it discards the entire file, logging where nobody looks. Catch that
+      # here rather than in a silently agent-less Codex session.
+      - name: Codex agent TOML is valid and has no unknown keys
+        run: |
+          python3 - <<'PY'
+          import glob, sys, tomllib
+          allowed = {"name", "description", "developer_instructions"}
+          failed = False
+          for f in sorted(glob.glob("agents/codex/*.toml")):
+              with open(f, "rb") as fh:
+                  try:
+                      d = tomllib.load(fh)
+                  except Exception as e:
+                      print(f"::error file={f}::does not parse as TOML: {e}")
+                      failed = True
+                      continue
+              extra = set(d) - allowed
+              if extra:
+                  print(f"::error file={f}::Codex would discard this file for unknown keys: {sorted(extra)}")
+                  failed = True
+              for required in ("name", "description", "developer_instructions"):
+                  if not str(d.get(required, "")).strip():
+                      print(f"::error file={f}::missing or blank {required}")
+                      failed = True
+          sys.exit(1 if failed else 0)
+          PY
 
       - name: Plugin manifest version is valid semver
         run: |

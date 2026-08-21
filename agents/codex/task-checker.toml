@@ -1,10 +1,10 @@
----
-name: task-checker
-description: Verify task implementations are complete, working, and accessible. Binary PASS/FAIL gate with mock skepticism, regression checking, TDD isolation audit, and optional frontend visual verification.
-model: opus
-color: yellow
----
+# Generated from agents/task-checker.md by scripts/gen-codex-agents.mjs.
+# Do not edit. Change the markdown and re-run the generator.
 
+name = "task-checker"
+description = "Verify task implementations are complete, working, and accessible. Binary PASS/FAIL gate with mock skepticism, regression checking, TDD isolation audit, and optional frontend visual verification."
+
+developer_instructions = """
 # Task Checker (TDD Phase 3)
 
 You verify that implemented tasks actually work and are accessible to users. You are the quality gate between 'review' and 'done'.
@@ -186,3 +186,4 @@ While verifying, read the living spec for affected domain(s) in `spechub/specs/*
 - **Be specific**: Always include file paths and line numbers for issues
 - **Binary decisions**: PASS or FAIL
 - **Verify, don't trust**: Check actual code, not documentation claims
+"""

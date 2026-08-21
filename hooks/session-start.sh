@@ -111,6 +111,46 @@ if [ -n "$plugin_root" ] && [ -f "$cli_wrapper" ]; then
   fi
 fi
 
+# --- Codex subagents: keep ~/.codex/agents current with the plugin ---
+# Codex cannot ship agent definitions inside a plugin - its plugin manifest has
+# no agent field - so they have to be installed as files. This reconciles them
+# on every session, the same way the CLI symlink above is reconciled, so a
+# plugin upgrade heals them instead of leaving stale copies behind.
+#
+# Copies rather than symlinks: Codex is known to refuse symlinked skill
+# directories and manifests, and the agent loader's behaviour there is
+# unverified. A copy is boring and works.
+#
+# Only ever overwrites files this generator wrote. A file without the generated
+# marker is someone's own agent that happens to share a name, and clobbering it
+# would be unforgivable.
+if [ -n "$plugin_root" ] && [ -d "${HOME}/.codex" ]; then
+  codex_src="${plugin_root}/agents/codex"
+  codex_dst="${HOME}/.codex/agents"
+  marker="by scripts/gen-codex-agents.mjs"
+
+  if [ -d "$codex_src" ]; then
+    mkdir -p "$codex_dst" 2>/dev/null
+    for src in "$codex_src"/*.toml; do
+      [ -f "$src" ] || continue
+      dst="${codex_dst}/$(basename "$src")"
+
+      if [ -e "$dst" ] && ! grep -qF "$marker" "$dst" 2>/dev/null; then
+        echo "spechub: ${dst} was not written by spechub - leaving it alone." >&2
+        continue
+      fi
+
+      if ! cmp -s "$src" "$dst" 2>/dev/null; then
+        if cp "$src" "$dst" 2>/dev/null; then
+          echo "spechub: installed Codex agent $(basename "$src" .toml)" >&2
+        else
+          echo "spechub: could not write ${dst}" >&2
+        fi
+      fi
+    done
+  fi
+fi
+
 # --- Playwriter bridge: keep deployed scripts current with the plugin cache ---
 # The bridge runs as OS scheduled tasks (Windows) and an on-demand helper (VM)
 # that live outside the plugin, so a plugin update alone never reaches them.

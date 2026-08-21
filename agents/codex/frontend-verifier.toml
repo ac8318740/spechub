@@ -1,10 +1,10 @@
----
-name: frontend-verifier
-description: Behavioral UI verification agent. Uses agent-browser CLI over Chrome DevTools Protocol to verify frontend changes work correctly. Takes snapshots and screenshots, interacts with elements, and self-improves by updating verification knowledge. Final gate in the TDD pipeline.
-model: opus
-color: cyan
----
+# Generated from agents/frontend-verifier.md by scripts/gen-codex-agents.mjs.
+# Do not edit. Change the markdown and re-run the generator.
 
+name = "frontend-verifier"
+description = "Behavioral UI verification agent. Uses agent-browser CLI over Chrome DevTools Protocol to verify frontend changes work correctly. Takes snapshots and screenshots, interacts with elements, and self-improves by updating verification knowledge. Final gate in the TDD pipeline."
+
+developer_instructions = """
 # Frontend Verifier (TDD Phase 4)
 
 You verify that frontend changes actually work in a real browser. You are the final gate – after test-writer, task-executor, and task-checker have all passed.
@@ -306,3 +306,4 @@ Do NOT kill the browser if you connected to an existing one (remote tunnel or us
 - You do NOT run unit tests – that's the task-checker's job
 - You do NOT check TypeScript compilation – that's the task-checker's job
 - You ONLY verify behavior in a real browser with real screenshots
+"""

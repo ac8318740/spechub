@@ -125,6 +125,41 @@ that way: the rebuild only fires when `cli/src/` changes, so bumping the plugin
 alone would leave any baked-in copy behind. That is exactly how the CLI came to
 report `0.1.0` while the plugin was at 0.14.2.
 
+## Codex agent definitions
+
+`agents/*.md` is the source. `agents/codex/*.toml` is generated from it by
+`scripts/gen-codex-agents.mjs` and committed. Never hand-edit the TOML.
+
+```sh
+node scripts/gen-codex-agents.mjs
+```
+
+Codex cannot ship agent definitions inside a plugin, so the SessionStart hook
+installs them into `~/.codex/agents/` and re-reconciles on every session. It
+only overwrites files carrying the generated marker, so an agent of yours that
+happens to share a name is left alone, and it does nothing at all on a machine
+with no `~/.codex`.
+
+The generator emits only the three keys Codex applies: `name`, `description`
+and `developer_instructions`. It deliberately omits others:
+
+- `model` – ours says `opus`, a Claude alias that means nothing to Codex.
+  Omitting it makes a subagent inherit the parent's model, which is what we
+  want anyway.
+- `sandbox_mode` and `mcp_servers` – Codex parses then ignores both, because a
+  child agent may never escalate past its parent. Emitting them would imply a
+  guarantee that does not hold.
+
+This matters more than it looks. Codex parses agent files with
+`deny_unknown_fields`: one unrecognised key and it discards the whole file,
+logging somewhere nobody reads. CI parses every generated file and fails on any
+key outside the allowed three.
+
+Keep the markdown harness-neutral. Naming Claude Code's tools directly ("use
+Grep/Glob") produces instructions that are wrong under Codex, so prefer "search
+the codebase". Fixing it in the markdown keeps the generator free of a
+translation layer.
+
 ## Releasing
 
 1. Bump `.claude-plugin/plugin.json` version. Use semver – patch for fixes, minor for features, major for breaking changes.
