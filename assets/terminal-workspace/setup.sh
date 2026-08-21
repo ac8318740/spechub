@@ -1148,9 +1148,10 @@ apply_remote() {
     say "clipboard: xclip stand-in not installed"; return 0; }
   local real
   # Only when the machine has neither a real xclip nor a display for one to
-  # talk to. Shadowing a working clipboard would be a downgrade.
+  # talk to. Shadowing a working clipboard would be a downgrade. A stand-in
+  # this script wrote before is not a real one, wherever it turns up.
   real="$(command -v xclip 2>/dev/null)"
-  if [ -n "$real" ] && [ "$real" != "$BIN/xclip" ]; then
+  if [ -n "$real" ] && ! grep -q "Installed by spechub" "$real" 2>/dev/null; then
     say "clipboard: real xclip at $real, stand-in not installed"
     return 0
   fi

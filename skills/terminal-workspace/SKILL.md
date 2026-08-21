@@ -26,6 +26,7 @@ Nothing here is required to use SpecHub. Offer it, do not assume it.
 | tuicr | Code review, which gh-dash hands pull requests to | `tuicr.enabled` |
 | yazi | File manager, with markdown previewed live by spechub-md | `yazi.enabled` |
 | spechub-md | Markdown with mermaid diagrams, as text or in a browser | `markdown.enabled` |
+| spechub-clip, spechub-open | Copy and open, on a machine reached over SSH | `remote.enabled` |
 
 Background and full key tables: [docs/terminal-workspace.md](../../docs/terminal-workspace.md).
 
@@ -88,6 +89,53 @@ Removes every managed block and the helper scripts, and leaves the binaries.
   upstream pull requests (#607 stats, #633 resize). `true` needs cargo and takes a
   few minutes to build. Tell them it is temporary and that `status` tracks both PRs
 - **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
+- **`remote.clipboard_shim`**: leave `true` on any machine reached over SSH. It puts an `xclip` on `$PATH` backed by `spechub-clip`, which is the only reason gh-dash's `y` and `Y` work there. It is skipped automatically when the machine has a real `xclip` or a display
+
+## Copy and open, on a machine reached over SSH
+
+A dev VM has no display and no clipboard. Three gh-dash keys land on that:
+`o` fails with `exit status 1` because `xdg-open` has no display, and `y` and
+`Y` fail with `Failed copying to clipboard` because gh-dash shells out to
+`xclip`, `xsel` or `wl-copy` and none is installed.
+
+`apply` fixes both. Setting a second machine up needs nothing extra:
+
+```bash
+bash "$SETUP" apply
+bash "$SETUP" status     # read the last two lines
+```
+
+The last two `status` lines say where a copy and an open will actually land on
+**this** machine:
+
+```
+clipboard: xclip stand-in, copying to your terminal over OSC 52
+browser: Chrome on your laptop, through the Playwriter bridge
+```
+
+Read them before debugging anything else. What each means:
+
+| Line | What happened | What to do |
+|---|---|---|
+| `clipboard: xclip stand-in` | Copy reaches your terminal over OSC 52 | Nothing |
+| `clipboard: this machine has a display` | It has a real clipboard | Nothing |
+| `clipboard: none` | `apply` has not run, or `remote.clipboard_shim` is false | Run `apply` |
+| `browser: Chrome on your laptop` | The bridge tunnel is up | Nothing |
+| `browser: none reachable` | `o` copies the URL instead of opening it | Below |
+
+`browser: none reachable` is honest, not broken: nothing on that machine can
+open a page. `o` puts the URL on the clipboard and raises a herdr notification
+saying so. To make it a real one-key open, give it a command that can:
+
+```bash
+export SPECHUB_OPEN_CMD="ssh laptop open"   # any command taking a URL
+```
+
+Do not suggest installing a browser or an X server on the VM to fix this. The
+browser belongs on the machine the user is sitting at.
+
+Detail, and why OSC 52 rather than a clipboard daemon:
+[docs/terminal-workspace.md](../../docs/terminal-workspace.md).
 
 ## Free the client's keys
 

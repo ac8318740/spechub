@@ -358,6 +358,49 @@ gh dash --config "$GEN" "$@"
 
 Because herdr popups inherit the focused pane's directory, `alt+i` from an agent's worktree opens the dashboard already scoped to that repository.
 
+## Copy and open, from a machine you reach over SSH
+
+A dev VM has no display and no clipboard of its own. Two gh-dash keys land on that fact:
+
+- `o`, open on GitHub, fails with `exit status 1`. gh-dash opens URLs through `$BROWSER`, falling back to `xdg-open`, and `xdg-open` with no `$DISPLAY` exits 1
+- `y` and `Y`, copy the URL and the number, fail with `Failed copying to clipboard`. gh-dash copies through a Go library that shells out to `xclip`, `xsel`, `wl-copy` or `termux-clipboard-set`, and none of them is installed or would work if it were
+
+Neither is a gh-dash bug. The clipboard and the browser are on the machine you are typing at, several hops away. Two helpers carry each one back across.
+
+### spechub-clip: the clipboard
+
+OSC 52 is the escape sequence that asks a terminal to put text on its own clipboard. It is bytes in the terminal stream, so it crosses SSH for free, herdr forwards it from a pane to whatever terminal hosts it, and Windows Terminal, iTerm2, kitty and Ghostty all act on it.
+
+```bash
+spechub-clip "some text"      # copy the arguments
+git rev-parse HEAD | spechub-clip
+spechub-clip --out            # print what was copied last
+```
+
+Reading back is not symmetrical. Windows Terminal refuses OSC 52 clipboard *reads* on purpose, because a program that can read your clipboard without asking is a security hole. So `--out` replays a local cache, not the real clipboard.
+
+To reach programs that only know how to shell out, `apply` also writes an `xclip` onto `$PATH` backed by `spechub-clip`. That is what makes gh-dash's `y` and `Y` work unchanged, with no rebinding and no flicker. It is skipped on any machine that has a real `xclip` or a display for one to talk to, and `setup.sh uninstall` removes it.
+
+### spechub-open: the browser
+
+`spechub-dash` exports `BROWSER=spechub-open`, so `o` runs it. It tries, in order:
+
+1. `$SPECHUB_OPEN_CMD`, if you set one. The escape hatch
+2. `xdg-open`, when this machine has a display after all
+3. `wslview` or `explorer.exe`, when the Windows half of the machine holds the browser
+4. Chrome on your laptop, through the [Playwriter bridge](../skills/bridge/SKILL.md), if the tunnel is up. It opens a new tab first, so it never navigates a page an agent is working in
+5. Failing all of that, the URL goes on your clipboard and a herdr notification says so. One paste away, rather than nothing
+
+`setup.sh status` prints which of those a machine will use, which is the first thing to check when `o` or `y` misbehaves.
+
+### On a machine with none of this
+
+Only tier 5 is guaranteed. A VM with no bridge and no WSL copies the URL and tells you; it cannot conjure a browser. If you want a real one-key open there, give `spechub-open` something to call:
+
+```bash
+export SPECHUB_OPEN_CMD="ssh laptop open"   # or any command taking a URL
+```
+
 ## Keys
 
 Each tool has its own help: `prefix+?` in herdr (press `/` to filter), `?` in gh-dash, and diffnav's footer.
@@ -484,3 +527,4 @@ Each of these cost real time to find.
 - **Worktree workspaces nest, plain workspaces do not.** A workspace made with `alt+w` always sits at the top level, whatever directory it points at
 - **Sidebar actions act on the selected workspace**, not the focused pane. Open the sidebar and select before creating a worktree or closing a workspace
 - **In-process teammates are invisible to herdr.** A Claude teammate shares its parent's pane and session, so it never appears as its own agent. Two agents in one worktree means two real sessions
+- **A remote machine has no clipboard and no browser.** `o`, `y` and `Y` in gh-dash all fail on a bare VM until `apply` installs `spechub-clip` and `spechub-open`. `setup.sh status` says which one a machine ended up with

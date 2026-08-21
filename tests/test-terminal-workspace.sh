@@ -205,5 +205,64 @@ PYCHK
 then ok "grouping puts a repo above its worktrees and keeps groups contiguous"
 else no "grouping puts a repo above its worktrees and keeps groups contiguous"; fi
 
+echo "copy and open from a remote machine"
+# gh-dash's o, y and Y all fail on a machine with no display: xdg-open exits 1
+# and the Go clipboard library finds no xclip to shell out to. These pin the
+# two helpers that carry each one back to the terminal you are typing at.
+extract() {  # extract <helper-name> -> path
+  local name="$1" out="$WORK/$1"
+  awk -v n="$name" '$0 == "  cat > \"$BIN/" n "\" <<'\''H'\''" {f=1; next} f && $0 == "H" {exit} f' \
+    "$SETUP" > "$out"
+  chmod +x "$out"
+  printf '%s' "$out"
+}
+CLIPBIN="$WORK/remote-bin"
+mkdir -p "$CLIPBIN" "$WORK/remote-home"
+cp "$(extract spechub-clip)" "$CLIPBIN/spechub-clip"
+cp "$(extract spechub-open)" "$CLIPBIN/spechub-open"
+cp "$(extract xclip)"        "$CLIPBIN/xclip"
+# No display, no clipboard, and only the extracted helpers on PATH: a bare VM.
+bare() { env -i PATH="$CLIPBIN:/usr/bin:/bin" HOME="$WORK/remote-home" "$@"; }
+
+osc=$(bare bash -c 'printf pr-42 | spechub-clip' 2>&1 >/dev/null)
+back=$(bare spechub-clip --out 2>/dev/null)
+# ESC ] 52 ; c ; <base64 of "pr-42"> BEL
+if [ "$osc" = "$(printf '\033]52;c;cHItNDI=\a')" ] && [ "$back" = "pr-42" ]; then
+  ok "spechub-clip copies over OSC 52 and replays it"
+else
+  no "spechub-clip OSC 52 round trip (got '$(printf '%s' "$osc" | cat -v)' / '$back')"
+fi
+
+# What gh-dash's clipboard library actually runs, argument for argument.
+bare bash -c 'printf pr-43 | xclip -in -selection clipboard' >/dev/null 2>&1
+if [ "$(bare xclip -out -selection clipboard 2>/dev/null)" = "pr-43" ]; then
+  ok "the xclip stand-in speaks the flags gh-dash passes it"
+else
+  no "the xclip stand-in speaks the flags gh-dash passes it"
+fi
+
+# o reaches a browser only because spechub-dash names one.
+if grep -q '^export BROWSER=spechub-open$' "$(extract spechub-dash)"; then
+  ok "spechub-dash points \$BROWSER at spechub-open"
+else
+  no "spechub-dash points \$BROWSER at spechub-open"
+fi
+
+if [ "$(bare env SPECHUB_OPEN_CMD=echo spechub-open https://example.com 2>/dev/null)" \
+     = "https://example.com" ]; then
+  ok "spechub-open obeys \$SPECHUB_OPEN_CMD"
+else
+  no "spechub-open obeys \$SPECHUB_OPEN_CMD"
+fi
+
+# Nothing reachable is not the same as nothing done: the URL lands on the
+# clipboard rather than being lost.
+bare env SPECHUB_OPEN_BRIDGE=off spechub-open https://example.com/pr/7 >/dev/null 2>&1
+if [ "$(bare spechub-clip --out 2>/dev/null)" = "https://example.com/pr/7" ]; then
+  ok "spechub-open falls back to the clipboard when no browser is reachable"
+else
+  no "spechub-open falls back to the clipboard when no browser is reachable"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
