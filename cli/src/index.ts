@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 const pkg = JSON.parse(
   readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')
-);
+) as { version: string };
 
 const program = new Command()
   .name('spechub')

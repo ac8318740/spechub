@@ -22,6 +22,7 @@ cd cli
 npm install     # only needed when package.json changed
 npm run build   # rebuilds dist/index.js via esbuild (see build.mjs)
 npm run typecheck  # tsc --noEmit, catches type errors the bundler skips
+npm run lint    # eslint, type-aware rules over src/ (see eslint.config.js)
 git add src/ dist/ package.json package-lock.json
 ```
 
