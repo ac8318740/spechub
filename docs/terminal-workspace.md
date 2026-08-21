@@ -126,6 +126,16 @@ An opener rule puts that ahead of the editor, so reading is the default and
 editing is the second entry in the same menu. Nothing shims `$EDITOR`, and your
 shell environment is untouched.
 
+If you already write your own `yazi.toml`, setup reads it before it writes and
+leaves alone anything you have already set: your `mgr` settings, your markdown
+opener, your `plugin.prepend_previewers`, your `open.prepend_rules`. Whichever
+of the four it skipped, it says so. Declaring any of them a second time would
+make yazi reject the whole config and fall back to presets, so it concedes them
+instead. What it cannot read is a `yazi.toml` that does not parse, and yazi is
+already ignoring that one in favour of presets, so fix the error and re-run
+setup. Add `spechub-md` to your own opener to read markdown with it, and
+`show_hidden = true` to your own `mgr` if you want hidden files shown.
+
 So: `alt+y` for the tree, cursor onto a markdown file to preview it, `Enter` to
 read it full width with its diagrams drawn, `q` back to the tree.
 

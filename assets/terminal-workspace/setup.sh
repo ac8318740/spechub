@@ -245,6 +245,8 @@ H
 # Read a markdown file in the terminal with its mermaid diagrams drawn as text.
 #
 #   spechub-md FILE.md              render to the terminal
+#   spechub-md --preview FILE.md    render into a preview pane: width from
+#                                   $COLUMNS, straight to stdout, no pager
 #   spechub-md --diagram N FILE.md  one diagram alone, with horizontal scroll
 #   spechub-md --serve FILE.md      serve it for a real browser, print the link
 #
@@ -254,15 +256,69 @@ H
 set -uo pipefail
 
 PORT="${SPECHUB_MD_PORT:-6419}"
-SERVE=0; ONLY=0
-[ "${1:-}" = "--serve" ] && { SERVE=1; shift; }
-[ "${1:-}" = "--diagram" ] && { ONLY="${2:-1}"; shift 2; }
+SERVE=0; ONLY=0; PREVIEW=0
+usage() { echo "usage: spechub-md [--preview] [--diagram N] [--serve] FILE.md" >&2; exit 1; }
+# A loop rather than a fixed order, so --preview composes with --diagram and
+# a caller can pass them either way round.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --serve)   SERVE=1; shift ;;
+    --preview) PREVIEW=1; shift ;;
+    --diagram) ONLY="${2:-1}"; shift; [ $# -gt 0 ] && shift ;;
+    --)        shift; break ;;
+    --*)       usage ;;
+    *)         break ;;
+  esac
+done
+# A preview pane is somewhere to read, not somewhere to run a server.
+if [ "$SERVE" = "1" ] && [ "$PREVIEW" = "1" ]; then
+  echo "spechub-md: --preview and --serve do opposite things - pick one" >&2
+  exit 1
+fi
 # Node labels set a diagram's width, so padding cannot rescue a wide one.
 # Tightening still buys roughly a third of the height back.
 PAD="${SPECHUB_MD_PAD:--x 2 -y 2}"
-COLS=$(tput cols 2>/dev/null || echo 80)
+# A caller that exports COLUMNS means it, so it wins outright. tput reads
+# COLUMNS too, ahead of terminfo, but that is a side effect worth naming
+# rather than resting on - it goes when TERM is unset and tput fails.
+case "${COLUMNS:-}" in
+  ''|*[!0-9]*) COLS=$(tput cols 2>/dev/null || echo 80) ;;
+  *)           COLS="$COLUMNS" ;;
+esac
+[ "$COLS" -gt 0 ] 2>/dev/null || COLS=80
 FILE="${1:-}"
-[ -n "$FILE" ] && [ -f "$FILE" ] || { echo "usage: spechub-md [--serve] FILE.md" >&2; exit 1; }
+[ -n "$FILE" ] && [ -f "$FILE" ] || usage
+# One place to clean up, so no exit path leaks a temp file.
+trap "rm -f /tmp/spechub-md.$$.md /tmp/spechub-md-out.$$.md /tmp/spechub-md-art.$$.*" EXIT
+
+# A preview pane cannot page, so the same render goes straight to stdout.
+emit() { local f="$1"; shift; if [ "$PREVIEW" = "1" ]; then cat "$f"; else "$@" "$f"; fi; }
+
+# A wide diagram left a marker behind rather than art glow would wrap. Turn
+# the marker into a line a person can read and put the drawing back under it.
+# Both output paths run this: without it the marker reaches the reader raw.
+splice() {
+  SPECHUB_PID=$$ SPECHUB_PREVIEW="$PREVIEW" python3 - "$1" <<'PY'
+import os, pathlib, re, sys
+f = pathlib.Path(sys.argv[1])
+pid = os.environ["SPECHUB_PID"]
+preview = os.environ.get("SPECHUB_PREVIEW") == "1"
+lines = []
+for line in f.read_text().split("\n"):
+    m = re.search(r"\x00SPECHUBART(\d+)\x00", line)
+    if not m:
+        lines.append(line); continue
+    art = pathlib.Path(f"/tmp/spechub-md-art.{pid}.{m.group(1)}")
+    lines.append(re.sub(r"\x00SPECHUBART\d+\x00", f"Diagram {m.group(1)}:", line))
+    if art.exists():
+        # Art too wide for the pane would spill past it, so a preview pane
+        # keeps the placeholder and leaves the drawing to a full-width read.
+        if not preview:
+            lines.extend("  " + l for l in art.read_text().splitlines())
+        art.unlink()
+f.write_text("\n".join(lines) + "\n")
+PY
+}
 
 if [ "$SERVE" = "1" ]; then
   # exec -a names the process spechub-md-serve. Without it the running server
@@ -362,6 +418,7 @@ fi
 
 # Terminal render: swap each mermaid fence for its text drawing, then page it.
 SPECHUB_COLS="$COLS" SPECHUB_PAD="$PAD" SPECHUB_ONLY="$ONLY" SPECHUB_RUN="$$" \
+SPECHUB_PREVIEW="$PREVIEW" \
 python3 - "$FILE" <<'PY' > /tmp/spechub-md.$$.md 2>/dev/null
 import os, pathlib, re, shlex, shutil, subprocess, sys, tempfile
 text = pathlib.Path(sys.argv[1]).read_text()
@@ -375,6 +432,7 @@ have = shutil.which("mermaid-ascii")
 COLS = int(os.environ.get("SPECHUB_COLS") or 80)
 PAD = (os.environ.get("SPECHUB_PAD") or "").split()
 ONLY = int(os.environ.get("SPECHUB_ONLY") or 0)
+PREVIEW = os.environ.get("SPECHUB_PREVIEW") == "1"
 # glow indents and pads a fenced block, so the art has less room than the pane.
 BUDGET = max(20, COLS - 6)
 seen = 0
@@ -403,8 +461,13 @@ def to_ascii(src):
         return None, f"{kind} diagrams are not supported by mermaid-ascii"
     with tempfile.NamedTemporaryFile("w", suffix=".mmd", delete=False) as f:
         f.write(body); path = f.name
-    r = subprocess.run(["mermaid-ascii", "--file", path] + PAD,
-                       capture_output=True, text=True)
+    # mermaid-ascii reads a file, not stdin. A preview redraws on every cursor
+    # move, so a file left behind here fills /tmp at cursor speed.
+    try:
+        r = subprocess.run(["mermaid-ascii", "--file", path] + PAD,
+                           capture_output=True, text=True)
+    finally:
+        os.unlink(path)
     if r.returncode != 0 or not r.stdout.strip():
         return None, (r.stderr.strip().splitlines() or ["could not draw it"])[0]
     return r.stdout.rstrip("\n"), None
@@ -428,10 +491,14 @@ def repl(m):
         # noise. Emit a marker instead and splice the raw art back in after
         # glow has run, so prose wraps to the pane and the diagram does not.
         run = os.environ.get("SPECHUB_RUN") or str(os.getpid())
-        art_path = pathlib.Path(tempfile.gettempdir()) / f"spechub-md-art.{run}.{n}"
+        # /tmp, not gettempdir(): the shell trap and the splicer both look
+        # there, and a stray $TMPDIR would hide the art from either.
+        art_path = pathlib.Path(f"/tmp/spechub-md-art.{run}.{n}")
         art_path.write_text(art + "\n")
-        return (f"\n```\n\x00SPECHUBART{n}\x00 {width} cols, pans sideways "
-                f"with the arrow keys\n```")
+        # The arrow keys belong to the pager. A preview pane has none, and
+        # opening the file is what draws the diagram there.
+        hint = "open it full width" if PREVIEW else "pans sideways with the arrow keys"
+        return f"\n```\n\x00SPECHUBART{n}\x00 {width} cols, {hint}\n```"
     return "```\n" + art + "\n```"
 
 out = re.sub(r"```mermaid\n(.*?)```", repl, text, flags=re.S)
@@ -444,15 +511,14 @@ PY
 
 if [ "$ONLY" != "0" ]; then
   # -S chops instead of wrapping: arrow keys scroll sideways.
-  less -SR /tmp/spechub-md.$$.md
+  emit /tmp/spechub-md.$$.md less -SR
 elif command -v glow >/dev/null 2>&1; then
   # glow drops all styling when stdout is not a terminal, and its output has
-  # to be captured to splice the diagrams in, so it runs under a pty.
-  SPECHUB_PID=$$ SPECHUB_COLS="$COLS" SPECHUB_STYLE="${SPECHUB_MD_STYLE:-}" \
+  # to be captured to splice the diagrams into, so it runs under a pty.
+  SPECHUB_COLS="$COLS" SPECHUB_STYLE="${SPECHUB_MD_STYLE:-}" \
     python3 - /tmp/spechub-md.$$.md /tmp/spechub-md-out.$$.md <<'PY'
 import fcntl, os, pathlib, pty, re, struct, subprocess, sys, termios
 src, dst = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
-pid = os.environ["SPECHUB_PID"]
 cols = int(os.environ.get("SPECHUB_COLS") or 80)
 # Leave glow on "auto": under a pty it picks its full palette. Pinning a
 # named style here gives a noticeably flatter one.
@@ -461,7 +527,7 @@ style = os.environ.get("SPECHUB_STYLE") or ""
 cmd = ["glow", "-w", str(cols - 2)] + (["--style", style] if style else []) + [str(src)]
 master, slave = pty.openpty()
 # glow reads the width from the pty, not just -w, so set it to match.
-fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 200, cols, 0, 0))
+fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 200, min(cols, 65535), 0, 0))
 proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=slave, stderr=subprocess.DEVNULL)
 os.close(slave)
 chunks = []
@@ -474,30 +540,20 @@ while True:
         break
     chunks.append(b)
 os.close(master); proc.wait()
-text = b"".join(chunks).decode("utf-8", "replace").replace("\r\n", "\n")
+raw = b"".join(chunks)
+text = raw.decode("utf-8", "replace").replace("\r\n", "\n")
 # A pty makes glow probe the terminal for its background colour. Those replies
 # are meant for a real terminal, not a file, so drop them.
 text = re.sub(r"\x1b\][01][01];\?(\x07|\x1b\\)", "", text)
 text = re.sub(r"\x1b\[6n", "", text)
-
-lines = []
-for line in text.split("\n"):
-    m = re.search(r"\x00SPECHUBART(\d+)\x00", line)
-    if not m:
-        lines.append(line); continue
-    art = pathlib.Path(f"/tmp/spechub-md-art.{pid}.{m.group(1)}")
-    lines.append(re.sub(r"\x00SPECHUBART\d+\x00", f"Diagram {m.group(1)}:", line))
-    if art.exists():
-        lines.extend("  " + l for l in art.read_text().splitlines())
-        art.unlink()
-dst.write_text("\n".join(lines) + "\n")
+dst.write_text(text)
 PY
-  ${PAGER:-less -SR} /tmp/spechub-md-out.$$.md
-  rm -f /tmp/spechub-md-out.$$.md /tmp/spechub-md-art.$$.*
+  splice /tmp/spechub-md-out.$$.md
+  emit /tmp/spechub-md-out.$$.md ${PAGER:-less -SR}
 else
-  ${PAGER:-less -R} /tmp/spechub-md.$$.md
+  splice /tmp/spechub-md.$$.md
+  emit /tmp/spechub-md.$$.md ${PAGER:-less -R}
 fi
-rm -f /tmp/spechub-md.$$.md
 H
   chmod +x "$BIN/spechub-md"
 
@@ -1223,8 +1279,77 @@ import os, re, sys
 path = sys.argv[1]
 hidden, begin, end = os.environ["SPECHUB_ARGS"].split("|")
 text = open(path).read() if os.path.isfile(path) else ""
+# Drop any previous managed region, both to stay idempotent and so what is
+# left to inspect below is exactly the config the user wrote.
 text = re.sub(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", text, flags=re.S)
-block = f"""{begin}
+
+# Every namespace the block writes into. TOML forbids declaring any of them
+# twice, and yazi answers one duplicate by throwing the entire config away and
+# falling back to presets. So a namespace the user already occupies is theirs:
+# the block gives that piece up rather than cost them every other setting they
+# have. Deciding which are taken is a question about the parsed document, not
+# about the text: [ mgr ], [ "mgr" ], [ 'mgr' ] and mgr.show_hidden = false are
+# all the same table, and only a parser knows that.
+NAMESPACES = ("mgr", "opener.markdown", "plugin.prepend_previewers", "open.prepend_rules")
+
+try:
+    import tomllib
+except ImportError:  # tomllib is 3.11 and newer
+    tomllib = None
+
+
+def claimed(cfg):
+    """Which of NAMESPACES the user's own config already occupies."""
+    if tomllib is None:
+        # No parser to reason with, so read the text conservatively: name the
+        # top-level table wherever TOML could open one, as a header or as a
+        # key of its own. That concedes namespaces which would have been safe
+        # to write, and each of those costs one setting; guessing the other
+        # way costs the file. One thing text cannot see is that the config is
+        # broken already, so unlike the parsed path below this branch does not
+        # concede everything for a file that never parsed.
+        found = set()
+        for ns in NAMESPACES:
+            root = re.escape(ns.split(".")[0])
+            # A key may be bare, a basic string or a literal string, and all
+            # three name the same table: [mgr], ["mgr"] and ['mgr'] are one.
+            name = r"""(?:%s|"%s"|'%s')""" % (root, root, root)
+            header = r'\[\[?\s*%s\s*[.\]]' % name
+            key = r'%s\s*[.=]' % name
+            if re.search(r"(?m)^\s*(?:%s|%s)" % (header, key), cfg):
+                found.add(ns)
+        return found
+    try:
+        tomllib.loads(cfg)
+    except tomllib.TOMLDecodeError:
+        # Their config does not parse as it stands. We cannot tell what it
+        # claims, and repairing it is not ours to do, so concede everything:
+        # the file ends up exactly as broken as it arrived, never more.
+        return set(NAMESPACES)
+    found = set()
+    for ns in NAMESPACES:
+        # Whether a namespace is free is not "is the key there". TOML also
+        # refuses to reopen an inline table and to overwrite a scalar, so
+        # opener = { text = [...] } and opener = "nope" both have no
+        # opener.markdown key and are both fatal to write under. tomllib
+        # hands an inline table back as an ordinary dict, so no walk over the
+        # parsed document can tell those apart from a table that is still
+        # open. Put the question to the parser instead, in the exact form the
+        # block would write it: append that header to their config and see
+        # whether the whole thing still parses. Whatever it refuses is theirs.
+        probe = "[mgr]" if ns == "mgr" else "[[%s]]" % ns
+        try:
+            tomllib.loads(cfg + "\n" + probe + "\n")
+        except tomllib.TOMLDecodeError:
+            found.add(ns)
+    return found
+
+
+taken = claimed(text)
+parts = []
+
+if "plugin.prepend_previewers" not in taken:
+    parts.append("""
 [[plugin.prepend_previewers]]
 url = "*.md"
 run = 'piper -- COLUMNS=$w spechub-md --preview "$1"'
@@ -1232,15 +1357,30 @@ run = 'piper -- COLUMNS=$w spechub-md --preview "$1"'
 [[plugin.prepend_previewers]]
 url = "*.markdown"
 run = 'piper -- COLUMNS=$w spechub-md --preview "$1"'
+""")
 
+if "opener.markdown" not in taken:
+    # An array of tables rather than a markdown key under [opener]: a second
+    # [opener] table would be a duplicate, while a subtable of one the user
+    # has already declared is legal.
+    parts.append("""
 # The preview pane is narrow, so a wide diagram shows its placeholder there.
 # Enter opens the same renderer full width, where more of them fit.
-[opener]
-markdown = [
-  {{ run = 'spechub-md "$@"', block = true, desc = "Read (spechub-md)" }},
-  {{ run = '${{EDITOR:-vi}} "$@"', block = true, desc = "Edit" }},
-]
+[[opener.markdown]]
+run = 'spechub-md "$@"'
+block = true
+desc = "Read (spechub-md)"
 
+[[opener.markdown]]
+run = '${EDITOR:-vi} "$@"'
+block = true
+desc = "Edit"
+""")
+
+if "open.prepend_rules" not in taken:
+    # Worth writing even when the opener above was skipped: the rules point
+    # markdown files at whichever opener.markdown ends up in the file.
+    parts.append("""
 [[open.prepend_rules]]
 url = "*.md"
 use = "markdown"
@@ -1248,13 +1388,38 @@ use = "markdown"
 [[open.prepend_rules]]
 url = "*.markdown"
 use = "markdown"
+""")
 
-[mgr]
-show_hidden = {hidden}
-{end}"""
+if "mgr" not in taken:
+    parts.append(f"[mgr]\nshow_hidden = {hidden}")
+
+# The markers go down even when every piece was conceded, so the shell below
+# can still read the region back and see what is missing from it.
+block = begin + "\n" + "\n\n".join(p.strip("\n") for p in parts) + "\n" + end
 text = text.rstrip("\n")
 open(path, "w").write((text + "\n\n" if text else "") + block + "\n")
 PY
+  # A setting the block gave up to the user's own config is simply absent from
+  # what was written, so read the region back rather than let it go unsaid.
+  local written; written="$(sed -n "/$BEGIN/,/$END/p" "$HOME/.config/yazi/yazi.toml")"
+  case "$written" in *"[[plugin.prepend_previewers]]"*) ;; *)
+    say "yazi: your yazi.toml already sets plugin.prepend_previewers, so the"
+    say "     markdown previewer was left alone. Add a *.md entry there to"
+    say "     preview markdown with spechub-md." ;;
+  esac
+  case "$written" in *"[[opener.markdown]]"*) ;; *)
+    say "yazi: your yazi.toml already opens markdown its own way, so it was left"
+    say "     alone. Add spechub-md to that opener to read markdown with it." ;;
+  esac
+  case "$written" in *"[[open.prepend_rules]]"*) ;; *)
+    say "yazi: your yazi.toml already sets open.prepend_rules, so the markdown"
+    say "     rules were left alone. Add *.md and *.markdown entries there"
+    say "     pointing at the markdown opener." ;;
+  esac
+  case "$written" in *show_hidden*) ;; *)
+    say "yazi: your yazi.toml already claims mgr itself, so show_hidden was left"
+    say "     alone. Set it there yourself to show hidden files." ;;
+  esac
   say "yazi config written"
 }
 

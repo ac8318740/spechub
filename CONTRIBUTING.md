@@ -30,7 +30,7 @@ Two rules for it:
   only those regions, so hand-written config around them survives. Never write
   outside the markers, and never assume the file is absent.
 
-  Two exceptions, both forced by TOML. A key the block sets is **claimed**: an
+  The exceptions are forced by TOML. A key the block sets is **claimed**: an
   assignment of the same name in the user's own `[keys]`, and any
   `[[keys.command]]` bound to a key the block binds, is removed before the merge,
   because TOML forbids a duplicate key and herdr would reject the whole file.
@@ -39,6 +39,36 @@ Two rules for it:
   bare keys must sit inside `[keys]`, while `[[keys.command]]` and `[worktrees]`
   are top-level tables and cannot. What must hold is that re-applying never
   accumulates them.
+
+  `yazi.toml` is the same case, and stricter. yazi rejects the whole config on
+  one TOML error and falls back to presets, so a single duplicate costs the user
+  every setting they have. The managed block writes into four namespaces –
+  `mgr`, `opener.markdown`, `plugin.prepend_previewers` and `open.prepend_rules`
+  – and every one of them is a claimed-key case. An array-of-tables entry is
+  additive only where the name is free or already an array of tables:
+  `[[plugin.prepend_previewers]]` is fine under a `[plugin]` that leaves
+  `prepend_previewers` unset, and a duplicate under one holding it as an inline
+  array, which is the form yazi's own documentation teaches.
+
+  Which namespaces the user has claimed is decided by putting the question to
+  `tomllib` in the exact form the block would write it: append that header to
+  the config outside the markers and see whether the whole thing still parses.
+  Whatever the parser refuses is theirs. A dict lookup would not do – TOML also
+  refuses to reopen an inline table or to overwrite a scalar, and neither
+  `opener = { text = [...] }` nor `opener = "nope"` has an `opener.markdown`
+  key to find, so a lookup calls both free and the write kills the file. A
+  config that does not parse to begin with concedes all four, since nothing can
+  be known about it and repairing it is not ours to do.
+
+  `tomllib` needs Python 3.11, so its absence falls back to naming the
+  top-level table anywhere the text could open one – bare, `"quoted"` or
+  `'literal'`, as a header or as a key of its own. That mostly concedes
+  namespaces which would have been safe to write, and each of those costs one
+  setting where guessing the other way costs the file. It errs the other way in
+  one place: text cannot see that a config never parsed, so the fallback writes
+  all four into a file the parsed path would have conceded whole. Whatever is
+  conceded is left to the user and named in a `say` line, because a config that
+  parses with a setting missing beats one yazi throws out.
 
 After changing `setup.sh`, test it against a fake home rather than your own:
 
