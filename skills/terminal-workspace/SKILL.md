@@ -142,6 +142,13 @@ export SPECHUB_OPEN_CMD="ssh laptop open"   # any command taking a URL
 Do not suggest installing a browser or an X server on the VM to fix this. The
 browser belongs on the machine the user is sitting at.
 
+Under `herdr --remote`, panes run on the remote host, so `spechub-open` looks
+for a browser there and normally finds none. That is fine and needs no
+configuration: herdr carries clipboard writes and hyperlinks across the link,
+so the copy and the clickable link both arrive at the terminal you attached
+from. Do not add per-host browser configuration to make it "work" - it already
+does.
+
 ### When o claims it opened something nobody saw
 
 `agent-browser` launches a headless Chrome on the local machine when it cannot

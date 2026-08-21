@@ -404,7 +404,7 @@ It tries, in order:
 2. `xdg-open`, when this machine has a display after all
 3. `wslview` or `explorer.exe`, when the Windows half of the machine holds the browser
 4. Chrome on your laptop through the [Playwriter bridge](../skills/bridge/SKILL.md), but only once it has proved the browser is really reachable that way. See below
-5. A link you can click: the URL as an OSC 8 hyperlink, which the terminal you are sitting at draws itself, so ctrl+click reaches your own browser with nothing installed in between. The bare URL sits under it for terminals that ignore OSC 8, and it goes on your clipboard either way
+5. A link you can click: the URL as an OSC 8 hyperlink, which the terminal you are sitting at draws itself, so ctrl+click reaches your own browser with nothing installed in between. The link text is the URL, so a terminal that ignores OSC 8 still shows something its own URL detection can catch, and it goes on your clipboard either way
 6. With no terminal to draw on either, the URL still goes on the clipboard, but the command reports failure. Silent success is what left gh-dash claiming it had opened a page that never opened
 
 `setup.sh status` prints which route a machine will take, and the last line of `~/.cache/spechub/open.log` says what the last press actually did.
@@ -416,6 +416,25 @@ It tries, in order:
 Nothing about the relay answering on port 19988 rules that out either. Ours answered `/json/version` while refusing every CDP connection with `Multiple extensions connected. Specify extensionId.`, so every open landed in a headless Chrome for hours without one error message.
 
 So the bridge route asks `agent-browser get cdp-url` what it is actually attached to, and takes the route only when the answer is the bridge. It also skips the question entirely unless a session is already running, because asking it otherwise starts a browser as a side effect.
+
+### Under herdr --remote
+
+`herdr --remote <target>` runs the server, and therefore every pane process,
+on the remote host. The client is a thin attach: it sends input and draws what
+the server sends back. Both helpers are written for that shape and need no
+change.
+
+`spechub-clip` still works, because herdr carries a pane's clipboard write
+across the link rather than acting on it locally: the server stages the
+payload and hands it to the attached client, which writes it to the terminal
+in front of you. Paste travels the other way for the same reason.
+
+`spechub-open` runs on the server host, which is the honest answer for routes
+1 to 4: an override, a display, WSL or a bridge tunnel all have to exist
+*there*. In practice none does, so it falls to route 5 - and route 5 is the
+one that does not care, because herdr re-emits hyperlinks when it renders, so
+the link arrives at whichever terminal you attached from and ctrl+click opens
+the browser on that machine. Which is where you are sitting.
 
 ### On a machine with none of this
 
