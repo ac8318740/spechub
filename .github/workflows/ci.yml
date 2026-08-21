@@ -39,6 +39,23 @@ jobs:
             exit 1
           fi
 
+  shell:
+    name: Shell suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guards setup.sh against its docs. Every spechub-* and every bound
+      # command the docs name must be something setup.sh installs, every
+      # default key must be documented, and the generated keymap must still
+      # be valid TOML after merging onto a config written by hand. Offline,
+      # so no herdr needed.
+      - name: Terminal workspace and docs
+        run: bash tests/test-terminal-workspace.sh
+
+      - name: Session start handoff hook
+        run: bash tests/test-session-start-handoff.sh
+
   wiring:
     name: Plugin wiring
     runs-on: ubuntu-latest

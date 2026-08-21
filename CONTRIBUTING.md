@@ -27,8 +27,18 @@ Two rules for it:
   prefix, so a helper named anything else leaks.
 - **Every edit to a user's config sits between the managed markers**
   (`# >>> spechub terminal-workspace >>>` / `# <<< ... <<<`). Re-applying replaces
-  only that region, so hand-written config around it survives. Never write outside
-  the markers, and never assume the file is absent.
+  only those regions, so hand-written config around them survives. Never write
+  outside the markers, and never assume the file is absent.
+
+  Two exceptions, both forced by TOML. A key the block sets is **claimed**: an
+  assignment of the same name in the user's own `[keys]`, and any
+  `[[keys.command]]` bound to a key the block binds, is removed before the merge,
+  because TOML forbids a duplicate key and herdr would reject the whole file.
+  The same applies to `[worktrees]`, which the block re-declares in full. Merging
+  into an existing `[keys]` also produces **two** managed regions rather than one:
+  bare keys must sit inside `[keys]`, while `[[keys.command]]` and `[worktrees]`
+  are top-level tables and cannot. What must hold is that re-applying never
+  accumulates them.
 
 After changing `setup.sh`, test it against a fake home rather than your own:
 
@@ -40,8 +50,21 @@ HOME=$FAKE SPECHUB_TW_CONFIG=$FAKE/.config/spechub/tw.yaml SPECHUB_TW_BIN=$FAKE/
   bash assets/terminal-workspace/setup.sh apply
 ```
 
-Then check the generated config parses, run `apply` twice and confirm exactly one
-managed block, and run `uninstall` and confirm nothing is left behind.
+Then check the generated config parses, run `apply` twice and confirm the managed
+block count does not grow, and run `uninstall` and confirm nothing is left behind.
+
+Run the guard suite too. It is offline, so it needs no herdr:
+
+```bash
+bash tests/test-terminal-workspace.sh
+```
+
+It checks setup.sh against `docs/terminal-workspace.md` in both directions: every
+`spechub-*` and every bound command the docs mention must be something setup.sh
+installs, and every default keybinding must be documented. It also merges the
+generated keymap onto a hand-written config and asserts the result is valid TOML.
+CI runs it on every push and pull request. Rename a helper or change a default
+key and this suite fails until the docs follow.
 
 ## CLI build discipline
 

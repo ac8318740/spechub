@@ -57,6 +57,8 @@ for name in $(grep -oE '\bspechub-[a-z][a-z-]*[a-z]\b' "$DOCS" | sort -u); do
   echo "$installed" | grep -qx "$name" && continue
   # Process names rather than binaries, named via exec -a inside a helper.
   grep -q "exec -a $name" "$SETUP" && continue
+  # A family prefix such as spechub-herdr- names a convention, not a command.
+  echo "$installed" | grep -q "^$name-" && continue
   unknown="$unknown $name"
 done
 if [ -z "$unknown" ]; then ok "every spechub-* in docs is installed"
@@ -78,6 +80,22 @@ while read -r key; do
 done < <(grep -oE 'cfg_get [a-z_]+\.[a-z_]*key "[^"]+"' "$SETUP" | grep -oE '"[^"]+"$' | tr -d '"')
 if [ -z "$missing" ]; then ok "every default keybinding is documented"
 else no "keybindings missing from docs:$missing"; fi
+
+# The retired-name check above only sees helpers named spechub-*. The names
+# that actually rotted were hdiff and hdash, which predate that convention, so
+# check the config example the way a reader uses it: every command it binds
+# must be something this machine will actually have.
+externals="yazi diffnav delta glow tuicr gh"
+dangling=""
+while read -r cmd; do
+  [ -n "$cmd" ] || continue
+  first=${cmd%% *}
+  echo "$installed" | grep -qx "$first" && continue
+  echo "$externals" | grep -qw "$first" && continue
+  dangling="$dangling $first"
+done < <(grep -oE '^command = "[^"]+"' "$DOCS" | sed 's/^command = "//; s/"$//')
+if [ -z "$dangling" ]; then ok "every command the docs bind resolves to a real binary"
+else no "docs bind commands nothing installs:$dangling"; fi
 
 echo "keymap merge safety"
 # The generated block must survive landing on a keymap somebody wrote by hand.
@@ -129,9 +147,14 @@ run_keymap alt "$WORK/twice.toml"
 if diff -q "$WORK/merged.toml" "$WORK/twice.toml" >/dev/null; then ok "re-applying is idempotent"
 else no "re-applying is idempotent"; fi
 
-blocks=$(grep -c "$BEGIN_MARK" "$WORK/twice.toml")
-if [ "$blocks" = "1" ]; then ok "exactly one managed block after two applies"
-else no "expected 1 managed block, found $blocks"; fi
+# Merging into an existing [keys] needs two managed regions, not one: the bare
+# keys must sit inside [keys], while [[keys.command]] and [worktrees] are
+# top-level tables and cannot. What must hold is that re-applying does not
+# accumulate them.
+first=$(grep -c "$BEGIN_MARK" "$WORK/merged.toml")
+again=$(grep -c "$BEGIN_MARK" "$WORK/twice.toml")
+if [ "$first" = "$again" ]; then ok "managed blocks do not accumulate ($first)"
+else no "managed blocks grew from $first to $again"; fi
 
 # prefix+1..9 needs no modifier, so opting out of the chord family must not
 # cost you workspace numbers.
