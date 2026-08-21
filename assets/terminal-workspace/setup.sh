@@ -167,10 +167,18 @@ set -uo pipefail
 # o on a pull request opens it through $BROWSER. A dev VM has no desktop
 # for xdg-open to draw on, so gh-dash's default fails with exit status 1.
 export BROWSER=spechub-open
+# Every action gh-dash takes shells out to gh and discards its stderr, so a
+# refusal from GitHub reaches you as "exit status 1" for two seconds. spechub-gh
+# goes in front of the real gh under that name and speaks the refusal aloud.
+# Its directory holds nothing else, so nothing else on PATH is shadowed.
+SHIM="$(mktemp -d)"; GEN=""
+trap 'rm -rf "$SHIM"; rm -f "$GEN"' EXIT
+ln -s "$(command -v spechub-gh)" "$SHIM/gh" 2>/dev/null && export PATH="$SHIM:$PATH"
 BASE="$HOME/.config/gh-dash/config.yml"
 REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)"
-[ -z "$REPO" ] && exec gh dash "$@"
-GEN="$(mktemp)"; trap 'rm -f "$GEN"' EXIT
+# Not exec, so the trap above still gets to clean up after the dashboard.
+[ -z "$REPO" ] && { gh dash "$@"; exit $?; }
+GEN="$(mktemp)"
 REPO="$REPO" python3 - "$BASE" "$GEN" <<'PY'
 import os, sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1])) or {}
@@ -183,6 +191,57 @@ PY
 gh dash --config "$GEN" "$@"
 H
   chmod +x "$BIN/spechub-dash"
+
+  cat > "$BIN/spechub-gh" <<'H'
+#!/usr/bin/env bash
+# gh, plus the reason a pull request action failed.
+#
+# gh-dash runs gh for everything it does to a pull request - approve, comment,
+# merge - and throws the command's stderr away, so GitHub refusing one shows as
+# "exit status 1" in the footer for two seconds and nothing else. Approving your
+# own pull request is the everyday case: GitHub always refuses that, and the
+# dashboard looks like it simply ignored the keypress.
+#
+# spechub-dash links this into a directory of its own at the front of $PATH
+# under the name gh, so gh-dash finds it first. Everything is handed to the real
+# gh untouched and its exit code is returned as-is; the only thing added is a
+# notification when an action fails, because a suspended TUI cannot print for
+# us. Installed by spechub.
+set -uo pipefail
+
+# The real gh is the first one on $PATH that is not this script under another
+# name. Comparing what each resolves to sees through both the link spechub-dash
+# makes and a plain copy of this file.
+ME="$(readlink -f "$0")"
+REAL=""
+while IFS= read -r dir; do
+  [ -n "$dir" ] && [ -x "$dir/gh" ] || continue
+  [ "$(readlink -f "$dir/gh")" = "$ME" ] && continue
+  REAL="$dir/gh"; break
+done < <(printf '%s\n' "${PATH//:/$'\n'}")
+[ -n "$REAL" ] || { echo "spechub-gh: no gh on \$PATH besides this shim" >&2; exit 127; }
+
+# The dashboard is not an action: it owns the terminal for as long as it runs.
+[ "${1:-}" = "dash" ] && exec "$REAL" "$@"
+
+ERR="$(mktemp)"; trap 'rm -f "$ERR"' EXIT
+"$REAL" "$@" 2>"$ERR"
+RC=$?
+cat "$ERR" >&2
+
+# Only what a dashboard key fires. gh's own plumbing - repo view, api, auth -
+# fails for reasons a notification cannot help with, and spechub-dash asks gh
+# which repository this is before the dashboard has even started.
+case "${1:-}" in pr|issue) ;; *) exit $RC ;; esac
+[ "$RC" -eq 0 ] && exit 0
+
+MSG="$(grep -v '^[[:space:]]*$' "$ERR" | head -3)"
+[ -n "$MSG" ] || MSG="gh exited with status $RC"
+command -v herdr >/dev/null 2>&1 \
+  && herdr notification show "gh ${1:-} ${2:-} failed" --body "$MSG" >/dev/null 2>&1
+exit $RC
+H
+  chmod +x "$BIN/spechub-gh"
 
   cat > "$BIN/spechub-md" <<'H'
 #!/usr/bin/env bash

@@ -358,6 +358,19 @@ gh dash --config "$GEN" "$@"
 
 Because herdr popups inherit the focused pane's directory, `alt+i` from an agent's worktree opens the dashboard already scoped to that repository.
 
+### spechub-gh: why an action failed
+
+gh-dash shells out to `gh` for everything it does to a pull request and throws the command's stderr away, so GitHub refusing one arrives as `exit status 1` in the footer, for two seconds. Approving your own pull request is the case you meet daily, because GitHub always refuses that: the input box closes, nothing else happens, and the dashboard looks like it ignored the key.
+
+`spechub-dash` answers that without patching gh-dash. It links `spechub-gh` into a directory of its own at the front of `$PATH` under the name `gh`, so gh-dash finds it before the real one. The real `gh` still does the work and still decides the exit code. The only thing added is a notification carrying gh's own words when a `pr` or `issue` action fails:
+
+```
+gh pr review failed
+Can not approve your own pull request.
+```
+
+`gh dash` itself is handed straight through, and so is every subcommand that is not an action - `repo view` and `api` among them - because those fail for reasons a notification cannot help with.
+
 ## Copy and open, from a machine you reach over SSH
 
 A dev VM has no display and no clipboard of its own. Two gh-dash keys land on that fact:
@@ -527,4 +540,5 @@ Each of these cost real time to find.
 - **Worktree workspaces nest, plain workspaces do not.** A workspace made with `alt+w` always sits at the top level, whatever directory it points at
 - **Sidebar actions act on the selected workspace**, not the focused pane. Open the sidebar and select before creating a worktree or closing a workspace
 - **In-process teammates are invisible to herdr.** A Claude teammate shares its parent's pane and session, so it never appears as its own agent. Two agents in one worktree means two real sessions
+- **gh-dash never says why an action failed.** It discards gh's stderr, so a refusal shows as `exit status 1` for two seconds. `spechub-gh`, which `spechub-dash` puts on `$PATH` as `gh`, turns that into a notification quoting gh. Approving your own pull request is the one you will hit
 - **A remote machine has no clipboard and no browser.** `o`, `y` and `Y` in gh-dash all fail on a bare VM until `apply` installs `spechub-clip` and `spechub-open`. `setup.sh status` says which one a machine ended up with

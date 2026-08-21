@@ -264,5 +264,88 @@ else
   no "spechub-open falls back to the clipboard when no browser is reachable"
 fi
 
+echo "why a gh-dash action failed"
+# gh-dash runs gh for every action it takes and throws the command's stderr
+# away, so GitHub refusing one arrives as "exit status 1" in the footer for two
+# seconds. Approving your own pull request is the everyday case: GitHub always
+# refuses it, and the dashboard looks like it did nothing at all. spechub-gh
+# goes on PATH under the name gh and carries the refusal to a notification.
+GHBIN="$WORK/gh-bin"; SHIMDIR="$WORK/gh-shim"
+mkdir -p "$GHBIN" "$SHIMDIR"
+cp "$(extract spechub-gh)" "$SHIMDIR/gh"
+
+# Stands in for the real gh: reports what it was handed, fails when told to.
+cat > "$GHBIN/gh" <<'T'
+#!/usr/bin/env bash
+echo "real gh got: $*"
+[ "${GH_EXIT:-0}" = "0" ] || echo "Can not approve your own pull request." >&2
+exit "${GH_EXIT:-0}"
+T
+# Records the notification the shim raises, so a check can read it back.
+cat > "$GHBIN/herdr" <<'T'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$NOTES"
+T
+chmod +x "$GHBIN/gh" "$GHBIN/herdr"
+
+NOTES="$WORK/notes"
+# The shim first, the stand-in gh behind it: the arrangement spechub-dash makes.
+run_gh() {
+  local code="$1"; shift
+  env PATH="$SHIMDIR:$GHBIN:/usr/bin:/bin" NOTES="$NOTES" GH_EXIT="$code" gh "$@"
+}
+
+: > "$NOTES"
+out=$(run_gh 3 pr view 7 2>"$WORK/gh-err"); rc=$?
+if [ "$rc" = "3" ] && [ "$out" = "real gh got: pr view 7" ] \
+   && grep -q "Can not approve" "$WORK/gh-err"; then
+  ok "the gh shim passes arguments, both streams and the exit code through"
+else
+  no "the gh shim passes arguments, both streams and the exit code through (rc=$rc, out='$out')"
+fi
+
+if grep -q "notification show" "$NOTES" \
+   && grep -q "Can not approve your own pull request." "$NOTES"; then
+  ok "a failed pull request action says why, in a notification"
+else
+  no "a failed pull request action says why, in a notification (got '$(cat "$NOTES")')"
+fi
+
+: > "$NOTES"
+run_gh 0 pr comment 7 --body hello >/dev/null 2>&1
+if [ ! -s "$NOTES" ]; then
+  ok "an action that worked stays quiet"
+else
+  no "an action that worked stays quiet (got '$(cat "$NOTES")')"
+fi
+
+# The dashboard is not an action. It owns the terminal for as long as it runs,
+# and a notification about its exit code would be noise.
+: > "$NOTES"
+run_gh 4 dash --config /dev/null >/dev/null 2>&1
+rc=$?
+if [ "$rc" = "4" ] && [ ! -s "$NOTES" ]; then
+  ok "gh dash itself is handed straight to the real gh"
+else
+  no "gh dash itself is handed straight to the real gh (rc=$rc, notes='$(cat "$NOTES")')"
+fi
+
+# gh's own plumbing fails for reasons a notification cannot help with, and
+# spechub-dash calls gh repo view before the dashboard even starts.
+: > "$NOTES"
+run_gh 1 repo view --json nameWithOwner >/dev/null 2>&1
+if [ ! -s "$NOTES" ]; then
+  ok "a failure outside pr and issue raises nothing"
+else
+  no "a failure outside pr and issue raises nothing (got '$(cat "$NOTES")')"
+fi
+
+# None of the above reaches gh-dash unless spechub-dash puts the shim first.
+if grep -q 'PATH="\$SHIM:\$PATH"' "$(extract spechub-dash)"; then
+  ok "spechub-dash puts the gh shim at the front of \$PATH"
+else
+  no "spechub-dash puts the gh shim at the front of \$PATH"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
