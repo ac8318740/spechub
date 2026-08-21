@@ -96,7 +96,8 @@ For work with open decisions, chart it with `/spechub:map` first.
 | `/spechub:archive` | Close out a cleared map – check the residue landed (the durable output: spec updates, decision records, glossary entries), then dispose of the nodes |
 | `/spechub:config` | View/modify workflow settings |
 | `/spechub:sync` | Update specs from code changes |
-| `/spechub:handoff` | Hand work to a fresh agent session, or anchor it to survive compaction |
+| `/spechub:handoff` | Hand work to a visible agent – a new one in its own pane, or one already running – with acknowledgement |
+| `/spechub:compact-and-continue` | Anchor the session's load-bearing state to survive compaction, then continue in place |
 
 ### Setup and Supporting
 
