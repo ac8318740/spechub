@@ -49,6 +49,12 @@ export function requireProject(root: string | null): asserts root is string {
   }
 }
 
+/** Print a red error and exit 1 – the one way a command reports user error. */
+export function fail(message: string): never {
+  console.error(chalk.red(message));
+  process.exit(1);
+}
+
 export function formatDate(): string {
   return new Date().toISOString().split('T')[0];
 }
