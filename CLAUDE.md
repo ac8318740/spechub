@@ -324,7 +324,12 @@ See the `browser-verify` skill for the `agent-browser` command reference, select
 | Verify build before marking done     | Handle their own lint/typecheck       | Update documentation      |
 | Manage spec updates via /commit      | Do NOT edit files outside their scope | Verify & fix UI issues    |
 
-**User manages all git operations (commits, branches, PRs).**
+**Git is yours to run, within limits.** Low-risk operations – `status`, `diff`,
+`log`, listing branches, staging – need no permission; just run them. Anything
+that publishes or rewrites – commit, push, branch deletion, force operations,
+opening a PR – needs the user to have asked for it or permitted it. When you do
+commit, route through `/spechub:commit` rather than raw git; it is the only path
+that runs spec sync.
 
 **If you find yourself about to use Edit, Write, Grep, or read code directly – STOP.**
 **Delegate that work to a subagent or teammate instead.**
