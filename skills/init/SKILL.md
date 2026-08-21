@@ -291,6 +291,12 @@ workflow:
     strict: true
     orchestrator_strict: true
   frontend_verification: true
+  handoff:
+    agent: "claude"           # command template, not a bare name, so flags fit
+    ack_turns: 5              # turns after delivery before silence is reported
+    self_invoke: true         # whether the agent may invoke handoff itself
+    nudge_warn: 200000        # absolute tokens; small-context models want lower
+    nudge_severe: 500000      # absolute tokens
 
 commands:
   test: "npm test"
