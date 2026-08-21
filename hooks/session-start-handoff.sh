@@ -27,7 +27,7 @@
 #
 # Runs alongside session-start.sh as a second SessionStart hook. Claude Code
 # aggregates additionalContext from every matching hook, so this adds to the
-# orchestrator CLAUDE.md injection rather than replacing it.
+# orchestrator instruction injection rather than replacing it.
 
 set -u
 

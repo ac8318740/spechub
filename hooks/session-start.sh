@@ -18,7 +18,7 @@
 # tiny node wrapper that loads ../dist/index.js.
 #
 # When a project is initialized (spechub/project.yaml exists), the hook also
-# injects the plugin's orchestrator CLAUDE.md as additionalContext so installs
+# injects the plugin's orchestrator instructions as additionalContext so installs
 # stay version-agnostic. Otherwise prints a one-line reminder.
 
 set -u
@@ -146,10 +146,10 @@ if [ ! -f spechub/project.yaml ]; then
   exit 0
 fi
 
-claude_md="${plugin_root}/CLAUDE.md"
+claude_md="${plugin_root}/orchestrator/AGENTS.md"
 
 if [ -z "$plugin_root" ] || [ ! -r "$claude_md" ]; then
-  echo "spechub: could not read orchestrator CLAUDE.md (CLAUDE_PLUGIN_ROOT=${plugin_root:-unset})" >&2
+  echo "spechub: could not read orchestrator/AGENTS.md (CLAUDE_PLUGIN_ROOT=${plugin_root:-unset})" >&2
   exit 0
 fi
 

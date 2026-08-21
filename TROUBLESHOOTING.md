@@ -156,7 +156,7 @@ cat ~/.claude/plugins/cache/ac8318740-plugins/spechub/*/hooks/hooks.json
 
 **Symptom**: Hook prints `spechub: python3 not found; skipping orchestrator injection`.
 
-**Cause**: The hook uses `python3` to emit the orchestrator CLAUDE.md as JSON for `additionalContext` injection. Without it, the orchestrator instructions still load – but only when Claude Code itself reads `CLAUDE.md` from the plugin root, which it does anyway. The CLI symlinks are unaffected.
+**Cause**: The hook uses `python3` to emit `orchestrator/AGENTS.md` as JSON for `additionalContext` injection. Without it the orchestrator instructions do not load at all – nothing else reads that file. Claude Code does not auto-load instructions from a plugin's own directory, so injection is the only path. The CLI symlinks are unaffected, so the `spechub` command keeps working.
 
 **Fix**: Install Python 3 if you want the explicit injection (rare – most systems have it):
 
