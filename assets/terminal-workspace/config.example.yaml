@@ -22,9 +22,11 @@ remote:
 
 herdr:
   enabled: true
-  # Direct chords that need no prefix. Use "alt" if you work over SSH:
-  # many terminals cannot encode ctrl+alt through it. Set "none" to keep
-  # herdr's default prefix-only keymap.
+  # Direct chords that need no prefix. Keep "alt": it is the only family
+  # measured to work on both attach paths. ctrl+alt does reach herdr when you
+  # SSH in and run it on the remote host, but a Windows client attaching with
+  # `herdr --remote` never delivers it, so those chords go silently dead.
+  # Set "none" to keep herdr's default prefix-only keymap.
   chord_modifier: alt
   worktrees_directory: "~/.herdr/worktrees"
   # Agent state hook, so herdr reads state from the agent instead of the

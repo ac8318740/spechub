@@ -72,7 +72,7 @@ Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.
 
 ## Running agents in parallel
 
-Working over SSH with several agents at once? [docs/terminal-workspace.md](docs/terminal-workspace.md) documents one complete setup: herdr for panes that survive disconnect and worktree-backed workspaces, gh-dash for pull request triage, and diffnav for reading diffs. Exact config, keys, and the traps worth knowing.
+Driving several agents on a machine you reach over the network? [docs/terminal-workspace.md](docs/terminal-workspace.md) documents one complete setup: herdr for panes that survive disconnect and worktree-backed workspaces, attached from your own machine with `herdr --remote`, gh-dash for pull request triage, and diffnav for reading diffs. Exact config, keys, and the traps worth knowing.
 
 ## Skills
 

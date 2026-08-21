@@ -79,7 +79,7 @@ Removes every managed block and the helper scripts, and leaves the binaries.
 
 ## Choices worth walking the user through
 
-- **`herdr.chord_modifier`**: `alt` (default), `ctrl+alt`, or `none`. herdr's own docs recommend `ctrl+alt` because it is free across terminals, but many terminals cannot encode it over SSH. Recommend `alt` for remote work. `none` keeps herdr's prefix-only keymap
+- **`herdr.chord_modifier`**: `alt` (default), `ctrl+alt`, or `none`. Recommend `alt` and say why: it is the only family measured to work on both attach paths. herdr's own docs recommend `ctrl+alt`, and it does reach herdr over plain SSH, but a Windows client attaching with `herdr --remote` never delivers it, so every such chord goes silently dead. Only suggest `ctrl+alt` to a user who attaches exactly one way and has tested it. `none` keeps herdr's prefix-only keymap
 - **`herdr.worktrees_directory`**: keep it absolute. A relative value resolves against the herdr session's base directory rather than the repository being branched, so worktrees for a second repository land inside the first
 - **`herdr.integration`**: which agent reports its state to herdr. Set it to the agent the user actually runs, or `none`. Without it, herdr infers state by reading the screen
 - **`gh_dash.repo_paths`**: map each repo to its local clone. Without it, checkout and any keybinding using `{{.RepoPath}}` fail
@@ -90,6 +90,49 @@ Removes every managed block and the helper scripts, and leaves the binaries.
   few minutes to build. Tell them it is temporary and that `status` tracks both PRs
 - **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
 - **`remote.clipboard_shim`**: leave `true` on any machine reached over SSH. It puts an `xclip` on `$PATH` backed by `spechub-clip`, which is the only reason gh-dash's `y` and `Y` work there. It is skipped automatically when the machine has a real `xclip` or a display
+
+## Suggest a faster way to attach
+
+The keymap this skill writes lives on the machine it runs on. How the user
+reaches that machine is theirs to choose, and it changes what the setup can do,
+so raise it once during `apply` rather than leaving them to find out.
+
+Recommend attaching from their own machine:
+
+```bash
+herdr --remote <host> --remote-keybindings server
+```
+
+Say what it buys and what it costs, in one line each:
+
+- The client runs beside their clipboard and browser. Clipboard image paste into
+  an agent pane works only on this path, and an SSH shell cannot do it at all
+- `--remote-keybindings server` is not optional. Without it chords resolve from
+  the client's config, so everything `apply` just wrote is ignored and every
+  chord looks broken. This is the first thing they will report as a bug
+- It needs herdr installed on their own machine too, and key authentication
+  through an agent, because herdr's connection reuse is Unix-only and a Windows
+  client authenticates more than once per attach
+
+Then offer the shortcut, because the command is long and they will run it many
+times a day. On Windows it has to be a function, not an alias or a symlink:
+both map one name to another, so the target would arrive as an argument to
+`herdr` itself and be rejected.
+
+```powershell
+function herdr-dev {
+  & "$env:LOCALAPPDATA\Programs\Herdr\bin\herdr.exe" `
+    --remote <host> --remote-keybindings server @args
+}
+```
+
+A hyphenated name tab-completes where the second word of a two-word command
+never will. On macOS or Linux the same thing is a shell function in their
+profile.
+
+Do not write any of this for them. The profile and the SSH config live on the
+machine they type at, which this skill cannot reach. Hand them the lines, the
+same way `Free the client's keys` hands them a prompt.
 
 ## Copy and open, on a machine reached over SSH
 
