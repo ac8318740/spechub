@@ -1,0 +1,1 @@
+- [0001](0001-document-opener-service.md) – A document opener service on the laptop, separate from the Playwriter bridge

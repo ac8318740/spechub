@@ -9,8 +9,12 @@
 # own interactive SSH session. Killing that would drop the shell running
 # the script.
 #
-# Scoped strictly to port 19988. Exits non-zero with a clear message on
-# any ambiguous or unsafe situation.
+# Scoped strictly to the two ports this setup owns: 19988 (the bridge's CDP
+# port) and 19989 (the document opener). Any other port is refused. This is an
+# allowlist rather than a free --port flag on purpose - the guardrails below
+# reason about what a holder is, and that reasoning is only valid for sockets
+# we put there. Exits non-zero with a clear message on any ambiguous or unsafe
+# situation.
 #
 # Intended to be invoked via the handoff block produced by Windows-side
 # doctor.ps1. Safe to run at any time; no-ops if the port is already free.
@@ -18,6 +22,20 @@
 set -u
 
 PORT=19988
+# 64 for a bad argument (the conventional EX_USAGE), because 2 already means
+# something specific here: the port is held by something this script may not
+# kill. Reusing it would make "you typed it wrong" indistinguishable from "the
+# port is genuinely stuck".
+case "${1:-}" in
+    --port)
+        case "${2:-}" in
+            19988|19989) PORT="$2" ;;
+            *) printf 'ERROR: --port accepts only 19988 (bridge) or 19989 (opener), not "%s".\n' "${2:-}" >&2; exit 64 ;;
+        esac
+        ;;
+    "") ;;
+    *) printf 'usage: vm-free-port.sh [--port 19988|19989]\n' >&2; exit 64 ;;
+esac
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 err() { log "ERROR: $*" >&2; }

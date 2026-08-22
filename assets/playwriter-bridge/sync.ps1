@@ -45,7 +45,9 @@ $files = @(
     'tunnel.ps1',
     'register-tasks.ps1',
     'stop.ps1',
-    'doctor.ps1'
+    'doctor.ps1',
+    'opener.ps1',
+    'opener.js'
 )
 
 function Get-FileHashOrNull($path) {
@@ -139,7 +141,10 @@ foreach ($f in $changed) {
 # Decide which tasks each SUCCESSFULLY COPIED file forces a restart of:
 #   launcher-src.cs -> every task (all run through launcher.exe)
 #   relay.ps1       -> Playwriter-Relay
-#   tunnel.ps1      -> every Playwriter-Tunnel-*
+#   opener.ps1      -> Playwriter-Opener
+#   opener.js       -> Playwriter-Opener (opener.ps1 supervises it, so the
+#                      supervisor has to be bounced for the new code to run)
+#   tunnel.ps1      -> every tunnel task, bridge and opener alike
 # stop.ps1 / doctor.ps1 / build-launcher.ps1 / register-tasks.ps1 are invoked
 # on demand, so a copy is enough - no restart.
 # NOTE: any NEW task-backing script added to $files above must also be wired into
@@ -147,15 +152,21 @@ foreach ($f in $changed) {
 $launcherChanged = $copied -contains 'launcher-src.cs'
 $relayChanged    = $copied -contains 'relay.ps1'
 $tunnelChanged   = $copied -contains 'tunnel.ps1'
+$openerChanged   = ($copied -contains 'opener.ps1') -or ($copied -contains 'opener.js')
 
 $affected = New-Object System.Collections.Generic.HashSet[string]
 if ($launcherChanged) {
     foreach ($t in $tasks) { [void]$affected.Add($t.TaskName) }
 } else {
     if ($relayChanged) { [void]$affected.Add('Playwriter-Relay') }
+    if ($openerChanged) { [void]$affected.Add('Playwriter-Opener') }
     if ($tunnelChanged) {
+        # Both families run tunnel.ps1. 'Playwriter-Tunnel-*' alone would miss
+        # the opener's tunnel tasks, which are named Playwriter-OpenerTunnel-*.
         foreach ($t in $tasks) {
-            if ($t.TaskName -like 'Playwriter-Tunnel-*') { [void]$affected.Add($t.TaskName) }
+            if ($t.TaskName -like 'Playwriter-Tunnel-*' -or $t.TaskName -like 'Playwriter-OpenerTunnel-*') {
+                [void]$affected.Add($t.TaskName)
+            }
         }
     }
 }

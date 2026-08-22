@@ -397,7 +397,21 @@ works and configs can keep the fast one.
 spechub-md NOTES.md              # terminal, diagrams drawn as text
 spechub-md --diagram 2 NOTES.md  # one diagram alone, scrollable sideways
 spechub-md --serve NOTES.md      # browser, prints a clickable link
+spechub-md --browser NOTES.md    # the browser you are sitting at, wherever that is
+spechub-md --html NOTES.md       # that same page, as one document on stdout
 ```
+
+While you are reading, `b` opens the page in the browser you are sitting at and
+returns you to where you came from. It works by the routes in 6.5, so it is the
+same key whether you attached over `herdr --remote`, over SSH, or locally.
+
+`b` is back-a-page in `less`. `Ctrl-B` and `PageUp` both still do that, so the
+binding costs nothing; `SPECHUB_MD_BROWSER_KEY` moves it if you would rather
+have `b` back. The mechanism is a `lesskey` binding whose `quit` action carries
+an exit status, which `spechub-md` reads and acts on - `less` has no action that
+runs a fixed command, and its one shell escape would hand over the rendered
+temporary copy rather than the file you asked for. It needs `less` 582 or newer;
+older versions ignore the binding and leave `b` alone.
 
 A diagram's width comes from its node labels, so a wide one cannot be shrunk
 into a narrow pane, and wrapping box-drawing art destroys it. Anything wider
@@ -426,6 +440,11 @@ An opener rule puts that ahead of the editor, so reading is the default and
 editing is the second entry in the same menu. Nothing shims `$EDITOR`, and your
 shell environment is untouched.
 
+`b` on a file hands it to the browser you are sitting at, by the routes in 6.5.
+`b` is free in yazi's file list - its only default binding is a word motion
+while you are typing into a prompt, which this does not touch. Move it with
+`yazi.browser_key`.
+
 If you already write your own `yazi.toml`, setup reads it before it writes and
 leaves alone anything you have already set: your `mgr` settings, your markdown
 opener, your `plugin.prepend_previewers`, your `open.prepend_rules`. Whichever
@@ -435,6 +454,13 @@ instead. What it cannot read is a `yazi.toml` that does not parse, and yazi is
 already ignoring that one in favour of presets, so fix the error and re-run
 setup. Add `spechub-md` to your own opener to read markdown with it, and
 `show_hidden = true` to your own `mgr` if you want hidden files shown.
+
+The `b` binding lives in `keymap.toml`, not `yazi.toml`, and is written as
+`[[mgr.prepend_keymap]]`. That spelling is an array of tables, so it stacks with
+bindings you have already written the same way. The one spelling it cannot sit
+beside is `prepend_keymap = [...]` written inline under `[mgr]`: that is a
+single key, and TOML forbids declaring it twice. Setup detects that form and
+gives the binding up rather than cost you the whole keymap, and says so.
 
 So: `alt+y` for the tree, cursor onto a markdown file to preview it, `Enter` to
 read it full width with its diagrams drawn, `q` back to the tree.
@@ -463,14 +489,81 @@ process holding it and the command to stop it:
 
 ```
 port 6419 is busy: [Errno 98] Address already in use
-  held by pid 680666: spechub-md-serve - /path/to/NOTES.md 6419
+  held by pid 680666: spechub-md-serve - /path/to/NOTES.md 6419 serve
   stop it with:  kill 680666
 ```
 
 Use that pid rather than `pkill -f spechub-md-serve`, which also matches any
 shell whose own command line mentions the name, including the one you type it in.
 
-### 6.5. Why text and not inline images
+### 6.5. Getting the page to the browser you are sitting at
+
+`--browser` is the one to reach for: it works out where your browser actually
+is and picks a delivery that reaches it, so the same key works however you
+attached. It asks `spechub-open --why` rather than deciding that a second time.
+
+| Where the browser is | What `--browser` does |
+| --- | --- |
+| Behind the opener on your laptop | Posts the whole document to it; the opener stores it, serves it, and opens your default browser |
+| A desktop on this machine, or WSL | Serves it and opens it |
+| The far end of the Playwriter bridge, with no opener | Hands the whole document down the CDP link, into the tab the extension is armed on |
+| Anywhere else, over SSH | Serves it and prints a clickable link |
+
+The opener is the route you want, and section 8.6 covers what it is and how it
+gets installed. What matters here is what it changes: nothing to arm, no
+extension, and the browser it reaches is your default one rather than a
+dedicated Chrome profile. Read one document after another and each simply
+appears. Re-render a file you are already looking at and the tab you have open
+updates in place, scroll position kept, instead of a second tab joining the
+first.
+
+That last part is decided by the page itself, not by the opener remembering.
+Every page the opener serves polls it for its own version, so a tab that is
+still open says so by asking. Re-render that file and the opener sees a live
+tab and lets it reload itself; close the tab and the asking stops, so the next
+render opens a fresh one. Remembering that it once opened something would get
+the closed-tab case wrong every time.
+
+The bridge case is the fallback, and it is the one that needs explaining. Under `herdr --remote` the
+tunnel to your laptop runs the *other way*: nothing on the laptop can open a
+port on the dev machine, and a link to `localhost:6419` names the laptop's own
+localhost, where nothing is listening. So there is no link to hand over - only
+a document. That is what `--html` is for.
+
+`--html` prints the page `--serve` would have served, once, to stdout, and
+starts nothing. A document you can capture in a variable travels; a port does
+not. `--browser` is `--html` plus the delivery, and the two share one renderer
+so the page cannot differ between them.
+
+They differ in exactly one place. `--serve` answers for `/mermaid.js` off the
+vendored copy, so its page fetches nothing from a CDN. A document standing on
+its own has no server behind it, so `--html` names the CDN instead - the
+vendored file is 3.5MB, and inlining it would make the page offline-proof and
+far too big to hand anywhere. A document bound for the opener is the third
+case: it is handed over once like `--html`, but it does end up behind a server
+- the opener's - so it asks for `/mermaid.js` too. The 3.5MB goes up once, the
+first time the opener admits it has no copy, and every document after that
+draws its diagrams without reaching a CDN at all. Measured: this document, 39KB of markdown, renders
+to 50KB of HTML in under 200ms and reaches a laptop browser, diagram drawn, in
+about two seconds.
+
+On the bridge the page replaces what is in the armed tab, and no new tab is
+opened. That is deliberate, and it is the second thing that had to be measured
+rather than assumed: a tab opened over CDP is created in the **background**, and
+nothing on the dev machine can bring it to the front. The document lands in it,
+the helper reports success, and you never see it. Arming the extension is how
+you nominate the tab this may take over, so that is the tab it takes over.
+
+Success is likewise not an exit status. The pushed script ends with the page
+title, so the browser answers with what it is now holding, and `--browser` only
+reports success when that answer is the file you asked for. A command that
+exited 0 is not a page that arrived.
+
+When the bridge is the route and the push fails, `--browser` says so and stops
+rather than falling back to serving. A link the laptop resolves to its own
+localhost is a wrong answer dressed as a working one.
+
+### 6.6. Why text and not inline images
 
 herdr embeds libghostty and emits the **kitty graphics protocol**. It contains
 no sixel at all. Windows Terminal renders sixel and has never supported kitty
@@ -661,9 +754,12 @@ It tries, in order:
 1. `$SPECHUB_OPEN_CMD`, if you set one. The escape hatch
 2. `xdg-open`, when this machine has a display after all
 3. `wslview` or `explorer.exe`, when the Windows half of the machine holds the browser
-4. Chrome on your laptop through the [Playwriter bridge](../skills/bridge/SKILL.md), but only once it has proved the browser is really reachable that way. See below
-5. A link you can click: the URL as an OSC 8 hyperlink, which the terminal you are sitting at draws itself, so ctrl+click reaches your own browser with nothing installed in between. The link text is the URL, so a terminal that ignores OSC 8 still shows something its own URL detection can catch, and it goes on your clipboard either way
-6. With no terminal to draw on either, the URL still goes on the clipboard, but the command reports failure. Silent success is what left gh-dash claiming it had opened a page that never opened
+4. The opener on your laptop, which puts the page in your default browser with nothing to click. See 8.6
+5. Chrome on your laptop through the [Playwriter bridge](../skills/bridge/SKILL.md), but only once it has proved the browser is really reachable that way. See below
+6. A link you can click: the URL as an OSC 8 hyperlink, which the terminal you are sitting at draws itself, so ctrl+click reaches your own browser with nothing installed in between. The link text is the URL, so a terminal that ignores OSC 8 still shows something its own URL detection can catch, and it goes on your clipboard either way
+7. With no terminal to draw on either, the URL still goes on the clipboard, but the command reports failure. Silent success is what left gh-dash claiming it had opened a page that never opened
+
+The opener sits ahead of the bridge because the two are not competing for the same job. The bridge exists so an *agent* can drive a browser: it attaches one tab at a time, only after somebody clicks the extension icon, and it does so in a dedicated Chrome profile. The opener exists so a *person* can be shown a page, needs no click at all, and reaches the browser you actually use. Both can be up at once, and each keeps its own job.
 
 `setup.sh status` prints which route a machine will take, and the last line of `~/.cache/spechub/open.log` says what the last press actually did.
 
@@ -673,7 +769,11 @@ It tries, in order:
 
 Nothing about the relay answering on port 19988 rules that out either. Ours answered `/json/version` while refusing every CDP connection with `Multiple extensions connected. Specify extensionId.`, so every open landed in a headless Chrome for hours without one error message.
 
-So the bridge route asks `agent-browser get cdp-url` what it is actually attached to, and takes the route only when the answer is the bridge. It also skips the question entirely unless a session is already running, because asking it otherwise starts a browser as a side effect.
+So the bridge route asks the relay's `/json/list` what is on the far end, and takes the route only when something answers. The Playwriter extension attaches per tab, and `/json/list` is its own answer to that question: `[]` means it is armed on nothing, so there is no browser to drive however healthy the tunnel underneath looks.
+
+This used to gate on an `agent-browser` socket existing first, on the reasoning that probing starts a browser as a side effect. It does not - `curl` starts nothing. What that gate did do was make a perfectly healthy bridge unreachable, because nothing creates that socket until an `agent-browser` session is already running, so every press fell through to the link route. Asking the relay is both safer and correct.
+
+The opener proves itself the same way and for the same reason: `spechub-open` asks it for `/health`, carrying the shared token, and takes the route only if that round trip is answered. A token sitting on disk proves nothing about a service being up, and a service being up proves nothing without the token it is going to demand.
 
 ### 8.4. Under `herdr --remote`
 
@@ -695,13 +795,16 @@ the dev machine and pastes its path. An SSH shell cannot do that at all, which
 is the single strongest reason to prefer a remote attach.
 
 `spechub-open` runs on the dev machine, which is the honest answer for routes 1
-to 4: an override, a display, WSL or a bridge tunnel all have to exist *there*.
-In practice none does, so it falls to route 5, which is the one built for this.
+to 5: an override, a display, WSL, the opener or a bridge tunnel all have to be
+reachable *from there*. The opener and the bridge are, because both are carried
+back by reverse tunnels the laptop opens - so on a machine set up for either,
+that is the route taken. With neither, it falls to the link route, which is the
+one built for this.
 herdr tracks hyperlinks per cell and re-emits them when it renders, so the link
 is drawn by the client rather than shipped as raw bytes, and ctrl+click opens
 the browser on the machine you attached from.
 
-Route 5 also degrades further than the others. Even with no OSC 8 and no OSC 52
+The link route also degrades further than the others. Even with no OSC 8 and no OSC 52
 at all, the URL is on screen as plain text, which drag-select copies. That is
 why the link is its own text rather than a label over it.
 
@@ -713,11 +816,41 @@ from where you are sitting and you want the local number instead. Forwarding
 
 ### 8.5. On a machine with none of this
 
-Route 5 needs only a terminal, so it is the one that always works: over SSH, through herdr, and under `herdr --remote`. If you want a real one-key open instead, give `spechub-open` something that can do it:
+The link route needs only a terminal, so it is the one that always works: over SSH, through herdr, and under `herdr --remote`. If you want a real one-key open instead, give `spechub-open` something that can do it:
 
 ```bash
 export SPECHUB_OPEN_CMD="ssh laptop open"   # or any command taking a URL
 ```
+
+### 8.6. The opener: a page in your own browser, with nothing to click
+
+*A small service on your laptop that takes a page from the dev machine, stores it, serves it back, and opens your default browser on it.*
+
+The dev machine has no browser and no way to reach yours. The bridge solved that for agents, but not for reading: it needs a tab armed by hand before every session, and the tab it drives lives in a dedicated Chrome profile rather than your default browser. The opener is the answer for reading, and it is a separate service on purpose - see [ADR 0001](adr/0001-document-opener-service.md).
+
+What it does is deliberately small:
+
+| The dev machine sends | The opener does |
+| --- | --- |
+| A URL | Hands it to your default browser |
+| A rendered document | Stores it, serves it at `http://127.0.0.1:19989/doc/<id>`, opens that |
+| A vendored `mermaid.min.js`, once | Keeps it, and answers `/mermaid.js` off it from then on |
+| A request to restart the relay or the tunnel | Restarts that scheduled task |
+
+It rides the same machinery as the bridge: a scheduled task registered by `register-tasks.ps1`, a supervisor that restarts it, deployment reconciled by `sync.ps1` on every Claude Code launch, and a reverse SSH tunnel opened by your laptop. It gets its **own** tunnel task rather than a second forward on the bridge's connection, because ssh runs with `ExitOnForwardFailure=yes` - one wedged port fails the whole connection, so sharing one would let a stuck opener port take the bridge down with it.
+
+Installing it is the same command that registers the bridge, which now registers the opener too:
+
+```powershell
+cd $env:USERPROFILE\playwriter-bridge
+.\register-tasks.ps1 -VMs @("vm1.example.com")
+```
+
+That generates a shared secret, stores it at `%LOCALAPPDATA%\playwriter-bridge\opener.token`, and copies it to each VM at `~/.config/spechub/opener.token` over the same ssh the tunnel uses. Every request from the dev machine carries it. Loopback binding alone would not be enough: the reverse tunnel makes the port reachable by anything running on the VM, and this is a service that puts pages on your screen.
+
+The two recovery actions the dev machine could never perform - restarting the relay, restarting the tunnel - now go through the opener instead of being handed to you as a block to paste into PowerShell. Arming the extension is still yours. It is a click inside a third-party extension, and nothing on either machine can press it.
+
+Documents outlive the session that rendered them, which is what lets a page still work after the dev machine has gone away. They are pruned after a week.
 
 ## 9. The daily loop
 

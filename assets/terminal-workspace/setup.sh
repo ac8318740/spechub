@@ -249,6 +249,11 @@ H
 #                                   $COLUMNS, straight to stdout, no pager
 #   spechub-md --diagram N FILE.md  one diagram alone, with horizontal scroll
 #   spechub-md --serve FILE.md      serve it for a real browser, print the link
+#   spechub-md --html FILE.md       print that same page as one HTML document
+#   spechub-md --browser FILE.md    open it in the browser you are sitting at
+#
+# While reading, b opens the page in that browser. $SPECHUB_MD_BROWSER_KEY
+# moves it.
 #
 # Text, not images, is deliberate: herdr emits the kitty graphics protocol and
 # no terminal reachable from Windows or Android renders that, and e-ink panels
@@ -256,13 +261,23 @@ H
 set -uo pipefail
 
 PORT="${SPECHUB_MD_PORT:-6419}"
-SERVE=0; ONLY=0; PREVIEW=0
-usage() { echo "usage: spechub-md [--preview] [--diagram N] [--serve] FILE.md" >&2; exit 1; }
+# Named rather than inherited from an ambient $AGENT_BROWSER_CDP, for the
+# reason spechub-open gives at its own bridge branch: leaning on the ambient
+# one launches a headless Chrome nobody can see and calls it success.
+BRIDGE="${SPECHUB_BRIDGE_URL:-http://127.0.0.1:19988}"
+OPENER="${SPECHUB_OPENER_URL:-http://127.0.0.1:19989}"
+# The opener refuses anything without this, so its absence is the same as the
+# opener being down - which is exactly how the route probe treats it.
+OPENER_TOKEN="${XDG_CONFIG_HOME:-$HOME/.config}/spechub/opener.token"
+SERVE=0; ONLY=0; PREVIEW=0; HTML=0; BROWSER=0
+usage() { echo "usage: spechub-md [--preview] [--diagram N] [--serve|--html|--browser] FILE.md" >&2; exit 1; }
 # A loop rather than a fixed order, so --preview composes with --diagram and
 # a caller can pass them either way round.
 while [ $# -gt 0 ]; do
   case "$1" in
     --serve)   SERVE=1; shift ;;
+    --html)    HTML=1; shift ;;
+    --browser) BROWSER=1; shift ;;
     --preview) PREVIEW=1; shift ;;
     --diagram) ONLY="${2:-1}"; shift; [ $# -gt 0 ] && shift ;;
     --)        shift; break ;;
@@ -270,9 +285,11 @@ while [ $# -gt 0 ]; do
     *)         break ;;
   esac
 done
-# A preview pane is somewhere to read, not somewhere to run a server.
-if [ "$SERVE" = "1" ] && [ "$PREVIEW" = "1" ]; then
-  echo "spechub-md: --preview and --serve do opposite things - pick one" >&2
+# --preview, --serve and --html are three answers to the same question - where
+# does this end up - so at most one can be true. A preview pane is somewhere to
+# read, not somewhere to run a server or hand a document out of.
+if [ $((SERVE + PREVIEW + HTML + BROWSER)) -gt 1 ]; then
+  echo "spechub-md: --preview, --serve, --html and --browser do different things - pick one" >&2
   exit 1
 fi
 # Node labels set a diagram's width, so padding cannot rescue a wide one.
@@ -289,10 +306,43 @@ esac
 FILE="${1:-}"
 [ -n "$FILE" ] && [ -f "$FILE" ] || usage
 # One place to clean up, so no exit path leaks a temp file.
-trap "rm -f /tmp/spechub-md.$$.md /tmp/spechub-md-out.$$.md /tmp/spechub-md-art.$$.*" EXIT
+trap "rm -f /tmp/spechub-md.$$.md /tmp/spechub-md-out.$$.md /tmp/spechub-md-art.$$.* /tmp/spechub-md-keys.$$" EXIT
+
+# Wanting a document in a browser happens while reading it, so the key belongs
+# in the pager rather than before or after one.
+#
+# less has no action that runs a fixed command, and its one shell escape
+# expands % to the file it was handed - which here is the rendered temp copy,
+# not the markdown someone asked for. So the key quits instead: lesskey's quit
+# action takes the first character of its extra string as the exit status, and
+# "A" is 65, a value less never returns of its own accord. Nothing has to be
+# passed through the binding, because this script already knows the file.
+BROWSE_STATUS=65
+BROWSE_KEY="${SPECHUB_MD_BROWSER_KEY:-b}"
+KEYS="/tmp/spechub-md-keys.$$"
 
 # A preview pane cannot page, so the same render goes straight to stdout.
-emit() { local f="$1"; shift; if [ "$PREVIEW" = "1" ]; then cat "$f"; else "$@" "$f"; fi; }
+emit() {
+  local f="$1"; shift
+  if [ "$PREVIEW" = "1" ]; then cat "$f"; return; fi
+  # The binding is a less feature, so only less is handed it. Setting
+  # LESSKEYIN for a pager that never reads it is at best noise, and acting on
+  # an exit status that pager chose for its own reasons is a bug waiting.
+  case "${1:-}" in
+    less|*/less)
+      # b is back-a-page in less. ^B and PageUp both still do that, so this
+      # costs nothing (measured). LESSKEYIN wants less 582 or newer; older
+      # versions ignore it and quietly keep b as it was.
+      printf '#command\n%s quit A\n' "$BROWSE_KEY" > "$KEYS"
+      LESSKEYIN="$KEYS" "$@" "$f"
+      if [ "$?" = "$BROWSE_STATUS" ]; then
+        "$0" --browser "$FILE"
+        exit $?
+      fi
+      ;;
+    *) "$@" "$f" ;;
+  esac
+}
 
 # A wide diagram left a marker behind rather than art glow would wrap. Turn
 # the marker into a line a person can read and put the drawing back under it.
@@ -320,14 +370,147 @@ f.write_text("\n".join(lines) + "\n")
 PY
 }
 
-if [ "$SERVE" = "1" ]; then
-  # exec -a names the process spechub-md-serve. Without it the running server
-  # is just "python3 -" and there is nothing sensible to pkill.
-  exec -a spechub-md-serve python3 - "$FILE" "$PORT" <<'PY'
-import html, http.server, pathlib, re, socketserver, sys
-import markdown
+# --browser names a destination rather than a rendering: work out where the
+# browser actually is, then pick the delivery that reaches it. spechub-open
+# already answers that question for URLs, so ask it rather than deciding the
+# same thing twice and drifting from it later.
+if [ "$BROWSER" = "1" ]; then
+  case "$(command -v spechub-open >/dev/null 2>&1 && spechub-open --why 2>/dev/null)" in
+    opener)
+      # The opener stores the document on the laptop and serves it to the
+      # browser there, so the page still works once this machine stops
+      # answering - and a re-render of the same file updates the tab already
+      # showing it instead of stacking up a second one. That reuse is why the
+      # key has to be stable per file: it is the absolute path, hex-encoded
+      # because a path may hold anything a URL cannot.
+      tok=$(cat "$OPENER_TOKEN" 2>/dev/null || true)
+      if [ -z "$tok" ]; then
+        echo "spechub-md: no opener token at $OPENER_TOKEN." >&2
+        echo "  run register-tasks.ps1 on the laptop to install one." >&2
+        exit 1
+      fi
+      hex() { od -An -v -tx1 | tr -d ' \n'; }
+      key=$(printf '%s' "$(cd "$(dirname "$FILE")" && pwd -P)/$(basename "$FILE")" | hex)
+      name=$(basename "$FILE")
+      # Vendored mermaid, uploaded once so diagrams draw without reaching a
+      # CDN. Best effort throughout: the opener redirects to the CDN when it
+      # has no copy, so a failure here costs nothing but an outbound fetch.
+      vendored="$HOME/.local/share/spechub/mermaid.min.js"
+      # tr, because whitespace inside JSON carries no meaning and a match that
+      # depends on its absence is a match waiting to break. Same reasoning as
+      # spechub-open's /json/list check.
+      if [ -s "$vendored" ] && ! curl -fsS -m 3 -H "X-Spechub-Token: $tok" \
+           "$OPENER/health" 2>/dev/null | tr -d '[:space:]' | grep -q '"mermaid":true'; then
+        curl -fsS -m 60 -X POST -H "X-Spechub-Token: $tok" \
+          --data-binary "@$vendored" "$OPENER/asset/mermaid.js" >/dev/null 2>&1 || true
+      fi
+      # The opener answers with what it did, and that answer is what success
+      # means - it says whether a tab was opened or a live one reused. An exit
+      # status of 0 is not a page that arrived.
+      answer=$(SPECHUB_MD_OPENER=1 "$0" --html "$FILE" \
+        | curl -fsS -m 60 -X POST -H "X-Spechub-Token: $tok" \
+            -H 'Content-Type: text/html; charset=utf-8' --data-binary @- \
+            "$OPENER/doc?key=$key&title=$(printf '%s' "$name" | hex)" 2>/dev/null \
+        | tr -d '[:space:]')
+      case "$answer" in
+        *'"reused":true'*)
+          printf '%s updated in the tab already open on your machine\n' "$name" >&2
+          exit 0 ;;
+        *'"opened":true'*)
+          printf '%s is on screen in the browser on your machine\n' "$name" >&2
+          exit 0 ;;
+      esac
+      echo "spechub-md: the opener did not confirm the page reached a browser." >&2
+      echo "  check it is up:  spechub-open --why" >&2
+      exit 1
+      ;;
+    bridge)
+      # Under `herdr --remote` the tunnel runs laptop-to-here, so nothing over
+      # there can open a port on this machine and a link to localhost:6419
+      # names the wrong localhost. Hand the whole document down the CDP link
+      # that is already open instead, and let Chrome hold it. That is also why
+      # --html exists: a document travels, a port does not.
+      #
+      # $0 is the path bash resolved this script to - absolute when it came off
+      # PATH - so the page pushed is the one --html renders, not a second copy
+      # of the renderer that can disagree with it.
+      html=$("$0" --html "$FILE") || exit 1
+      # base64 because the document is full of quotes and newlines and has to
+      # survive being a JavaScript string literal. tr rather than `base64 -w0`,
+      # which is GNU-only.
+      payload=$(printf '%s' "$html" | base64 | tr -d '\n')
+      # A tab of its own, and never over a page that is already there. The
+      # extension attaches per tab through chrome.debugger, and rewriting a
+      # real document detaches it - measured: pushing over an https page left
+      # /json/list empty and the bridge unusable until it was armed again by
+      # hand. A fresh about:blank tab survives the same rewrite, because the
+      # document being replaced has the same origin. So the armed tab is left
+      # exactly as it was, and this writes into a new one.
+      #
+      # The default session deliberately, as spechub-open explains: the relay
+      # takes one CDP client at a time, so a session of our own could not
+      # connect while an agent holds it.
+      #
+      # The last expression is the page title, so the browser answers with
+      # what it is now holding. That answer is what success means here - a
+      # command that exited 0 is not a page that arrived.
+      name=$(basename "$FILE")
+      timeout 20 agent-browser --cdp "$BRIDGE" tab new >/dev/null 2>&1
+      landed=$(printf 'const b64="%s";const doc=new TextDecoder().decode(Uint8Array.from(atob(b64),c=>c.charCodeAt(0)));document.open();document.write(doc);document.close();document.title;\n' \
+                 "$payload" \
+                 | timeout 60 agent-browser --cdp "$BRIDGE" eval --stdin 2>/dev/null)
+      # Writing into the tab is only half of it. A tab created over CDP is
+      # created in the background, so it has to be brought forward or the page
+      # is real, correct, and never seen - which is exactly how this first went
+      # wrong. agent-browser carries Page.bringToFront on its tab switch, so
+      # switch to the tab just written into, which is the one it already has
+      # selected. Best effort: a page in a background tab still beats an error.
+      # The arrow marks the active tab, which is the one just written into.
+      # Taking the first line instead would raise whatever sits at index 0 -
+      # somebody else's tab, and the page still unseen.
+      idx=$(timeout 20 agent-browser --cdp "$BRIDGE" tab list 2>/dev/null \
+              | grep -m1 -- "$(printf '\342\206\222')" \
+              | sed -n 's/.*\[\([0-9][0-9]*\)\].*/\1/p')
+      [ -n "$idx" ] && timeout 20 agent-browser --cdp "$BRIDGE" tab "$idx" >/dev/null 2>&1
+      case "$landed" in
+        *"$name"*)
+          printf '%s is on screen in the browser on your machine\n' "$name" >&2
+          exit 0 ;;
+      esac
+      # Serving instead would print a link the laptop resolves to its own
+      # localhost, which is a wrong answer dressed as a working one.
+      echo "spechub-md: the bridge answered but is not holding the page." >&2
+      echo "  the document goes to the tab the Playwriter extension is armed on." >&2
+      echo "  check something is still armed:  spechub-open --why" >&2
+      exit 1
+      ;;
+  esac
+  # Every other route has a browser that can reach this machine's ports, or a
+  # terminal that can hand someone a link. Serving is already exactly that.
+  SERVE=1
+fi
 
-src, port = pathlib.Path(sys.argv[1]), int(sys.argv[2])
+if [ "$SERVE" = "1" ] || [ "$HTML" = "1" ]; then
+  # One program, two ways out: --serve keeps answering with the document,
+  # --html hands it over once and stops. Same renderer either way, so the two
+  # cannot drift into disagreeing about what the page looks like.
+  MODE=serve; NAME=spechub-md-serve
+  if [ "$HTML" = "1" ]; then MODE=html; NAME=spechub-md-html; fi
+  # A document bound for the opener on the laptop is handed over once, like
+  # --html, but it does end up behind a server - the opener's. So it wants the
+  # relative mermaid src that --html cannot use. Internal: set by the --browser
+  # dispatch below, never by a caller.
+  if [ "${SPECHUB_MD_OPENER:-0}" = "1" ] && [ "$HTML" = "1" ]; then MODE=opener; fi
+  # exec -a names the process. Without it a running server is just "python3 -"
+  # and there is nothing sensible to pkill.
+  exec -a "$NAME" python3 - "$FILE" "$PORT" "$MODE" <<'PY'
+import html, http.server, pathlib, re, socketserver, sys
+try:
+    import markdown
+except ImportError:
+    sys.exit("spechub-md: needs the python markdown package: pip install --user markdown")
+
+src, port, MODE = pathlib.Path(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
 VENDOR = pathlib.Path.home() / ".local/share/spechub/mermaid.min.js"
 
 CSS = """*{box-sizing:border-box}body{max-width:54rem;margin:0 auto;padding:2rem 1.25rem;
@@ -350,7 +533,18 @@ def render():
     body = re.sub(r'<pre><code class="language-mermaid">(.*?)</code></pre>',
                   lambda m: '<pre class="mermaid">' + html.unescape(m.group(1)) + "</pre>",
                   body, flags=re.S)
-    js = ('<script src="/mermaid.js"></script>' if VENDOR.exists() else
+    # --serve answers for /mermaid.js itself off the vendored copy. A document
+    # standing on its own has no server behind it, so a relative src would be
+    # fetched from whatever host the page ended up on and find nothing there -
+    # it names the CDN instead. Inlining the vendored 3.5MB would make the page
+    # offline-proof and far too big to push through a CDP payload, which is the
+    # whole reason --html exists.
+    # The opener serves the page from the laptop and answers /mermaid.js off
+    # the copy this machine uploaded to it - falling back to the CDN itself if
+    # it has none. So a relative src is right there too, and unlike --serve it
+    # does not depend on this machine having vendored anything.
+    js = ('<script src="/mermaid.js"></script>'
+          if MODE == "opener" or (MODE == "serve" and VENDOR.exists()) else
           '<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>')
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -360,6 +554,12 @@ def render():
 <script>mermaid.initialize({{startOnLoad:true,securityLevel:"loose",
 theme:matchMedia("(prefers-color-scheme:dark)").matches?"dark":"default"}});</script>
 </body></html>""".encode()
+
+# Out before the port is ever looked at: a document is not a server, and a
+# caller that only wants the page must not be stopped by a busy 6419.
+if MODE in ("html", "opener"):
+    sys.stdout.buffer.write(render())
+    raise SystemExit
 
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -556,6 +756,43 @@ else
 fi
 H
   chmod +x "$BIN/spechub-md"
+
+  cat > "$BIN/spechub-view" <<'H'
+#!/usr/bin/env bash
+# View one file, picked by what the file is.
+#
+#   spechub-view README.md      rendered markdown, mermaid diagrams included
+#   spechub-view src/main.rs    yazi, opened with the cursor on that file
+#
+# tuicr's <leader>v hands us the file under its cursor. Everything this
+# dispatches to is a terminal program, so `q` hands the screen back to tuicr
+# the same way a terminal editor does - which is the whole reason the choice
+# lives in a script rather than in tuicr: changing it is an edit, not a
+# rebuild.
+# Installed by spechub.
+set -uo pipefail
+
+FILE="${1:-}"
+[ -n "$FILE" ] || { echo "usage: spechub-view <file>" >&2; exit 2; }
+[ -e "$FILE" ] || { echo "spechub-view: no such file: $FILE" >&2; exit 1; }
+
+# Markdown is worth rendering rather than listing: spechub-md draws mermaid
+# diagrams as text, and offers --serve for a browser when a diagram needs to
+# be rendered properly.
+case "$FILE" in
+  *.md|*.MD|*.markdown|*.Markdown|*.mdown|*.mkd)
+    command -v spechub-md >/dev/null 2>&1 && exec spechub-md "$FILE"
+    ;;
+esac
+
+# yazi opens on the file's own directory with the cursor on it, so the preview
+# pane shows the file and the tree is right there to move around in.
+command -v yazi >/dev/null 2>&1 && exec yazi "$FILE"
+
+# Neither installed: a pager still beats nothing, and -R keeps any colour.
+exec ${PAGER:-less -R} "$FILE"
+H
+  chmod +x "$BIN/spechub-view"
 
   cat > "$BIN/spechub-herdr-tab" <<'H'
 #!/usr/bin/env bash
@@ -808,8 +1045,9 @@ H
 # link to click, has nowhere to put it. As a keybinding gh-dash steps aside
 # and gives us the terminal.
 #
-# In order: an explicit override, a desktop on this machine, WSL, the
-# Playwriter bridge to Chrome on the laptop, and last a link you can click.
+# In order: an explicit override, a desktop on this machine, WSL, the opener
+# service on the laptop, the Playwriter bridge to Chrome on the laptop, and
+# last a link you can click.
 # Installed by spechub.
 set -uo pipefail
 
@@ -817,6 +1055,10 @@ LOG="${XDG_CACHE_HOME:-$HOME/.cache}/spechub/open.log"
 # An ambient $AGENT_BROWSER_CDP is a hint, never the thing we rely on. See
 # the bridge branch below for what happened when it was.
 BRIDGE="${SPECHUB_BRIDGE_URL:-${AGENT_BROWSER_CDP:-http://127.0.0.1:19988}}"
+OPENER="${SPECHUB_OPENER_URL:-http://127.0.0.1:19989}"
+# The opener refuses anything without this, so its absence is the same as the
+# opener being down - which is exactly how the route probe treats it.
+OPENER_TOKEN="${XDG_CONFIG_HOME:-$HOME/.config}/spechub/opener.token"
 
 WHY=0
 [ "${1:-}" = "--why" ] && { WHY=1; shift; }
@@ -846,23 +1088,49 @@ has_tty() { { : > /dev/tty; } 2>/dev/null; }
 # reachable through it. agent-browser quietly launches a headless Chrome on
 # this machine when it cannot attach, and that Chrome navigates happily and
 # shows nobody anything - which is how o came to report a page it had opened
-# where no one could see it. So ask what it is actually attached to.
+# where no one could see it. So ask what is actually on the far end.
+#
+# /json/list is the Playwriter extension's own answer to that question. The
+# extension attaches per tab, so `[]` means it is armed on nothing and there
+# is no browser to drive, however healthy the tunnel underneath looks.
+#
+# This used to gate on $HOME/.agent-browser/default.sock existing first, on
+# the reasoning that probing starts a browser as a side effect. It does not:
+# curl starts nothing. What that gate did do was make the bridge unreachable,
+# because nothing on this machine creates that socket until an agent-browser
+# session is already running - so a perfectly healthy bridge still fell
+# through to the link route. Asking the relay is both safer and correct.
 bridge_attached() {
   [ "${SPECHUB_OPEN_BRIDGE:-auto}" != "off" ] || return 1
+  # agent-browser has to exist to take the route, but is never run to decide
+  # it: deciding must cost one round trip, not a browser launch.
   command -v agent-browser >/dev/null 2>&1 || return 1
-  # Only when a session is already running. Probing otherwise starts a
-  # browser as a side effect of asking a question, which is how the stray
-  # headless Chrome got there in the first place.
-  [ -S "$HOME/.agent-browser/default.sock" ] || return 1
-  # A second of patience, not two: the tunnel stays bound on this side after
-  # the relay at the far end stops answering, so an unhealthy bridge connects
-  # and then hangs rather than refusing. Every one of those seconds is spent
-  # in front of someone who just pressed a key.
-  curl -fsS --connect-timeout 1 -m 1 "$BRIDGE/json/version" >/dev/null 2>&1 || return 1
-  case "$(timeout 10 agent-browser --cdp "$BRIDGE" get cdp-url 2>/dev/null)" in
-    *"${BRIDGE##*/}"*) return 0 ;;
+  # Seconds, not tens of them: the tunnel stays bound on this side after the
+  # relay at the far end stops answering, so an unhealthy bridge connects and
+  # then hangs rather than refusing. Every one of those seconds is spent in
+  # front of someone who just pressed a key.
+  local targets
+  targets=$(curl -fsS --connect-timeout 1 -m 2 "$BRIDGE/json/list" 2>/dev/null) || return 1
+  # Whitespace-only and [] both mean armed on no tab.
+  case "$(printf '%s' "$targets" | tr -d '[:space:]')" in
+    ''|'[]') return 1 ;;
   esac
-  return 1
+  return 0
+}
+
+# Same discipline as bridge_attached: ask the far end rather than believing
+# anything local. A token on disk proves nothing about a service being up, and
+# a service being up proves nothing without the token it will demand - so the
+# probe carries the token and the route is only taken if that round trip
+# answered.
+opener_ready() {
+  [ "${SPECHUB_OPEN_OPENER:-auto}" != "off" ] || return 1
+  local tok
+  tok=$(cat "$OPENER_TOKEN" 2>/dev/null) || return 1
+  [ -n "$tok" ] || return 1
+  # Seconds, not tens of them - someone just pressed a key and is watching.
+  curl -fsS --connect-timeout 1 -m 2 -H "X-Spechub-Token: $tok" \
+    "$OPENER/health" >/dev/null 2>&1
 }
 
 route() {  # the route this machine will take, decided without taking it
@@ -873,6 +1141,12 @@ route() {  # the route this machine will take, decided without taking it
   for opener in wslview wsl-open explorer.exe; do
     command -v "$opener" >/dev/null 2>&1 && { echo "$opener"; return; }
   done
+  # Ahead of the bridge deliberately. The bridge drives a browser for an
+  # agent: it attaches per tab, only after someone clicks the extension icon,
+  # and it does so in a Chrome profile that is not the default browser. The
+  # opener needs no click and reaches the browser the user actually uses. See
+  # docs/adr/0001-document-opener-service.md.
+  opener_ready && { echo "opener"; return; }
   bridge_attached && { echo "bridge"; return; }
   has_tty && { echo "link"; return; }
   echo "clipboard"
@@ -919,6 +1193,28 @@ case "$ROUTE" in
     log "$ROUTE: $URL"
     exec "$ROUTE" "$URL"
     ;;
+  opener)
+    # One POST and the laptop opens it in whatever it considers the default
+    # browser. No tab to arm, no extension, no CDP session to contend for.
+    #
+    # A URL carrying a double quote or a backslash would break out of the JSON
+    # string it is about to become. Rather than escape it, fall through to the
+    # link screen: those characters are not legal in a URL unescaped, so a URL
+    # holding one is malformed and worth showing a human rather than sending.
+    tok=$(cat "$OPENER_TOKEN" 2>/dev/null || true)
+    case "$URL" in
+      *'"'*|*'\\'*) tok="" ;;
+    esac
+    if [ -n "$tok" ] && curl -fsS --connect-timeout 2 -m 10 -X POST \
+         -H "X-Spechub-Token: $tok" -H 'Content-Type: application/json' \
+         --data "$(printf '{"url":"%s"}' "$URL")" \
+         "$OPENER/open" 2>/dev/null | tr -d '[:space:]' | grep -q '"opened":true'; then
+      log "opener $OPENER: $URL"
+      exit 0
+    fi
+    log "opener $OPENER did not open it, handing over the link: $URL"
+    if has_tty; then link_screen; exit 0; fi
+    ;;
   bridge)
     # Name the endpoint rather than inheriting one. Leaning on an ambient
     # $AGENT_BROWSER_CDP made this launch a headless Chrome on the VM when
@@ -957,8 +1253,136 @@ exit 1
 H
   chmod +x "$BIN/spechub-open"
 
-  say "helpers written: spechub-diff, spechub-dash, spechub-md"
-  say "remote helpers written: spechub-clip, spechub-open"
+  cat > "$BIN/spechub-bridge" <<'H'
+#!/usr/bin/env bash
+# Look at the Playwriter bridge from the dev machine, and fix it where that is
+# possible from here.
+#
+#   spechub-bridge status        what is up, on both machines
+#   spechub-bridge fix [what]    restart relay | tunnel | both (default both)
+#
+# Restarting either is a Windows scheduled task, so this machine cannot do it
+# directly. It asks the opener, which runs over there and can. When the opener
+# is not reachable either, it prints the handoff block to paste into a
+# PowerShell on the laptop instead - the same block the bridge skill defines.
+#
+# What it still cannot do is arm the extension. That is a click inside a
+# third-party extension and nothing on either machine can press it.
+# Installed by spechub.
+set -uo pipefail
+
+BRIDGE="${SPECHUB_BRIDGE_URL:-http://127.0.0.1:19988}"
+OPENER="${SPECHUB_OPENER_URL:-http://127.0.0.1:19989}"
+OPENER_TOKEN="${XDG_CONFIG_HOME:-$HOME/.config}/spechub/opener.token"
+
+CMD="${1:-status}"
+WHAT="${2:-both}"
+
+tok() { cat "$OPENER_TOKEN" 2>/dev/null; }
+
+opener_call() {  # opener_call <method> <path> [data]
+  local t; t=$(tok) || return 1
+  [ -n "$t" ] || return 1
+  if [ "$1" = "POST" ]; then
+    curl -fsS --connect-timeout 2 -m 40 -X POST -H "X-Spechub-Token: $t" \
+      -H 'Content-Type: application/json' --data "${3:-{\}}" "$OPENER$2" 2>/dev/null
+  else
+    curl -fsS --connect-timeout 2 -m 10 -H "X-Spechub-Token: $t" "$OPENER$2" 2>/dev/null
+  fi
+}
+
+handoff() {  # what this machine cannot do, in the shape the other side expects
+  # Unquoted, because $1 names what is being asked for - so every PowerShell $
+  # inside has to be escaped or the shell eats it. A handoff block is pasted
+  # verbatim into a shell on the other machine, so a mangled one is worse than
+  # no block at all.
+  cat >&2 <<HANDOFF
+
+--- BEGIN VM-SIDE HANDOFF (to Windows agent) ---
+Context: the bridge needs $1 on the laptop, and the opener on 19989 is not
+reachable from this machine either, so nothing here can do it.
+
+Run on the Windows laptop:
+  Stop-ScheduledTask -TaskName 'Playwriter-*'
+  Start-ScheduledTask -TaskName 'Playwriter-Relay'
+  Start-ScheduledTask -TaskName 'Playwriter-Opener'
+  Get-ScheduledTask -TaskName 'Playwriter-Tunnel-*','Playwriter-OpenerTunnel-*' |
+    ForEach-Object { Start-ScheduledTask -TaskName \$_.TaskName }
+  .\doctor.ps1
+
+Expected result:
+  doctor.ps1 exits with all green rows, including "Relay listening on 19988"
+  and "Opener listening on 19989", and no tunnel-*.stuck markers.
+
+Report back:
+  The doctor.ps1 output (paste the table).
+--- END VM-SIDE HANDOFF ---
+HANDOFF
+}
+
+case "$CMD" in
+  status)
+    # This machine's own view first: these say whether the tunnels arrived,
+    # which is the half the laptop cannot see.
+    if curl -fsS --connect-timeout 1 -m 3 "$BRIDGE/json/version" >/dev/null 2>&1; then
+      armed=$(curl -fsS --connect-timeout 1 -m 3 "$BRIDGE/json/list" 2>/dev/null | tr -d '[:space:]')
+      case "$armed" in
+        ''|'[]') echo "relay:   reachable, but the extension is armed on no tab" ;;
+        *)       echo "relay:   reachable, extension armed" ;;
+      esac
+    else
+      echo "relay:   not reachable on $BRIDGE"
+    fi
+
+    if health=$(opener_call GET /health); then
+      echo "opener:  reachable - $(printf '%s' "$health" | tr -d '[:space:]')"
+    elif [ -z "$(tok)" ]; then
+      echo "opener:  no token at $OPENER_TOKEN (run register-tasks.ps1 on the laptop)"
+    else
+      echo "opener:  not reachable on $OPENER"
+    fi
+
+    # And the laptop's view, which only the opener can fetch.
+    if tasks=$(opener_call GET /bridge/health); then
+      echo "tasks:   $(printf '%s' "$tasks" | tr -d '[:space:]')"
+    else
+      echo "tasks:   unknown - the opener is the only way to see them from here"
+    fi
+    echo "route:   $(spechub-open --why 2>/dev/null || echo unknown)"
+    ;;
+  fix)
+    case "$WHAT" in
+      relay|tunnel|both) ;;
+      *) echo "usage: spechub-bridge fix [relay|tunnel|both]" >&2; exit 2 ;;
+    esac
+    if out=$(opener_call POST /bridge/restart "$(printf '{"what":"%s"}' "$WHAT")"); then
+      echo "asked the laptop to restart: $WHAT"
+      printf '%s\n' "$out"
+      # Restarting is not recovering. Give the tunnel a moment to rebind, then
+      # say whether it actually came back rather than reporting the request.
+      sleep 5
+      if curl -fsS --connect-timeout 1 -m 3 "$BRIDGE/json/version" >/dev/null 2>&1; then
+        echo "relay is answering again on $BRIDGE"
+        exit 0
+      fi
+      echo "the restart was accepted but the relay is still not answering here." >&2
+      echo "  if this persists the port may be wedged on this machine:" >&2
+      echo "  bash ~/.claude/spechub/bin/vm-free-port.sh" >&2
+      exit 1
+    fi
+    handoff "a restart of $WHAT"
+    exit 1
+    ;;
+  *)
+    echo "usage: spechub-bridge [status|fix [relay|tunnel|both]]" >&2
+    exit 2
+    ;;
+esac
+H
+  chmod +x "$BIN/spechub-bridge"
+
+  say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-view"
+  say "remote helpers written: spechub-clip, spechub-open, spechub-bridge"
   say "herdr helpers written: spechub-herdr-tab, spechub-herdr-renumber"
 }
 
@@ -1435,6 +1859,72 @@ PY
     say "yazi: your yazi.toml already claims mgr itself, so show_hidden was left"
     say "     alone. Set it there yourself to show hidden files." ;;
   esac
+  # The keymap is its own file, and prepend_keymap has two spellings: an array
+  # of tables, which is additive and safe to extend, and an inline array under
+  # [mgr], which is one key that TOML forbids declaring twice. Only the second
+  # collides with the entry below, and telling them apart takes the text - both
+  # spellings parse to the same list.
+  SPECHUB_ARGS="$(cfg_get yazi.browser_key "b")|$BEGIN|$END" \
+    py "$HOME/.config/yazi/keymap.toml" <<'PY'
+import os, re, sys
+
+path = sys.argv[1]
+key, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+text = open(path).read() if os.path.isfile(path) else ""
+# Drop any previous managed region, both to stay idempotent and so what is
+# left to inspect below is exactly the keymap the user wrote.
+text = re.sub(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", text, flags=re.S)
+
+try:
+    import tomllib
+except ImportError:  # tomllib is 3.11 and newer
+    tomllib = None
+
+
+def claimed(t):
+    """True when the user's keymap declares prepend_keymap as an inline array
+    under [mgr] - the one spelling our own entry cannot sit beside."""
+    if not re.search(r"^\s*prepend_keymap\s*=", t, flags=re.M):
+        return False
+    if tomllib is None:
+        # No parser to say which table that assignment sits in, so assume the
+        # worst. A conceded binding costs one key; a collision costs the whole
+        # keymap, because yazi answers invalid TOML by falling back to presets.
+        return True
+    try:
+        return "prepend_keymap" in (tomllib.loads(t).get("mgr") or {})
+    except Exception:
+        return True
+
+
+parts = []
+if not claimed(text):
+    # %h is the hovered file. $0 and $@ are not: yazi runs the template through
+    # a shell, where $0 names the shell itself and $@ is empty - both measured,
+    # and both would open the browser on nothing at all.
+    #
+    # --block because the delivery has something to say. On the bridge it is a
+    # line of confirmation; on every other route it is a link, and a served
+    # page that has to stay up. Detached, all of that goes nowhere.
+    parts.append(
+        "[[mgr.prepend_keymap]]\n"
+        f'on = "{key}"\n'
+        """run = 'shell --block -- spechub-md --browser "%h"'\n"""
+        'desc = "Open in the browser you are sitting at"'
+    )
+
+# The markers go down even when the binding was conceded, so the shell below
+# can read the region back and see what is missing from it.
+block = begin + "\n" + "\n\n".join(parts) + ("\n" if parts else "") + end
+text = text.rstrip("\n")
+open(path, "w").write((text + "\n\n" if text else "") + block + "\n")
+PY
+  local kmwritten; kmwritten="$(sed -n "/$BEGIN/,/$END/p" "$HOME/.config/yazi/keymap.toml")"
+  case "$kmwritten" in *prepend_keymap*) ;; *)
+    say "yazi: your keymap.toml already sets mgr.prepend_keymap as an inline"
+    say "     array, which this binding cannot sit beside. Add it there"
+    say "     yourself:  shell --block -- spechub-md --browser \"%h\"" ;;
+  esac
   say "yazi config written"
 }
 
@@ -1602,6 +2092,7 @@ case "$ACTION" in
       xdg-open)     say "browser: xdg-open on this machine" ;;
       wslview|wsl-open|explorer.exe)
                     say "browser: the Windows side of this machine" ;;
+      opener)       say "browser: your default browser on your laptop, through the opener" ;;
       bridge)       say "browser: Chrome on your laptop, through the Playwriter bridge" ;;
       link)         say "browser: none - o hands you a ctrl+clickable link and copies it" ;;
       clipboard)    say "browser: none, and no terminal either - o copies and reports failure" ;;

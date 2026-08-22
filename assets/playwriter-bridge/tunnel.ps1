@@ -29,7 +29,9 @@
 # Marker file: tunnel-<host>.stuck next to the log. Contains the reason,
 # timestamp, and the last 20 log lines. doctor.ps1 reads this.
 #
-# Port 19988 is the bridge's canonical CDP port and is hardcoded across
+# Port 19988 is the bridge's canonical CDP port and is the default here.
+# Port 19989 carries the document opener, registered as a second task
+# instance of this same script. 19988 is hardcoded across
 # the setup. If you ever need to change it, update every occurrence in:
 #   assets/playwriter-bridge/{tunnel.ps1, relay.ps1, stop.ps1, doctor.ps1,
 #                             register-tasks.ps1, vm-free-port.sh}
@@ -43,7 +45,16 @@ param(
     [string]$TargetHost,
 
     [Parameter(Mandatory = $false)]
-    [string]$User = $env:USERNAME
+    [string]$User = $env:USERNAME,
+
+    # Which port to carry. 19988 is the bridge's CDP port; 19989 is the
+    # document opener. They are forwarded by separate task instances rather
+    # than as two -R flags on one connection, deliberately: with
+    # ExitOnForwardFailure=yes a single wedged port fails the whole ssh, so
+    # sharing a connection would let a stuck opener port take the bridge down
+    # with it. Separate connections keep the two failures independent.
+    [Parameter(Mandatory = $false)]
+    [int]$Port = 19988
 )
 
 # Console hiding is handled by launcher.exe (spawns PowerShell with
@@ -53,8 +64,9 @@ $ErrorActionPreference = "Continue"
 
 $logDir = Join-Path $env:LOCALAPPDATA "playwriter-bridge"
 New-Item -Path $logDir -ItemType Directory -Force | Out-Null
-$logFile = Join-Path $logDir "tunnel-$TargetHost.log"
-$markerFile = Join-Path $logDir "tunnel-$TargetHost.stuck"
+$logSuffix = if ($Port -eq 19988) { "" } else { "-$Port" }
+$logFile = Join-Path $logDir "tunnel-$TargetHost$logSuffix.log"
+$markerFile = Join-Path $logDir "tunnel-$TargetHost$logSuffix.stuck"
 
 # The stuck marker is NOT cleared on start. The scheduler can restart this
 # task within its backstop window after an `exit 10`, so clearing on start
@@ -152,7 +164,7 @@ while ($true) {
 
     $startedAt = Get-Date
     $output = & $sshExe -N `
-        -R 19988:127.0.0.1:19988 `
+        -R "$($Port):127.0.0.1:$Port" `
         -o ServerAliveInterval=30 `
         -o ServerAliveCountMax=3 `
         -o ExitOnForwardFailure=yes `
@@ -174,15 +186,15 @@ while ($true) {
             if ($stuckStreak -ge $stuckMaxStreak) {
                 $mins = [int]($stuckMaxStreak * $stuckRetrySeconds / 60)
                 Write-Log -State 'fatal' -ExitCode $code -Message "Remote port still bound on $TargetHost after ~$mins min of retries. Writing marker and exiting."
-                Write-Marker -Reason "remote port forwarding failed – port 19988 still bound on VM after ~$mins min of retries (the VM's sshd has not reaped the orphaned forward channel)" `
-                    -Remediation "Run ~/.claude/spechub/bin/vm-free-port.sh on $TargetHost, then retrigger this task from Task Scheduler. If this recurs, tighten the VM's sshd ClientAliveInterval per the bridge SKILL-VM runbook so orphaned forwards reap faster."
+                Write-Marker -Reason "remote port forwarding failed – port $Port still bound on VM after ~$mins min of retries (the VM's sshd has not reaped the orphaned forward channel)" `
+                    -Remediation "Run ~/.claude/spechub/bin/vm-free-port.sh --port $Port on $TargetHost, then retrigger this task from Task Scheduler. If this recurs, tighten the VM's sshd ClientAliveInterval per the bridge SKILL-VM runbook so orphaned forwards reap faster."
                 exit 10
             }
             # The port is held by the orphaned forward channel of the dropped
             # session. Wait for the VM's sshd ClientAlive reaper to release it;
             # the next attempt then binds. This is the bridge's self-heal path,
             # so the wait is sized to outlast the reap window, not a token 10 s.
-            Write-Log -State 'stuck-retry' -ExitCode $code -Message "Port 19988 still held on $TargetHost (attempt $stuckStreak/$stuckMaxStreak); waiting ${stuckRetrySeconds}s for the VM to reap the orphaned forward."
+            Write-Log -State 'stuck-retry' -ExitCode $code -Message "Port $Port still held on $TargetHost (attempt $stuckStreak/$stuckMaxStreak); waiting ${stuckRetrySeconds}s for the VM to reap the orphaned forward."
             Start-Sleep -Seconds $stuckRetrySeconds
             continue
         }

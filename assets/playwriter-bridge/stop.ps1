@@ -1,6 +1,8 @@
 ﻿# stop.ps1 – Canonical "stop the bridge" entry point.
 #
-# Stops every Playwriter-* scheduled task, kills any lingering bridge
+# Stops every Playwriter-* scheduled task - which covers the document opener
+# and its tunnel too, both registered under the same prefix - kills any
+# lingering bridge
 # processes (relay.ps1, tunnel.ps1), reaps orphan ssh.exe children that
 # were carrying the reverse forward, and confirms 127.0.0.1:19988 is no
 # longer bound. Prints a one-line verdict.
@@ -59,13 +61,14 @@ Start-Sleep -Milliseconds 500
 # Pass 2: reap orphan ssh.exe reverse-forward children. Required because
 # Stop-Process -Force on the launcher does not run the launcher's
 # ProcessExit handler, so the ssh.exe it parented survives. Match on the
-# reverse-forward argument pattern (narrow, scoped to port 19988) so this
-# never touches an unrelated ssh session.
+# reverse-forward argument pattern (narrow, scoped to the two ports this setup
+# owns - 19988 for the bridge, 19989 for the document opener) so this never
+# touches an unrelated ssh session.
 $sshRemnants = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object {
         $_.Name -eq 'ssh.exe' -and
         $_.CommandLine -and
-        ($_.CommandLine -match '19988:127\.0\.0\.1:19988' -or $_.CommandLine -match '-R\s+19988:') -and
+        ($_.CommandLine -match '1998[89]:127\.0\.0\.1:1998[89]' -or $_.CommandLine -match '-R\s+"?1998[89]:') -and
         -not (Should-Skip $_.ProcessId)
     }
 
@@ -78,37 +81,45 @@ foreach ($p in $sshRemnants) {
 
 Start-Sleep -Milliseconds 500
 
-# Pass 3: reap the orphan node.exe that relay.ps1 spawned (playwriter
-# serve) and that still binds 19988. Identify it by whatever owns the
-# port, then kill only if its command line contains 'playwriter' – so we
-# never touch an unrelated listener that happens to be on 19988.
-$listener = Get-NetTCPConnection -LocalPort 19988 -State Listen -ErrorAction SilentlyContinue
-foreach ($conn in $listener) {
-    $ownerPid = [int]$conn.OwningProcess
-    if ($ownerPid -le 0) { continue }
-    if (Should-Skip $ownerPid) { continue }
-    $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerPid" -ErrorAction SilentlyContinue
-    if (-not $proc) { continue }
-    if ($proc.CommandLine -and $proc.CommandLine -match 'playwriter') {
-        try {
-            Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
-            Write-Host "  killed: PID $ownerPid ($($proc.Name), orphan playwriter relay listener)"
-        } catch { }
-    } else {
-        Write-Host "  NOT killing PID $ownerPid ($($proc.Name)): command line does not match 'playwriter'" -ForegroundColor Yellow
+# Pass 3: reap the orphan node.exe that relay.ps1 spawned (playwriter serve)
+# and still binds 19988, and the one opener.ps1 spawned and still binds 19989.
+# Identify each by whatever owns the port, then kill only if its command line
+# names the thing we expect - so we never touch an unrelated listener that
+# happens to be on either port.
+$owned = @{ 19988 = 'playwriter'; 19989 = 'opener\.js' }
+foreach ($port in $owned.Keys) {
+    $listener = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    foreach ($conn in $listener) {
+        $ownerPid = [int]$conn.OwningProcess
+        if ($ownerPid -le 0) { continue }
+        if (Should-Skip $ownerPid) { continue }
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerPid" -ErrorAction SilentlyContinue
+        if (-not $proc) { continue }
+        if ($proc.CommandLine -and $proc.CommandLine -match $owned[$port]) {
+            try {
+                Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
+                Write-Host "  killed: PID $ownerPid ($($proc.Name), orphan listener on $port)"
+            } catch { }
+        } else {
+            Write-Host "  NOT killing PID $ownerPid ($($proc.Name)): command line does not match '$($owned[$port])'" -ForegroundColor Yellow
+        }
     }
 }
 
 Start-Sleep -Milliseconds 500
 
-$listener = Get-NetTCPConnection -LocalPort 19988 -State Listen -ErrorAction SilentlyContinue
-if ($listener) {
+$stillUp = @()
+foreach ($port in $owned.Keys) {
+    if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+        $stillUp += $port
+    }
+}
+if ($stillUp) {
     Write-Host ""
-    Write-Host "VERDICT: bridge is PARTIALLY down – something still listens on 127.0.0.1:19988" -ForegroundColor Yellow
-    $listener | Format-Table LocalAddress, LocalPort, OwningProcess -AutoSize
+    Write-Host "VERDICT: PARTIALLY down – something still listens on $($stillUp -join ', ')" -ForegroundColor Yellow
     exit 1
 }
 
 Write-Host ""
-Write-Host "VERDICT: bridge is down" -ForegroundColor Green
+Write-Host "VERDICT: bridge and opener are down" -ForegroundColor Green
 exit 0

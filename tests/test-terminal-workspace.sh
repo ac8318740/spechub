@@ -56,7 +56,9 @@ unknown=""
 for name in $(grep -oE '\bspechub-[a-z][a-z-]*[a-z]\b' "$DOCS" | sort -u); do
   echo "$installed" | grep -qx "$name" && continue
   # Process names rather than binaries, named via exec -a inside a helper.
-  grep -q "exec -a $name" "$SETUP" && continue
+  # Either spelling counts: a fixed name, or a variable, which is how one
+  # helper that renames itself by the mode it was asked for spells it.
+  grep -qE "exec -a $name|NAME=$name\\b" "$SETUP" && continue
   # A family prefix such as spechub-herdr- names a convention, not a command.
   echo "$installed" | grep -q "^$name-" && continue
   unknown="$unknown $name"
@@ -710,14 +712,72 @@ else
   no "with a terminal and no browser, o draws a clickable link and copies it"
 fi
 
-# The bridge is only taken once it has proved what it is attached to. With no
-# agent-browser session running, it must not even be asked - probing starts a
+# The bridge is only taken once it has proved a browser is on the other end.
+# With no relay answering at all, it must not even be asked - probing starts a
 # browser as a side effect.
 if [ "$(bare spechub-open --why 2>/dev/null)" != "bridge" ]; then
   ok "the bridge route is skipped when nothing has attached to it"
 else
   no "the bridge route is skipped when nothing has attached to it"
 fi
+
+# A relay answering on its HTTP port is not a browser. The Playwriter
+# extension attaches per tab, and /json/list is its own answer about that:
+# [] means armed on nothing. Driving the bridge in that state is what let
+# agent-browser fall back to a headless Chrome nobody could see.
+#
+# These two pin both halves against a stub relay. agent-browser must exist on
+# PATH for the route to be considered, but must never be run to decide it - a
+# stub that fails loudly proves the decision costs no browser.
+printf '#!/bin/sh\necho "agent-browser must not run during routing" >&2\nexit 97\n' \
+  > "$CLIPBIN/agent-browser"
+chmod +x "$CLIPBIN/agent-browser"
+
+cat > "$WORK/relay.py" <<'RELAY'
+import http.server, socketserver, sys, threading
+body = sys.argv[1].encode()
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        payload = body if self.path == "/json/list" else b'{"Browser":"Stub/1.0"}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+    def log_message(self, *a): pass
+srv = socketserver.TCPServer(("127.0.0.1", 0), H)
+print(srv.server_address[1], flush=True)
+srv.serve_forever()
+RELAY
+
+# Sets $BURL and $RELAY_PID directly rather than printing the url: a command
+# substitution runs in a subshell, so the pid to kill would not survive it.
+relay_up() {  # relay_up <json-list-body>
+  rm -f "$WORK/relay.port"
+  python3 "$WORK/relay.py" "$1" > "$WORK/relay.port" 2>/dev/null &
+  RELAY_PID=$!
+  local i=0
+  while [ ! -s "$WORK/relay.port" ] && [ "$i" -lt 50 ]; do i=$((i+1)); sleep 0.1; done
+  BURL="http://127.0.0.1:$(cat "$WORK/relay.port")"
+}
+
+relay_up '[]' 
+if [ "$(bare env SPECHUB_BRIDGE_URL="$BURL" spechub-open --why 2>/dev/null)" != "bridge" ]; then
+  ok "a relay with the extension armed on no tab is not treated as a browser"
+else
+  no "a relay with the extension armed on no tab is not treated as a browser"
+fi
+kill "$RELAY_PID" 2>/dev/null; wait "$RELAY_PID" 2>/dev/null
+rm -f "$WORK/relay.port"
+
+relay_up '[{"id":"1","type":"page","url":"https://example.com"}]'
+if [ "$(bare env SPECHUB_BRIDGE_URL="$BURL" spechub-open --why 2>/dev/null)" = "bridge" ]; then
+  ok "a relay with the extension armed on a tab is taken as the bridge route"
+else
+  no "a relay with the extension armed on a tab is taken as the bridge route"
+fi
+kill "$RELAY_PID" 2>/dev/null; wait "$RELAY_PID" 2>/dev/null
+rm -f "$WORK/relay.port" "$CLIPBIN/agent-browser"
 
 if [ "$(bare env SPECHUB_OPEN_CMD=echo spechub-open https://example.com 2>/dev/null)" \
      = "https://example.com" ]; then
@@ -733,6 +793,73 @@ if [ "$(bare spechub-clip --out 2>/dev/null)" = "https://example.com/pr/7" ]; th
   ok "spechub-open falls back to the clipboard when no browser is reachable"
 else
   no "spechub-open falls back to the clipboard when no browser is reachable"
+fi
+
+echo "spechub-view"
+# tuicr's <leader>v hands the focused file to this, and what comes back has to
+# be a terminal program so `q` returns to tuicr. These pin which one each file
+# type reaches, with stubs standing in for the real viewers.
+VIEWBIN="$WORK/view-bin"
+mkdir -p "$VIEWBIN" "$WORK/viewfiles"
+cp "$(extract spechub-view)" "$VIEWBIN/spechub-view"
+for stub in spechub-md yazi; do
+  printf '#!/bin/sh\necho "%s $*"\n' "$stub" > "$VIEWBIN/$stub"
+  chmod +x "$VIEWBIN/$stub"
+done
+viewrun() { env -i PATH="$VIEWBIN:/usr/bin:/bin" "$VIEWBIN/spechub-view" "$@"; }
+
+: > "$WORK/viewfiles/notes.md"
+: > "$WORK/viewfiles/NOTES.markdown"
+: > "$WORK/viewfiles/main.rs"
+
+if [ "$(viewrun "$WORK/viewfiles/notes.md" 2>/dev/null)" \
+     = "spechub-md $WORK/viewfiles/notes.md" ]; then
+  ok "spechub-view sends markdown to spechub-md"
+else
+  no "spechub-view sends markdown to spechub-md"
+fi
+
+# The suffix match must not be case-exact, or a .markdown from a different
+# editor silently lands in the file manager instead of the renderer.
+if [ "$(viewrun "$WORK/viewfiles/NOTES.markdown" 2>/dev/null)" \
+     = "spechub-md $WORK/viewfiles/NOTES.markdown" ]; then
+  ok "spechub-view recognises .markdown as well as .md"
+else
+  no "spechub-view recognises .markdown as well as .md"
+fi
+
+if [ "$(viewrun "$WORK/viewfiles/main.rs" 2>/dev/null)" \
+     = "yazi $WORK/viewfiles/main.rs" ]; then
+  ok "spechub-view sends everything else to yazi"
+else
+  no "spechub-view sends everything else to yazi"
+fi
+
+# A path tuicr could not resolve must say so and fail, not open the file
+# manager on the current directory as if nothing were wrong.
+viewrun "$WORK/viewfiles/gone.rs" >/dev/null 2>&1
+if [ "$?" = "1" ]; then
+  ok "spechub-view fails on a path that does not exist"
+else
+  no "spechub-view fails on a path that does not exist"
+fi
+
+viewrun >/dev/null 2>&1
+if [ "$?" = "2" ]; then
+  ok "spechub-view with no argument reports usage"
+else
+  no "spechub-view with no argument reports usage"
+fi
+
+# Neither viewer installed is not a reason to show nothing.
+rm -f "$VIEWBIN/yazi" "$VIEWBIN/spechub-md"
+printf 'body-line\n' > "$WORK/viewfiles/plain.txt"
+if env -i PATH="$VIEWBIN:/usr/bin:/bin" PAGER=cat \
+     "$VIEWBIN/spechub-view" "$WORK/viewfiles/plain.txt" 2>/dev/null \
+     | grep -q "body-line"; then
+  ok "spechub-view falls back to a pager when no viewer is installed"
+else
+  no "spechub-view falls back to a pager when no viewer is installed"
 fi
 
 echo "why a gh-dash action failed"
@@ -1017,6 +1144,898 @@ MD2
 else
   printf '  note: glow, mermaid-ascii or perl not installed - skipping wide-diagram preview check\n'
 fi
+
+echo "spechub-md --html"
+# Every browser route needs the same primitive: the whole document on stdout,
+# built without a server. --serve already renders exactly this document, so
+# these pin it as something a caller can capture and hand on rather than curl
+# for - which is the only shape that works when the browser is on a different
+# machine and no forward port reaches this one.
+cat > "$WORK/html.md" <<'MDH'
+# Browser me
+
+Prose before the diagram.
+
+```mermaid
+graph LR
+  A[start] --> B[end]
+```
+MDH
+
+html_out="$WORK/html.out"
+html_err="$WORK/html.err"
+"$MD" --html "$WORK/html.md" </dev/null >"$html_out" 2>"$html_err"
+html_rc=$?
+
+if [ "$html_rc" -eq 0 ] \
+   && head -1 "$html_out" | grep -qi '<!doctype html' \
+   && grep -qi '</html>' "$html_out" \
+   && ! grep -q 'usage: spechub-md' "$html_out" "$html_err"
+then
+  ok "--html writes a whole document to stdout and exits 0"
+else
+  no "--html writes a whole document to stdout and exits 0 (rc=$html_rc)"
+fi
+
+# Rendered, not passed through. Markdown source reaching the browser raw is
+# the failure this catches.
+if grep -q '<h1' "$html_out" && grep -q 'Prose before the diagram' "$html_out"; then
+  ok "--html renders the markdown body"
+else
+  no "--html renders the markdown body"
+fi
+
+# mermaid.js reads <pre class="mermaid"> holding raw diagram source. An
+# escaped code block leaves --&gt; in place of the arrow and draws nothing,
+# which looks like a mermaid bug rather than a rendering one.
+if grep -q '<pre class="mermaid">' "$html_out" \
+   && grep -q 'A\[start\] --> B\[end\]' "$html_out" \
+   && ! grep -q 'language-mermaid' "$html_out"
+then
+  ok "--html hands mermaid fences over unescaped"
+else
+  no "--html hands mermaid fences over unescaped"
+fi
+
+# The one thing --html cannot inherit from --serve. --serve answers for
+# /mermaid.js itself off the vendored copy; a document standing on its own has
+# no server behind it, so a relative src fetches from whatever host the page
+# ended up on and finds nothing there.
+if grep -q '<script src="https://' "$html_out" \
+   && ! grep -q 'src="/mermaid.js"' "$html_out"
+then
+  ok "--html names a mermaid source reachable with no server behind the page"
+else
+  no "--html names a mermaid source reachable with no server behind the page"
+fi
+
+# A document is not a server. Hold the serve port and the document must still
+# come out: a caller pushing one into a browser over CDP should never have to
+# find a free port first, and must never be left waiting on one.
+cat > "$WORK/holdport.py" <<'HOLD'
+import socket, sys, time
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+s.listen(1)
+open(sys.argv[1], "w").write(str(s.getsockname()[1]))
+time.sleep(30)
+HOLD
+rm -f "$WORK/held.port"
+python3 "$WORK/holdport.py" "$WORK/held.port" >/dev/null 2>&1 &
+HOLD_PID=$!
+i=0
+while [ ! -s "$WORK/held.port" ] && [ "$i" -lt 50 ]; do i=$((i+1)); sleep 0.1; done
+held=$(cat "$WORK/held.port" 2>/dev/null)
+if [ -n "$held" ] \
+   && SPECHUB_MD_PORT="$held" timeout 20 "$MD" --html "$WORK/html.md" \
+        </dev/null 2>/dev/null | grep -qi '</html>'
+then
+  ok "--html renders with the serve port already taken, and returns"
+else
+  no "--html renders with the serve port already taken, and returns"
+fi
+kill "$HOLD_PID" 2>/dev/null; wait "$HOLD_PID" 2>/dev/null
+rm -f "$WORK/held.port"
+
+# --preview, --serve and --html are three answers to "where does this end up",
+# and a caller that gives two of them meant something the helper cannot do.
+# Saying so beats silently picking one.
+excl_broken=""
+for other in --serve --preview; do
+  timeout 10 "$MD" --html "$other" "$WORK/html.md" </dev/null >/dev/null 2>&1 \
+    && excl_broken="$excl_broken $other"
+done
+if [ -z "$excl_broken" ]; then
+  ok "--html refuses to combine with --serve or --preview"
+else
+  no "--html silently combines with:$excl_broken"
+fi
+
+echo "spechub-md --browser"
+# Where the browser is decides how the page reaches it, and spechub-open
+# already answers that for URLs. These pin that --browser asks it rather than
+# working the question out a second time, and that each answer gets the
+# delivery it needs: a document handed over the CDP link when the browser is
+# on the far end of the bridge, a served page when it can reach this machine.
+BRBIN="$WORK/browser-bin"
+mkdir -p "$BRBIN"
+cat > "$BRBIN/spechub-open" <<'SO'
+#!/bin/sh
+if [ "$1" = "--why" ]; then echo "$SPECHUB_TEST_ROUTE"; exit 0; fi
+echo "spechub-open $*" >> "$SPECHUB_TEST_LOG"
+SO
+# Records what it was asked to do, and keeps whatever came down stdin so the
+# payload can be decoded and inspected rather than taken on trust. It answers
+# the way a browser does - with the title of the page it is now holding - so
+# the helper's own check has something real to read. $SPECHUB_TEST_LIE makes it
+# hold something else instead, which is a bridge that took the page and did not
+# keep it.
+cat > "$BRBIN/agent-browser" <<'AB'
+#!/bin/sh
+echo "agent-browser $*" >> "$SPECHUB_TEST_LOG"
+# The real listing marks the active tab with an arrow and indents the rest.
+# Which line carries the arrow is the whole point: switching to the wrong index
+# raises somebody else's tab.
+case "$*" in
+  *"tab list"*)
+    printf '  [0] Google - https://www.google.com/\n'
+    printf '\342\206\222 [1]  - about:blank\n'
+    exit 0 ;;
+esac
+for a in "$@"; do
+  if [ "$a" = "--stdin" ]; then
+    cat > "$SPECHUB_TEST_PUSH"
+    if [ -n "${SPECHUB_TEST_LIE:-}" ]; then printf '"%s"\n' "$SPECHUB_TEST_LIE"; exit 0; fi
+    python3 - "$SPECHUB_TEST_PUSH" <<'EOF'
+import base64, pathlib, re, sys
+js = pathlib.Path(sys.argv[1]).read_text()
+m = re.search(r'"([A-Za-z0-9+/=]{200,})"', js)
+doc = base64.b64decode(m.group(1)).decode() if m else ""
+t = re.search(r"<title>(.*?)</title>", doc)
+print('"%s"' % (t.group(1) if t else ""))
+EOF
+    exit 0
+  fi
+done
+exit 0
+AB
+chmod +x "$BRBIN/spechub-open" "$BRBIN/agent-browser"
+
+br_log="$WORK/browser.log"
+br_push="$WORK/browser.push"
+rm -f "$br_log" "$br_push"
+PATH="$BRBIN:$PATH" SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$br_log" \
+  SPECHUB_TEST_PUSH="$br_push" timeout 30 "$MD" --browser "$WORK/html.md" \
+  </dev/null >/dev/null 2>&1
+br_rc=$?
+
+if [ "$br_rc" -eq 0 ] && grep -q 'agent-browser.*eval' "$br_log" 2>/dev/null; then
+  ok "--browser hands the page to agent-browser on the bridge route"
+else
+  no "--browser hands the page to agent-browser on the bridge route (rc=$br_rc)"
+fi
+
+# The payload has to be the rendered document, not the markdown and not a
+# path: the far end cannot read this machine's disk, which is the whole point.
+if [ -s "$br_push" ] && python3 - "$br_push" <<'DECODE'
+import base64, pathlib, re, sys
+js = pathlib.Path(sys.argv[1]).read_text()
+m = re.search(r'"([A-Za-z0-9+/=]{200,})"', js)
+if not m:
+    sys.exit("no base64 payload found")
+doc = base64.b64decode(m.group(1)).decode()
+for want in ("<!doctype html", "<pre class=\"mermaid\">", "</html>"):
+    if want not in doc.lower() and want not in doc:
+        sys.exit(f"payload missing {want!r}")
+DECODE
+then
+  ok "--browser pushes the whole rendered document, diagrams included"
+else
+  no "--browser pushes the whole rendered document, diagrams included"
+fi
+
+# A document delivered over CDP needs no port here, and must not leave a
+# server running behind it - the caller got its page and is done.
+if ! grep -q 'spechub-md-serve' /proc/*/cmdline 2>/dev/null \
+   || ! pgrep -f "spechub-md-serve.*$WORK/html.md" >/dev/null 2>&1
+then
+  ok "--browser on the bridge route leaves no server behind"
+else
+  no "--browser on the bridge route leaves no server behind"
+  pkill -f "spechub-md-serve.*$WORK/html.md" 2>/dev/null
+fi
+
+# Every other route has a browser that can reach this machine, so the page is
+# served rather than pushed, and agent-browser must stay out of it entirely.
+rm -f "$br_log" "$br_push"
+br_port=6717
+PATH="$BRBIN:$PATH" SPECHUB_TEST_ROUTE=link SPECHUB_TEST_LOG="$br_log" \
+  SPECHUB_TEST_PUSH="$br_push" SPECHUB_MD_PORT="$br_port" \
+  "$MD" --browser "$WORK/html.md" </dev/null >/dev/null 2>&1 &
+BR_PID=$!
+br_body=""
+for i in $(seq 40); do
+  br_body=$(curl -fsS -m 1 "http://127.0.0.1:$br_port/" 2>/dev/null) && break
+  sleep 0.25
+done
+kill "$BR_PID" 2>/dev/null; wait "$BR_PID" 2>/dev/null
+pkill -f "spechub-md-serve.*$WORK/html.md" 2>/dev/null
+
+if printf '%s' "$br_body" | grep -qi '</html>' \
+   && ! grep -q 'agent-browser' "$br_log" 2>/dev/null
+then
+  ok "--browser serves the page when the browser can reach this machine"
+else
+  no "--browser serves the page when the browser can reach this machine"
+fi
+
+# The page goes into a tab of its own, and never over a page that is already
+# there. The Playwriter extension attaches per tab through chrome.debugger, and
+# rewriting a real document detaches it: measured on a live bridge, pushing
+# over an https page left /json/list empty and the bridge unusable until it was
+# armed again by hand. A fresh about:blank tab survives the same rewrite,
+# because the document it replaces has the same origin.
+rm -f "$br_log" "$br_push"
+PATH="$BRBIN:$PATH" SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$br_log" \
+  SPECHUB_TEST_PUSH="$br_push" timeout 30 "$MD" --browser "$WORK/html.md" \
+  </dev/null >/dev/null 2>&1
+if grep -q 'tab new' "$br_log" 2>/dev/null; then
+  ok "--browser writes into a tab of its own, leaving the armed tab armed"
+else
+  no "--browser rewrites a live page, which detaches the extension"
+fi
+
+# A tab created over CDP is created in the background, so writing into it is
+# only half the job - it still has to be brought forward, or the page is real,
+# correct, and never seen. agent-browser carries Page.bringToFront on its tab
+# switch, so the tab just written into is switched to explicitly.
+if grep -qE 'agent-browser .*tab 1$' "$br_log" 2>/dev/null; then
+  ok "--browser brings the tab it wrote into to the front"
+elif grep -qE 'agent-browser .*tab [0-9]+$' "$br_log" 2>/dev/null; then
+  no "--browser raises the wrong tab: $(grep -oE 'tab [0-9]+$' "$br_log" | tail -1)"
+else
+  no "--browser leaves the tab in the background, where nobody sees it"
+fi
+
+# "It said it opened but it did not" has to be impossible to say twice. An exit
+# status only means the command ran; the page is confirmed by asking the far
+# end what it is now holding.
+rm -f "$br_log" "$br_push"
+PATH="$BRBIN:$PATH" SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$br_log" \
+  SPECHUB_TEST_PUSH="$br_push" SPECHUB_TEST_LIE="something else entirely" \
+  timeout 30 "$MD" --browser "$WORK/html.md" </dev/null >/dev/null 2>&1
+if [ "$?" -ne 0 ]; then
+  ok "--browser fails when the far end is not holding the page"
+else
+  no "--browser reports success without checking the page arrived"
+fi
+
+# A preview pane is still not a browser.
+if ! timeout 10 "$MD" --browser --preview "$WORK/html.md" </dev/null >/dev/null 2>&1; then
+  ok "--browser refuses to combine with --preview"
+else
+  no "--browser refuses to combine with --preview"
+fi
+
+echo "spechub-md browser key in the pager"
+# Reading a document and wanting it in a browser is the same moment, so the
+# key belongs where the reading happens. less cannot run a command and hand it
+# the filename cleanly, but lesskey's quit action takes the first character of
+# its extra string as an exit status - so the key quits with a value less
+# never produces on its own, and spechub-md acts on that.
+KEYBIN="$WORK/key-bin"
+mkdir -p "$KEYBIN"
+# Records the keys file it was handed, and exits with whatever the test wants
+# less to have returned.
+cat > "$KEYBIN/less" <<'FAKELESS2'
+#!/bin/sh
+printf '%s' "${LESSKEYIN:-}" > "$SPECHUB_TEST_LESSKEYIN"
+[ -n "${LESSKEYIN:-}" ] && [ -f "$LESSKEYIN" ] && cp "$LESSKEYIN" "$SPECHUB_TEST_KEYS"
+exit "${SPECHUB_TEST_LESS_RC:-0}"
+FAKELESS2
+chmod +x "$KEYBIN/less"
+
+key_seen="$WORK/key.lesskeyin"
+key_file="$WORK/key.keys"
+key_log="$WORK/key.log"
+
+run_pager() {  # run_pager <less-exit-status>
+  rm -f "$key_seen" "$key_file" "$key_log"
+  PATH="$KEYBIN:$BRBIN:$PATH" \
+    SPECHUB_TEST_LESS_RC="$1" \
+    SPECHUB_TEST_LESSKEYIN="$key_seen" SPECHUB_TEST_KEYS="$key_file" \
+    SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$key_log" \
+    SPECHUB_TEST_PUSH="$WORK/key.push" \
+    timeout 40 "$MD" "$WORK/html.md" </dev/null >/dev/null 2>&1
+}
+
+run_pager 0
+if [ -s "$key_seen" ]; then
+  ok "the pager is handed a lesskey file"
+else
+  no "the pager is handed a lesskey file"
+fi
+
+# The binding has to be quit-with-a-status, not a shell escape: less expands %
+# to the file it was given, which here is the rendered temp copy rather than
+# the markdown the reader asked for.
+if grep -q '^#command' "$key_file" 2>/dev/null \
+   && grep -qE '^b[[:space:]]+quit[[:space:]]+.' "$key_file" 2>/dev/null
+then
+  ok "the lesskey file binds b to quit with an exit status"
+else
+  no "the lesskey file binds b to quit with an exit status"
+fi
+
+# Quitting normally must not open anything. This is the check that would catch
+# the browser firing every time somebody just finished reading.
+if ! grep -q 'agent-browser' "$key_log" 2>/dev/null; then
+  ok "quitting the pager normally opens no browser"
+else
+  no "quitting the pager normally opens no browser"
+fi
+
+# 65 is "A", the first character of the extra string in the binding above.
+run_pager 65
+if grep -q 'agent-browser' "$key_log" 2>/dev/null; then
+  ok "the pager's browser status opens the browser"
+else
+  no "the pager's browser status opens the browser"
+fi
+
+# Somebody else's pager gets none of this: the binding is a less feature, and
+# handing LESSKEYIN to a program that does not read it is at best noise.
+cat > "$KEYBIN/otherpager" <<'OTHERP'
+#!/bin/sh
+printf '%s' "${LESSKEYIN:-}" > "$SPECHUB_TEST_LESSKEYIN"
+exit 65
+OTHERP
+chmod +x "$KEYBIN/otherpager"
+rm -f "$key_seen" "$key_log"
+PATH="$KEYBIN:$BRBIN:$PATH" PAGER="otherpager" \
+  SPECHUB_TEST_LESSKEYIN="$key_seen" SPECHUB_TEST_KEYS="$key_file" \
+  SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$key_log" \
+  SPECHUB_TEST_PUSH="$WORK/key.push" \
+  timeout 40 "$MD" "$WORK/html.md" </dev/null >/dev/null 2>&1
+if [ ! -s "$key_seen" ] && ! grep -q 'agent-browser' "$key_log" 2>/dev/null; then
+  ok "a pager that is not less gets no lesskey file and no browser status"
+else
+  no "a pager that is not less gets no lesskey file and no browser status"
+fi
+
+# The key is a preference, not a constant - b is taken in less for back-a-page,
+# and somebody who wants that back needs a way to move this.
+rm -f "$key_file"
+PATH="$KEYBIN:$BRBIN:$PATH" SPECHUB_MD_BROWSER_KEY=w \
+  SPECHUB_TEST_LESS_RC=0 \
+  SPECHUB_TEST_LESSKEYIN="$key_seen" SPECHUB_TEST_KEYS="$key_file" \
+  SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$key_log" \
+  SPECHUB_TEST_PUSH="$WORK/key.push" \
+  timeout 40 "$MD" "$WORK/html.md" </dev/null >/dev/null 2>&1
+if grep -qE '^w[[:space:]]+quit' "$key_file" 2>/dev/null; then
+  ok "\$SPECHUB_MD_BROWSER_KEY moves the key"
+else
+  no "\$SPECHUB_MD_BROWSER_KEY moves the key"
+fi
+
+# The one that proves the mechanism rather than our half of it: a real less,
+# a real keypress, and the exit status the binding is supposed to produce.
+# Needs a terminal, which is what script(1) is for.
+if command -v script >/dev/null 2>&1 && command -v less >/dev/null 2>&1; then
+  lk_real="$WORK/real.lesskey"
+  printf '#command\nb quit A\n' > "$lk_real"
+  printf 'one\ntwo\nthree\n' > "$WORK/real.txt"
+  rm -f "$WORK/real.fifo" "$WORK/real.out"; mkfifo "$WORK/real.fifo"
+  ( LESSKEYIN="$lk_real" timeout 20 \
+      script -qec "stty rows 20 cols 60; less -R $WORK/real.txt; echo RC=\$?" \
+        /dev/null < "$WORK/real.fifo" > "$WORK/real.out" 2>&1 & )
+  exec 7>"$WORK/real.fifo"
+  sleep 3; printf 'b' >&7; sleep 3
+  exec 7>&-
+  real_rc=$(tr -d '\000' < "$WORK/real.out" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' \
+              | grep -oE 'RC=[0-9]+' | tail -1)
+  if [ "$real_rc" = "RC=65" ]; then
+    ok "a real less quits with 65 when the bound key is pressed"
+  else
+    no "a real less quits with 65 when the bound key is pressed (got '$real_rc')"
+  fi
+else
+  printf '  note: script or less not installed - skipping the real-less check\n'
+fi
+
+echo "yazi keymap merge safety"
+# The same key, in the other place ;v can land you. The keymap lives in its own
+# file, so this writer has its own collision to worry about: prepend_keymap can
+# be written either as an array-of-tables or as an inline array under [mgr],
+# and a file containing both forms is invalid TOML - which yazi answers by
+# throwing the whole keymap away and falling back to presets.
+KEYMAP="$WORK/keymap.py"
+awk "/^    py \"\\\$HOME\/\.config\/yazi\/keymap\.toml\" <<'PY'\$/{f=1; next} f && /^PY\$/{exit} f" \
+  "$SETUP" > "$KEYMAP"
+run_keymap() {  # run_keymap <key> <path>
+  SPECHUB_ARGS="$1|$BEGIN_MARK|$END_MARK" python3 "$KEYMAP" "$2" 2>/dev/null
+}
+
+if [ -s "$KEYMAP" ]; then
+  ok "the yazi keymap writer is extractable from setup.sh"
+else
+  no "the yazi keymap writer is extractable from setup.sh"
+fi
+
+# No file at all is the ordinary case - the user has never written one.
+rm -f "$WORK/km-fresh.toml"
+run_keymap b "$WORK/km-fresh.toml"
+if parses "$WORK/km-fresh.toml" && python3 - "$WORK/km-fresh.toml" <<'PYKM'
+import sys, tomllib
+data = tomllib.load(open(sys.argv[1], "rb"))
+binds = data.get("mgr", {}).get("prepend_keymap", [])
+hit = [b for b in binds if b.get("on") == "b"]
+if not hit:
+    sys.exit("no b binding")
+run = hit[0].get("run", "")
+if "spechub-md --browser" not in run:
+    sys.exit(f"binding does not reach the browser: {run!r}")
+# %h is the hovered file. $0 names the shell and $@ is empty, both measured -
+# a binding using them opens the browser on nothing at all.
+if "%h" not in run:
+    sys.exit(f"binding does not pass the hovered file: {run!r}")
+PYKM
+then
+  ok "a fresh keymap.toml binds b to the browser on the hovered file"
+else
+  no "a fresh keymap.toml binds b to the browser on the hovered file"
+fi
+
+cp "$WORK/km-fresh.toml" "$WORK/km-twice.toml"
+run_keymap b "$WORK/km-twice.toml"
+if diff -q "$WORK/km-fresh.toml" "$WORK/km-twice.toml" >/dev/null; then
+  ok "re-applying the yazi keymap is idempotent"
+else
+  no "re-applying the yazi keymap is idempotent"
+fi
+
+# A keymap the user wrote by hand, in the array-of-tables form, with no
+# prepend_keymap of their own.
+cat > "$WORK/km-hand.toml" <<'KMHAND'
+[[mgr.append_keymap]]
+on = "T"
+run = "plugin toggle-pane"
+desc = "Toggle the preview pane"
+
+[input]
+keymap = []
+KMHAND
+run_keymap b "$WORK/km-hand.toml"
+if parses "$WORK/km-hand.toml" \
+   && grep -q 'toggle-pane' "$WORK/km-hand.toml" \
+   && grep -q 'spechub-md --browser' "$WORK/km-hand.toml"
+then
+  ok "a hand-written keymap survives the merge and still gains the binding"
+else
+  no "a hand-written keymap survives the merge and still gains the binding"
+fi
+
+# The collision that matters: prepend_keymap already written as an inline
+# array. Adding [[mgr.prepend_keymap]] alongside it redefines the same key and
+# the file stops parsing, so the binding has to be given up instead.
+cat > "$WORK/km-claimed.toml" <<'KMCLAIM'
+[mgr]
+prepend_keymap = [
+  { on = "<C-y>", run = "plugin something", desc = "Mine" },
+]
+KMCLAIM
+run_keymap b "$WORK/km-claimed.toml"
+if parses "$WORK/km-claimed.toml" && grep -q 'C-y' "$WORK/km-claimed.toml"; then
+  ok "a keymap already claiming prepend_keymap stays valid TOML"
+else
+  no "a keymap already claiming prepend_keymap stays valid TOML"
+fi
+
+first_km=$(grep -c "$BEGIN_MARK" "$WORK/km-hand.toml")
+if [ "$first_km" = "1" ]; then
+  ok "managed yazi keymap blocks do not accumulate"
+else
+  no "managed yazi keymap blocks do not accumulate ($first_km)"
+fi
+
+
+echo "the opener route"
+# The opener is a service on the user's laptop that takes a page and puts it in
+# the default browser there. It is not the bridge: no tab to arm, no extension,
+# and the browser it reaches is the one the user actually uses. These pin that
+# the route is decided by asking it - never by finding a token on disk - and
+# that a document handed over is only called delivered when the opener says so.
+OWORK="$WORK/opener"
+mkdir -p "$OWORK/bin" "$OWORK/home/.config/spechub"
+cp "$(extract spechub-open)" "$OWORK/bin/spechub-open"
+cp "$(extract spechub-clip)" "$OWORK/bin/spechub-clip"
+cp "$(extract spechub-md)"   "$OWORK/bin/spechub-md"
+chmod +x "$OWORK/bin"/*
+OTOKEN="$OWORK/home/.config/spechub/opener.token"
+
+# A stand-in for the opener that speaks the same protocol and writes down what
+# it was asked to do. $OWORK/mode steers the answer, because "opened a tab",
+# "reused the one already open" and "did not manage it" are three different
+# things the helper has to tell apart.
+cat > "$OWORK/opener.py" <<'OPENER'
+import http.server, json, pathlib, socketserver, sys
+work = pathlib.Path(sys.argv[1])
+token = sys.argv[2]
+log = work / "opener.log"
+
+class H(http.server.BaseHTTPRequestHandler):
+    def note(self, *parts):
+        with log.open("a") as f:
+            f.write(" ".join(parts) + "\n")
+
+    def reply(self, code, obj):
+        # Compact, because the real opener answers with JSON.stringify and a
+        # stand-in that formats differently would be testing the wrong thing.
+        body = json.dumps(obj, separators=(",", ":")).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def authed(self):
+        if self.headers.get("X-Spechub-Token") == token:
+            return True
+        self.note("UNAUTHED", self.path)
+        self.reply(401, {"error": "bad or missing token"})
+        return False
+
+    def mode(self):
+        f = work / "mode"
+        return f.read_text().strip() if f.exists() else "open"
+
+    def do_GET(self):
+        if not self.authed():
+            return
+        if self.path == "/health":
+            self.note("health")
+            return self.reply(200, {"opener": 1, "docs": 0, "mermaid": (work / "mermaid").exists()})
+        if self.path == "/bridge/health":
+            self.note("bridge-health")
+            return self.reply(200, {"tasks": {"Playwriter-Relay": "Running"}})
+        self.reply(404, {"error": "no"})
+
+    def do_POST(self):
+        if not self.authed():
+            return
+        n = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(n)
+        if self.path.startswith("/open"):
+            url = json.loads(body or b"{}").get("url", "")
+            self.note("open", url)
+            if self.mode() == "fail":
+                return self.reply(500, {"opened": False})
+            return self.reply(200, {"opened": True, "url": url})
+        if self.path.startswith("/asset/mermaid.js"):
+            (work / "mermaid").write_text("yes")
+            self.note("mermaid", str(len(body)))
+            return self.reply(200, {"cached": True})
+        if self.path.startswith("/bridge/restart"):
+            what = json.loads(body or b"{}").get("what", "")
+            self.note("bridge-restart", what)
+            return self.reply(200, {"restarted": ["Playwriter-Relay"]})
+        if self.path.startswith("/doc"):
+            (work / "pushed.html").write_bytes(body)
+            self.note("doc", self.path.split("?", 1)[-1])
+            m = self.mode()
+            if m == "fail":
+                return self.reply(200, {"url": "x", "opened": False, "reused": False})
+            if m == "reuse":
+                return self.reply(200, {"url": "x", "reused": True, "opened": False})
+            return self.reply(200, {"url": "x", "reused": False, "opened": True})
+        self.reply(404, {"error": "no"})
+
+    def log_message(self, *a):
+        pass
+
+socketserver.TCPServer.allow_reuse_address = True
+srv = socketserver.TCPServer(("127.0.0.1", 0), H)
+print(srv.server_address[1], flush=True)
+srv.serve_forever()
+OPENER
+
+# Sets $OURL and $OPENER_PID rather than printing: a command substitution runs
+# in a subshell and the pid to kill would not survive it.
+opener_up() {
+  rm -f "$OWORK/opener.port" "$OWORK/opener.log" "$OWORK/mode" "$OWORK/mermaid"
+  python3 "$OWORK/opener.py" "$OWORK" "$(cat "$OTOKEN")" > "$OWORK/opener.port" 2>/dev/null &
+  OPENER_PID=$!
+  local i=0
+  while [ ! -s "$OWORK/opener.port" ] && [ "$i" -lt 50 ]; do i=$((i+1)); sleep 0.1; done
+  OURL="http://127.0.0.1:$(cat "$OWORK/opener.port")"
+}
+opener_down() {
+  kill "$OPENER_PID" 2>/dev/null
+  wait "$OPENER_PID" 2>/dev/null
+  rm -f "$OWORK/opener.port"
+}
+obare() { env -i PATH="$OWORK/bin:/usr/bin:/bin" HOME="$OWORK/home" "$@"; }
+
+# A token on disk is not a service that is up. With nothing listening, the
+# route must fall through rather than be taken on the strength of a file.
+printf 'test-token-0123456789' > "$OTOKEN"
+if [ "$(obare env SPECHUB_OPENER_URL=http://127.0.0.1:1 spechub-open --why 2>/dev/null)" != "opener" ]; then
+  ok "a token with nothing answering is not the opener route"
+else
+  no "a token with nothing answering is not the opener route"
+fi
+
+opener_up
+
+# And a service that is up is no use without the credential it will demand, so
+# the probe has to carry it. No token file at all must not take the route.
+mv "$OTOKEN" "$OTOKEN.away"
+if [ "$(obare env SPECHUB_OPENER_URL="$OURL" spechub-open --why 2>/dev/null)" != "opener" ]; then
+  ok "an opener that is up but has no token here is not the opener route"
+else
+  no "an opener that is up but has no token here is not the opener route"
+fi
+mv "$OTOKEN.away" "$OTOKEN"
+
+# A wrong token is the same as no token: the probe is answered 401 and the
+# route is not taken.
+printf 'wrong-token' > "$OTOKEN"
+if [ "$(obare env SPECHUB_OPENER_URL="$OURL" spechub-open --why 2>/dev/null)" != "opener" ]; then
+  ok "a token the opener rejects is not the opener route"
+else
+  no "a token the opener rejects is not the opener route"
+fi
+printf 'test-token-0123456789' > "$OTOKEN"
+
+if [ "$(obare env SPECHUB_OPENER_URL="$OURL" spechub-open --why 2>/dev/null)" = "opener" ]; then
+  ok "a healthy opener holding the same token is the opener route"
+else
+  no "a healthy opener holding the same token is the opener route"
+fi
+
+if [ "$(obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_OPEN_OPENER=off spechub-open --why 2>/dev/null)" != "opener" ]; then
+  ok "\$SPECHUB_OPEN_OPENER=off gives the opener route up"
+else
+  no "\$SPECHUB_OPEN_OPENER=off gives the opener route up"
+fi
+
+# Both reachable at once is the interesting case: the bridge drives a browser
+# for an agent and needs a tab armed by hand, the opener reaches the browser
+# the user actually uses. The opener wins.
+printf '#!/bin/sh\nexit 0\n' > "$OWORK/bin/agent-browser"
+chmod +x "$OWORK/bin/agent-browser"
+relay_up '[{"id":"1","type":"page","url":"https://example.com"}]'
+if [ "$(obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL="$BURL" spechub-open --why 2>/dev/null)" = "opener" ]; then
+  ok "with both reachable the opener outranks the bridge"
+else
+  no "with both reachable the opener outranks the bridge"
+fi
+kill "$RELAY_PID" 2>/dev/null; wait "$RELAY_PID" 2>/dev/null
+rm -f "$WORK/relay.port" "$OWORK/bin/agent-browser"
+
+obare env SPECHUB_OPENER_URL="$OURL" spechub-open "https://example.com/pr/7" >/dev/null 2>&1
+if grep -q '^open https://example.com/pr/7$' "$OWORK/opener.log" 2>/dev/null; then
+  ok "the opener route hands the URL to the opener"
+else
+  no "the opener route hands the URL to the opener"
+fi
+
+# An opener that took the request and did not open anything is not a success.
+# The link screen is the fallback, and a pty is what tells the helper it has
+# somewhere to draw it.
+printf 'fail' > "$OWORK/mode"
+screen=$(printf x | obare env SPECHUB_OPENER_URL="$OURL" \
+  script -qec 'spechub-open https://example.com/pr/8' /dev/null 2>/dev/null)
+if printf '%s' "$screen" | grep -q $'\033]8;;https://example.com/pr/8\033'; then
+  ok "an opener that did not open it falls back to a link you can click"
+else
+  no "an opener that did not open it falls back to a link you can click"
+fi
+rm -f "$OWORK/mode"
+
+# --- the document path -----------------------------------------------------
+cat > "$OWORK/doc.md" <<'MD'
+# Opener test
+
+```mermaid
+graph LR
+  A --> B
+```
+MD
+
+obare env SPECHUB_OPENER_URL="$OURL" spechub-md --browser "$OWORK/doc.md" >/dev/null 2>&1
+pushed="$OWORK/pushed.html"
+if [ -s "$pushed" ] \
+   && grep -q '<title>doc.md</title>' "$pushed" \
+   && grep -q 'class="mermaid"' "$pushed" \
+   && grep -q 'graph LR' "$pushed"; then
+  ok "--browser pushes the whole rendered document to the opener, diagrams included"
+else
+  no "--browser pushes the whole rendered document to the opener, diagrams included"
+fi
+
+# The opener serves the page, so a relative src resolves against it - and
+# unlike --serve that holds whether or not this machine vendored anything.
+if grep -q '<script src="/mermaid.js"></script>' "$pushed"; then
+  ok "a document bound for the opener asks it for mermaid rather than a CDN"
+else
+  no "a document bound for the opener asks it for mermaid rather than a CDN"
+fi
+
+# The key is what lets the opener recognise the same file again, so it has to
+# be the absolute path - and hex-encoded, because a path may hold anything a
+# query string cannot carry.
+want_key=$(printf '%s' "$OWORK/doc.md" | od -An -v -tx1 | tr -d ' \n')
+if grep -q "key=$want_key" "$OWORK/opener.log"; then
+  ok "--browser keys the document by its absolute path, hex-encoded"
+else
+  no "--browser keys the document by its absolute path, hex-encoded"
+fi
+
+# Serving would leave a port behind on a machine whose ports nobody can reach.
+if ! pgrep -f 'spechub-md-serve' >/dev/null 2>&1; then
+  ok "--browser on the opener route leaves no server behind"
+else
+  no "--browser on the opener route leaves no server behind"
+fi
+
+printf 'reuse' > "$OWORK/mode"
+out=$(obare env SPECHUB_OPENER_URL="$OURL" spechub-md --browser "$OWORK/doc.md" 2>&1 >/dev/null)
+if printf '%s' "$out" | grep -q 'updated in the tab already open'; then
+  ok "a re-render the opener reused is reported as an update, not a new tab"
+else
+  no "a re-render the opener reused is reported as an update, not a new tab (got '$out')"
+fi
+
+# Exit status 0 is not a page that arrived. The opener answers with what it
+# did, and anything short of opening or reusing is a failure worth saying.
+printf 'fail' > "$OWORK/mode"
+if ! obare env SPECHUB_OPENER_URL="$OURL" spechub-md --browser "$OWORK/doc.md" >/dev/null 2>&1; then
+  ok "--browser fails when the opener does not confirm the page reached a browser"
+else
+  no "--browser fails when the opener does not confirm the page reached a browser"
+fi
+rm -f "$OWORK/mode"
+
+# Vendored mermaid goes up once, so a diagram draws without reaching a CDN.
+mkdir -p "$OWORK/home/.local/share/spechub"
+printf 'pretend-this-is-mermaid' > "$OWORK/home/.local/share/spechub/mermaid.min.js"
+obare env SPECHUB_OPENER_URL="$OURL" spechub-md --browser "$OWORK/doc.md" >/dev/null 2>&1
+if grep -q '^mermaid ' "$OWORK/opener.log"; then
+  ok "the vendored mermaid is uploaded to an opener that has none"
+else
+  no "the vendored mermaid is uploaded to an opener that has none"
+fi
+before=$(grep -c '^mermaid ' "$OWORK/opener.log")
+obare env SPECHUB_OPENER_URL="$OURL" spechub-md --browser "$OWORK/doc.md" >/dev/null 2>&1
+if [ "$(grep -c '^mermaid ' "$OWORK/opener.log")" = "$before" ]; then
+  ok "an opener that already holds mermaid is not sent it again"
+else
+  no "an opener that already holds mermaid is not sent it again"
+fi
+
+# The token can go missing between the route being chosen and the document
+# being sent. That guard is unreachable through the real spechub-open, which
+# will not name the opener route without a token, so the route is stubbed to
+# reach it - and it must refuse rather than fall through to serving a port
+# nobody on the far side can reach.
+mkdir -p "$OWORK/stub"
+cat > "$OWORK/stub/spechub-open" <<'SO'
+#!/bin/sh
+[ "$1" = "--why" ] && { echo opener; exit 0; }
+exit 0
+SO
+chmod +x "$OWORK/stub/spechub-open"
+mv "$OTOKEN" "$OTOKEN.away"
+if ! env -i PATH="$OWORK/stub:$OWORK/bin:/usr/bin:/bin" HOME="$OWORK/home" \
+     SPECHUB_OPENER_URL="$OURL" timeout 20 "$OWORK/bin/spechub-md" --browser "$OWORK/doc.md" \
+     >/dev/null 2>&1; then
+  ok "--browser refuses rather than guessing when there is no opener token"
+else
+  no "--browser refuses rather than guessing when there is no opener token"
+fi
+mv "$OTOKEN.away" "$OTOKEN"
+
+opener_down
+
+# vm-free-port.sh gained a second port to clear, and must still refuse every
+# other one - the guardrails inside it only reason correctly about sockets
+# this setup put there.
+FREEPORT="$(dirname "$SETUP")/../playwriter-bridge/vm-free-port.sh"
+# --- spechub-bridge: seeing and fixing the bridge from here ----------------
+# Restarting the relay or the tunnel is a Windows scheduled task, so this
+# machine cannot do it directly. It asks the opener, which can. When the opener
+# is not reachable either, the paste-ready handoff block is the answer - and it
+# has to survive being written, because it is pasted verbatim into a shell on
+# the other machine.
+cp "$(extract spechub-bridge)" "$OWORK/bin/spechub-bridge"
+chmod +x "$OWORK/bin/spechub-bridge"
+opener_up
+
+out=$(obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL=http://127.0.0.1:1 \
+        spechub-bridge status 2>&1)
+if printf '%s' "$out" | grep -q '^relay:   not reachable' \
+   && printf '%s' "$out" | grep -q '^opener:  reachable'; then
+  ok "spechub-bridge status separates what this machine sees from what the opener sees"
+else
+  no "spechub-bridge status separates what this machine sees from what the opener sees (got '$out')"
+fi
+
+# Only the opener can see the laptop's scheduled tasks from here.
+if printf '%s' "$out" | grep -q '^tasks:.*Playwriter-Relay'; then
+  ok "spechub-bridge status reads the laptop's tasks through the opener"
+else
+  no "spechub-bridge status reads the laptop's tasks through the opener"
+fi
+
+mv "$OTOKEN" "$OTOKEN.away"
+out=$(obare env SPECHUB_OPENER_URL="$OURL" spechub-bridge status 2>&1)
+if printf '%s' "$out" | grep -q 'no token at'; then
+  ok "spechub-bridge status names a missing token rather than calling it unreachable"
+else
+  no "spechub-bridge status names a missing token rather than calling it unreachable"
+fi
+mv "$OTOKEN.away" "$OTOKEN"
+
+if ! obare env SPECHUB_OPENER_URL="$OURL" spechub-bridge fix nonsense >/dev/null 2>&1; then
+  ok "spechub-bridge fix refuses a target it does not know"
+else
+  no "spechub-bridge fix refuses a target it does not know"
+fi
+
+obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL=http://127.0.0.1:1 \
+  spechub-bridge fix relay >/dev/null 2>&1
+if grep -q '^bridge-restart relay$' "$OWORK/opener.log"; then
+  ok "spechub-bridge fix asks the opener to restart the task named"
+else
+  no "spechub-bridge fix asks the opener to restart the task named"
+fi
+
+# Accepted is not recovered. With the relay still not answering here, this must
+# report failure rather than the request having been taken.
+if ! obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL=http://127.0.0.1:1 \
+     spechub-bridge fix relay >/dev/null 2>&1; then
+  ok "spechub-bridge fix fails when the restart did not bring the relay back"
+else
+  no "spechub-bridge fix fails when the restart did not bring the relay back"
+fi
+
+opener_down
+
+block=$(obare env SPECHUB_OPENER_URL=http://127.0.0.1:1 spechub-bridge fix both 2>&1)
+if printf '%s' "$block" | grep -q 'BEGIN VM-SIDE HANDOFF' \
+   && printf '%s' "$block" | grep -q 'END VM-SIDE HANDOFF'; then
+  ok "spechub-bridge hands over a block when it cannot reach the opener either"
+else
+  no "spechub-bridge hands over a block when it cannot reach the opener either"
+fi
+
+# The block is pasted verbatim into PowerShell, so a $ the writing shell ate is
+# a command that silently does nothing on the other machine.
+if printf '%s' "$block" | grep -q 'Start-ScheduledTask -TaskName \$_\.TaskName'; then
+  ok "the handoff block keeps its PowerShell variables intact"
+else
+  no "the handoff block keeps its PowerShell variables intact"
+fi
+
+# What is asserted is the allowlist, not the outcome of clearing: whether 19989
+# is currently held depends on whether a tunnel is up, which is not this test's
+# business. Exit 2 is the argument refusal, so an accepted port is anything but.
+if [ -f "$FREEPORT" ]; then
+  bash "$FREEPORT" --port 19989 >/dev/null 2>&1; a=$?
+  bash "$FREEPORT" --port 19988 >/dev/null 2>&1; b=$?
+  bash "$FREEPORT" --port 22 >/dev/null 2>&1; c=$?
+  bash "$FREEPORT" --port >/dev/null 2>&1; d=$?
+  bash "$FREEPORT" --wat >/dev/null 2>&1; e=$?
+  # 64 is the argument refusal and nothing else uses it, so an accepted port is
+  # anything but 64 - whatever it then decides about the socket it found.
+  if [ "$a" != "64" ] && [ "$b" != "64" ] && [ "$c" = "64" ] && [ "$d" = "64" ] && [ "$e" = "64" ]; then
+    ok "vm-free-port.sh accepts the bridge and opener ports and refuses every other"
+  else
+    no "vm-free-port.sh accepts the bridge and opener ports and refuses every other ($a/$b/$c/$d/$e)"
+  fi
+fi
+
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

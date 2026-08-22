@@ -140,6 +140,48 @@ if ($versionOk) {
     Add-Result 'Extension armed on a tab' 'amber' 'skipped (version check failed)' ''
 }
 
+# ---- Check 4b: the document opener ----------------------------------------
+#
+# The opener is what puts a page in the default browser here. It is a separate
+# service from the relay on purpose - it needs no tab armed and no extension -
+# so it gets its own rows rather than being folded into the bridge's.
+
+$openerToken = Join-Path $env:LOCALAPPDATA 'playwriter-bridge\opener.token'
+$openerListener = Get-NetTCPConnection -LocalPort 19989 -State Listen -ErrorAction SilentlyContinue
+if (-not $openerListener) {
+    Add-Result 'Opener listening on 19989' 'red' 'nothing listening on 127.0.0.1:19989' `
+        'The opener task is not up. Run Start-ScheduledTask Playwriter-Opener, then check opener-supervisor.log.'
+} else {
+    Add-Result 'Opener listening on 19989' 'green' "PID $($openerListener.OwningProcess -join ',') listening"
+}
+
+if (-not (Test-Path $openerToken)) {
+    Add-Result 'Opener token' 'red' 'no token file' `
+        'Run register-tasks.ps1 to generate one and push it to each VM.'
+} else {
+    # A token here is only half of it: the dev machine needs the same bytes, and
+    # nothing on this side can see whether it has them. Say so rather than
+    # calling it green and leaving a VM that gets 401 on every request.
+    Add-Result 'Opener token' 'green' 'present here (each VM needs the same copy at ~/.config/spechub/opener.token)'
+}
+
+if ($openerListener -and (Test-Path $openerToken)) {
+    try {
+        $tok = (Get-Content $openerToken -Raw).Trim()
+        $r = Invoke-WebRequest -Uri 'http://127.0.0.1:19989/health' `
+            -Headers @{ 'X-Spechub-Token' = $tok } `
+            -TimeoutSec $CurlTimeoutSeconds -UseBasicParsing -ErrorAction Stop
+        $h = $r.Content | ConvertFrom-Json
+        $mermaid = if ($h.mermaid) { 'mermaid cached' } else { 'no mermaid cached yet (first push will send it)' }
+        Add-Result 'Opener /health' 'green' "HTTP 200, $($h.docs) document(s) held, $mermaid"
+    } catch {
+        Add-Result 'Opener /health' 'red' "request failed: $($_.Exception.Message)" `
+            'The port is open but the service is not answering. Restart Playwriter-Opener and read opener.log.'
+    }
+} else {
+    Add-Result 'Opener /health' 'amber' 'skipped (no listener or no token)' ''
+}
+
 # ---- Check 5: tunnel log signatures ---------------------------------------
 
 $stuckHosts = @()

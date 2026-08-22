@@ -3,9 +3,17 @@
 # Creates three kinds of scheduled tasks, all at user logon, LogonType=Interactive:
 #
 #   Playwriter-Relay         – runs relay.ps1 (always one)
+#   Playwriter-Opener        – runs opener.ps1 (always one)
 #   Playwriter-Tunnel-VM1    – runs tunnel.ps1 -TargetHost <vm1>
 #   Playwriter-Tunnel-VM2    – runs tunnel.ps1 -TargetHost <vm2>
 #   ...                       (one per VM in -VMs, auto-numbered)
+#   Playwriter-OpenerTunnel-VM1 – runs tunnel.ps1 -TargetHost <vm1> -Port 19989
+#   ...                       (one per VM, carrying the opener's port)
+#
+# The opener gets its own tunnel task rather than a second -R on the bridge's
+# connection. ssh runs with ExitOnForwardFailure=yes, so one wedged port fails
+# the whole connection – sharing one would mean a stuck opener port takes the
+# bridge down too. See docs/adr/0001-document-opener-service.md.
 #
 # The tasks run as the current user, so the ssh-agent named pipe (SID-ACL'd
 # to the user) stays reachable and no password is ever stored. Each task
@@ -50,10 +58,10 @@ if (-not $principalCheck.IsInRole([Security.Principal.WindowsBuiltInRole]::Admin
 }
 
 # Validate that the script files are actually where we expect them.
-foreach ($file in @("relay.ps1", "tunnel.ps1")) {
+foreach ($file in @("relay.ps1", "tunnel.ps1", "opener.ps1", "opener.js")) {
     $full = Join-Path $ScriptsDir $file
     if (-not (Test-Path $full)) {
-        Write-Error "Missing required script: $full. Copy relay.ps1 and tunnel.ps1 into $ScriptsDir before running this."
+        Write-Error "Missing required script: $full. Copy relay.ps1, tunnel.ps1, opener.ps1 and opener.js into $ScriptsDir before running this."
         exit 1
     }
 }
@@ -161,22 +169,59 @@ function Register-BridgeTask {
 }
 
 Register-BridgeTask -Name "Playwriter-Relay" -ScriptFile "relay.ps1"
+Register-BridgeTask -Name "Playwriter-Opener" -ScriptFile "opener.ps1"
 
 for ($i = 0; $i -lt $VMs.Count; $i++) {
     $vm = $VMs[$i]
-    $taskName = "Playwriter-Tunnel-VM$($i + 1)"
     Register-BridgeTask `
-        -Name $taskName `
+        -Name "Playwriter-Tunnel-VM$($i + 1)" `
         -ScriptFile "tunnel.ps1" `
         -ExtraArgs @("-TargetHost", $vm, "-User", $TunnelUser)
+    Register-BridgeTask `
+        -Name "Playwriter-OpenerTunnel-VM$($i + 1)" `
+        -ScriptFile "tunnel.ps1" `
+        -ExtraArgs @("-TargetHost", $vm, "-User", $TunnelUser, "-Port", "19989")
+}
+
+# The opener refuses every request that does not carry this, so each VM needs
+# a copy. Generated here if the opener has not already made one; pushed over
+# the same ssh the tunnel uses, so it needs no new access. A VM that cannot be
+# reached is a warning, not a failure: the tunnel tasks are still worth
+# registering, and the token can be copied by hand afterwards.
+$tokenFile = Join-Path $env:LOCALAPPDATA "playwriter-bridge\opener.token"
+if (-not (Test-Path $tokenFile)) {
+    New-Item -Path (Split-Path $tokenFile) -ItemType Directory -Force | Out-Null
+    $bytes = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    Set-Content -Path $tokenFile -Value ([System.BitConverter]::ToString($bytes).Replace('-', '').ToLower()) -NoNewline -Encoding ascii
+    Write-Host "Generated opener token: $tokenFile"
+}
+$token = (Get-Content $tokenFile -Raw).Trim()
+
+Write-Host ""
+Write-Host "Pushing opener token to VMs..."
+foreach ($vm in $VMs) {
+    $remote = "$TunnelUser@$vm"
+    # Single-quoted on the remote side so the shell there cannot interpret it,
+    # and 0600 because it is a bearer credential for opening pages on this
+    # screen.
+    $cmd = "mkdir -p ~/.config/spechub && umask 077 && printf '%s' '$token' > ~/.config/spechub/opener.token"
+    & ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $remote $cmd 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  $vm : token installed at ~/.config/spechub/opener.token"
+    } else {
+        Write-Warning "  $vm : could not push the token (ssh exit $LASTEXITCODE). Copy $tokenFile to ~/.config/spechub/opener.token on that VM by hand."
+    }
 }
 
 Write-Host ""
 Write-Host "Starting tasks..."
 Start-ScheduledTask -TaskName "Playwriter-Relay"
+Start-ScheduledTask -TaskName "Playwriter-Opener"
 Start-Sleep -Seconds 2
 for ($i = 0; $i -lt $VMs.Count; $i++) {
     Start-ScheduledTask -TaskName "Playwriter-Tunnel-VM$($i + 1)"
+    Start-ScheduledTask -TaskName "Playwriter-OpenerTunnel-VM$($i + 1)"
 }
 
 Write-Host "Done. Logs: $env:LOCALAPPDATA\playwriter-bridge\"
