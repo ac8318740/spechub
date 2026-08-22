@@ -21,6 +21,16 @@ items are too load-bearing to risk losing. This skill writes those items to an
 anchor file that a SessionStart hook re-injects the moment the session resumes,
 so the work continues here rather than moving to a fresh agent.
 
+## Only the lead session runs this
+
+Run `[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" ]` before anything else. If it is
+set, you are a subagent or a teammate: stop, and tell whoever launched you that
+this skill runs only in the lead session, and that a subagent or teammate should
+report its state to the lead instead – in its final message, or by
+`SendMessage` – and let the lead hand off or compact. The reason: a child
+session would write the lead's quiet marker and the shared `spechub/HANDOFF.md`
+anchor, both of which belong to the lead alone.
+
 ## The rule that governs the anchor
 
 *Reference state. Never copy it.*
@@ -104,6 +114,25 @@ created: <ISO 8601 UTC>
 - Map state: `~/.claude/spechub/bin/spechub node walk` and `~/.claude/spechub/bin/spechub node frontier`
 - Files in flight: `git status --short`
 ```
+
+## Silence the context-pressure nudge
+
+With the anchor written, write the quiet marker. The context-pressure Stop hook
+reads it and stays silent for the rest of this session – the compaction is
+already arranged, so there is nothing left to nudge about:
+
+```bash
+d="${SPECHUB_CONTEXT_PRESSURE_DIR:-${TMPDIR:-/tmp}/spechub-context-pressure}"
+[ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && mkdir -p "$d" && : > "$d/${CLAUDE_CODE_SESSION_ID}.quiet" || true
+```
+
+`CLAUDE_CODE_SESSION_ID` is this session's own id – the gate at the top ruled
+out the child sessions where it would name the parent instead – so the marker
+lands exactly where the hook looks for it. If the variable is unset, skip this
+step and tell the user: the hook will keep nudging, which is noisy but harmless.
+The marker is cleared automatically when the session compacts, because the hook
+resets its state on `SessionStart` with `source: compact`, so the nudge can
+return once the context grows again.
 
 ## Hand over the compact line
 

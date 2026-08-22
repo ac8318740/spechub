@@ -18,6 +18,17 @@ A handoff moves the current work to an agent a human can see: a named session
 in a visible pane, or a session already running. To keep the work in THIS
 session across a context compaction instead, use `compact-and-continue`.
 
+## Only the lead session runs this
+
+Run `[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" ]` before anything else. If it is
+set, you are a subagent or a teammate: stop, and tell whoever launched you that
+this skill runs only in the lead session, and that a subagent or teammate should
+report its state to the lead instead – in its final message, or by
+`SendMessage` – and let the lead hand off or compact. The reason: this skill's
+last step writes the quiet marker that silences the lead's context-pressure
+nudge, and in a child session `CLAUDE_CODE_SESSION_ID` names the lead, so a
+child would write a marker that is the lead's alone to write.
+
 ## First: is this yours to invoke?
 
 If the user asked for a handoff, proceed. If you are invoking it on your own
@@ -108,7 +119,23 @@ conversation content, not project state, and must not be committable. Name it
 `$TMPDIR/spechub-handoff-<slug>-<timestamp>.md` (`/tmp` when `$TMPDIR` is unset),
 where `<slug>` names the work and `<timestamp>` stops two handoffs colliding.
 
-Head it with the same skeleton the `compact-and-continue` anchor uses – Next
+Its first line, above every heading, repeats the acknowledgement requirement
+verbatim:
+
+```text
+Acknowledge first: ACCEPT or DECLINE, the way the message that brought you here told you to, before doing anything else.
+```
+
+It stays channel-neutral because the file is read on both routes, and the two
+routes acknowledge differently. The receiving agent is invited to read this file
+before it decides, so the file is the second place the requirement lands. The
+launch prompt is the first.
+
+This temp file is not `spechub/HANDOFF.md`, which is the `compact-and-continue`
+anchor: never put this line into that anchor, which has to start with `---`
+frontmatter.
+
+Head the rest with the same skeleton the `compact-and-continue` anchor uses – Next
 action, Decisions made, Open questions & blockers, Agent-team plan, Suggested
 skills, References – which is the five carried items above, plus the commands
 from the reference table instead of copied state. Drop any heading with nothing
@@ -126,16 +153,30 @@ message and simply ignore it, and the sender is never told. Refusal is
 ultimately a model-level choice, so the handshake has to live in the prompt text
 itself.
 
-So every handoff prompt – the single-line launch prompt for an agent started
-here, and the message sent to an agent already running alike – opens with this
-one line. It is the canonical acknowledgement opener: use it verbatim,
-substituting only the handoff file path.
+So every handoff prompt opens with an acknowledgement instruction. There are
+two of them, because the two destinations answer over different channels. Use
+the matching one verbatim, substituting only the handoff file path. Each is a
+single line: `herdr agent start` rejects newlines and tabs in its arguments, so
+the instruction and the pointer at the handoff file share that one line.
 
-> Before doing anything else, acknowledge: reply ACCEPT or DECLINE with a one-line reason. Reading <handoff-file> first, to judge whether this work suits you, is encouraged. Then continue that work.
+**Fresh agent** – one launched for this handoff, into a new pane, worktree or
+tab, or as a `--bg` session. It has no handle to reply on, so its acknowledgement
+is simply the first line of its first reply. A tool call is not a reply: reading
+the handoff file, running a command or spawning a subagent all leave the
+acknowledgement still owed, because the acknowledgement is the first *text* the
+agent sends.
+
+> The first line of your first reply must be the single word ACCEPT or DECLINE, followed by a one-line reason – plain text, nothing at all before it, and no bold, heading, quote or code formatting – because the sender matches that line literally and cannot report this work as yours until it sees it. You may read <handoff-file> first to judge whether the work suits you, but reply before doing any other work. Then continue that work.
+
+**Agent already running** – one reached by cross-session message. A reply typed
+into its own conversation goes nowhere this session can see, so the
+acknowledgement has to travel back over the same channel it arrived on:
+
+> The first thing you do must be to send an acknowledgement back to me with SendMessage – copy this message's from field as your to field – and that message must begin with the single word ACCEPT or DECLINE, followed by a one-line reason, as plain text with nothing at all before it and no bold, heading, quote or code formatting, because the sender matches it literally. A reply typed only into your own conversation is not seen, and the sender cannot report this work as yours until that message arrives. You may read <handoff-file> first to judge whether the work suits you, but send the acknowledgement before doing any other work. Then continue that work.
 
 Investigating before deciding is explicitly allowed: acknowledgement comes
-first, work second. The launch prompt still has to be one line, so the
-convention text and the pointer at the handoff file share that single line.
+first, work second. What is not allowed is starting the work and acknowledging
+later – by then the sender has already had to guess.
 
 ## Launch: a new worktree, for separate work
 
@@ -146,9 +187,9 @@ herdr worktree create --cwd "<main-repo-root>" --branch <branch> --base <base> \
 # read .result.root_pane.pane_id from the JSON – never hardcode
 # .result.worktree.path confirms where the checkout landed, for the report at the end
 
-# the quoted prompt is the acknowledgement opener defined above – use it verbatim
+# the quoted prompt is the FRESH AGENT opener defined above – use it verbatim
 herdr agent start <handoff-name> --kind claude --pane <root_pane_id> \
-  -- "Before doing anything else, acknowledge: reply ACCEPT or DECLINE with a one-line reason. Reading <handoff-file> first, to judge whether this work suits you, is encouraged. Then continue that work."
+  -- "The first line of your first reply must be the single word ACCEPT or DECLINE, followed by a one-line reason – plain text, nothing at all before it, and no bold, heading, quote or code formatting – because the sender matches that line literally and cannot report this work as yours until it sees it. You may read <handoff-file> first to judge whether the work suits you, but reply before doing any other work. Then continue that work."
 ```
 
 `<base>` is `origin/dev` when that ref exists, otherwise `origin/main` – the same
@@ -165,6 +206,29 @@ Every `herdr agent` subcommand accepts it in place of a pane ID and it survives
 the pane being moved, so always name the agent something short that describes the
 work. Pass `--no-focus` on every create, so the user's view never jumps.
 
+### When `agent start` times out
+
+`agent start` can return `{"error":{"code":"timeout"}}` when the launch actually
+worked. A timeout means the outcome is unknown, not failed, so check the pane
+before concluding anything:
+
+```bash
+herdr pane get <pane-id>   # read .result.pane.agent_session.value
+```
+
+If `agent_session.value` is present, the launch succeeded. The named handle was
+never registered, so use the pane ID in place of the agent name for every later
+`herdr agent ...` command – they all accept a pane ID – and use that value as the
+session id for the acknowledgement watcher. `agent wait <name>` and
+`agent get <name>` returning `agent_not_found` is expected here, not a second
+failure.
+
+If it is absent, wait a few seconds and check once more. Only then treat the
+launch as failed and report it.
+
+Report upstream: if the timeout reproduces, file it against herdr – the launch
+succeeded but the handle was not registered.
+
 ## Launch: a new tab, for a continuation
 
 Same shape one level down – no new checkout, so no worktree:
@@ -174,7 +238,8 @@ herdr tab create --workspace "$HERDR_WORKSPACE_ID" --no-focus
 # read the new tab's root pane ID from .result.root_pane.pane_id – same field the worktree's uses above
 ```
 
-Then `herdr agent start` into that pane, exactly as above.
+Then `herdr agent start` into that pane, exactly as above – same fresh-agent
+opener, same handoff file path.
 
 ## The trust dialog
 
@@ -198,6 +263,12 @@ herdr agent wait <name> --until working --timeout <ms>
 If either wait times out, read the agent's current state directly with
 `herdr agent get <name>` rather than guessing.
 
+Throughout this section `<name>` is the pane ID instead, whenever the launch
+timed out – see *When `agent start` times out*, above. Such a launch may already
+be past the trust dialog – the pane can report `agent_status: working` – so
+`herdr agent wait <pane-id> --until blocked` may simply time out; read the real
+state with `herdr agent get <pane-id>` and carry on from there.
+
 Never write `hasTrustDialogAccepted` into `~/.claude.json`, and never edit any
 security settings file. SpecHub does not touch those.
 
@@ -208,8 +279,8 @@ background session using the command template from `workflow.handoff.agent`
 (default `claude`):
 
 ```bash
-# again the acknowledgement opener defined above, verbatim
-<agent-template> --bg --name "<name>" "Before doing anything else, acknowledge: reply ACCEPT or DECLINE with a one-line reason. Reading <handoff-file> first, to judge whether this work suits you, is encouraged. Then continue that work."
+# again the FRESH AGENT opener defined above, verbatim
+<agent-template> --bg --name "<name>" "The first line of your first reply must be the single word ACCEPT or DECLINE, followed by a one-line reason – plain text, nothing at all before it, and no bold, heading, quote or code formatting – because the sender matches that line literally and cannot report this work as yours until it sees it. You may read <handoff-file> first to judge whether the work suits you, but reply before doing any other work. Then continue that work."
 ```
 
 There are no tabs and no workspaces here, so the destination rule has two cases,
@@ -230,7 +301,10 @@ transcript.
 
 Message that session by name, *proposing* the work and pointing at the handoff
 file. Do not assign it, and do not assume it was accepted. Open the message with
-the acknowledgement instruction above.
+the **agent already running** variant of the acknowledgement instruction above –
+the one that asks for a SendMessage reply whose first word is ACCEPT or DECLINE.
+That reply is the only form of acknowledgement the watcher can see on this
+channel.
 
 Generate a short token – a random string that appears nowhere else, say
 `ack-7f3a91c4` – and include it in the message text. The watcher anchors on it,
@@ -259,11 +333,13 @@ Do not eyeball transcripts. The CLI watches for you:
 ```
 
 The two modes detect the acknowledgement differently. An existing agent
-received a cross-session message, and its acknowledgement is a reply sent back
-over that same channel, which the watcher sees. A freshly launched agent has no
-handle for this session to reply on, so its acknowledgement is simply its first
-reply beginning ACCEPT or DECLINE, which the watcher – in `--fresh` mode –
-reads straight from the transcript text.
+received a cross-session message, and its acknowledgement is a SendMessage sent
+back over that same channel, whose message text must begin with ACCEPT or
+DECLINE. A freshly launched agent has no handle for this session to reply on, so
+its acknowledgement is the first line of its first reply, again beginning ACCEPT
+or DECLINE, which the watcher – in `--fresh` mode – reads straight from the
+transcript text. Either way the word has to lead: a decision buried mid-sentence
+is not matched, and neither form counts once the turn budget has run out.
 
 For an agent launched for this handoff there is no delivery record, so pass
 `--fresh` instead of `--token`: counting starts at the first line of its
@@ -275,6 +351,9 @@ before launching, and the target is whichever session id appears afterward that
 was not in the snapshot. The no-herdr `--bg` fallback needs no snapshot at all:
 it was launched with `--name`, so find the row carrying that name in
 `claude agents --json` and take its session id.
+
+When a herdr `agent start` timed out there is no agent name to look up: the
+session id is the `agent_session.value` read from `herdr pane get <pane-id>`.
 
 **Run the watcher in the background.** This session has stopped working on the
 task, but it must not lock up: the user can keep talking to it while the handoff
@@ -329,6 +408,25 @@ is no evidence about the target at all. Have the user check the target's session
 id, its cwd, and the token before concluding anything about it.
 
 Nothing in any of these reports may imply anyone owns the work.
+
+## Silence the context-pressure nudge
+
+Once the handoff is done, write the quiet marker. The context-pressure Stop
+hook reads it and stays silent for the rest of this session – the work has
+already moved on, so there is nothing left to nudge about:
+
+```bash
+d="${SPECHUB_CONTEXT_PRESSURE_DIR:-${TMPDIR:-/tmp}/spechub-context-pressure}"
+[ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && mkdir -p "$d" && : > "$d/${CLAUDE_CODE_SESSION_ID}.quiet" || true
+```
+
+`CLAUDE_CODE_SESSION_ID` is this session's own id – the gate at the top ruled
+out the child sessions where it would name the parent instead – so the marker
+lands exactly where the hook looks for it. If the variable is unset, skip this
+step and say so in the report: the hook will keep nudging, which is noisy but
+harmless. The marker is cleared automatically when the session compacts, because
+the hook resets its state on `SessionStart` with `source: compact`, so the nudge
+can return once the context grows again.
 
 ## Report
 
