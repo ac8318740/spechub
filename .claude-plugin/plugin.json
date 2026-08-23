@@ -1,7 +1,7 @@
 {
   "name": "spechub",
   "description": "Spec-driven TDD workflow where planning grows only as far as the fog demands – a map of nodes behind a pluggable tracker, commit-time spec sync, strict orchestrator pattern, and a four-phase implementation pipeline (test-writer, task-executor, task-checker, frontend-verifier).",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "author": {
     "name": "ac8318740"
   },

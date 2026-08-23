@@ -1,10 +1,12 @@
-// Handoff-side commands. `handoff watch` observes the target agent's
-// transcript and reports whether the handoff was picked up.
+// Handoff-side commands, one for each end of a handoff. `handoff watch` is the
+// sender's: it observes the target and reports whether the handoff was picked
+// up. `handoff ack` is the target's: it writes the acknowledgement the watcher
+// is waiting for.
 //
-// A thin wrapper: every decision lives in lib/ackwatch.ts. This file only
-// resolves the transcript path, validates the flag combinations, and prints.
+// A thin wrapper: every decision lives in lib/ackwatch.ts and lib/ackfile.ts.
+// This file only resolves paths, validates flag combinations, and prints.
 import { Command } from 'commander';
-import { isAbsolute } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import {
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_TIMEOUT_MS,
@@ -12,6 +14,7 @@ import {
   transcriptPath,
   watch,
 } from '../lib/ackwatch.js';
+import { writeAck } from '../lib/ackfile.js';
 import { fail } from '../lib/utils.js';
 
 /**
@@ -35,6 +38,9 @@ interface WatchOpts {
   cwd?: string;
   token?: string;
   fresh?: boolean;
+  file?: string;
+  nudged?: boolean;
+  ackAfter?: number;
   turns: number;
   pollInterval: number;
   timeout: number;
@@ -79,6 +85,19 @@ export function register(program: Command): void {
     .option('--token <token>', 'correlation token in the delivered message; anchors on its delivery')
     .option('--fresh', 'target was launched for this handoff; anchor at the transcript start')
     .option(
+      '--file <path>',
+      'path to the handoff file; its .ack sidecar counts as an acknowledgement, ' +
+        'and tool calls naming it count as engagement'
+    )
+    .option('--nudged', 'this target has already been nudged once; echoed back on the result')
+    .option(
+      '--ack-after <ms>',
+      'epoch milliseconds before which a sidecar ack does not count; pass the ' +
+        'previous watch\'s startedAt to cover a nudge gap, or 0 to accept any ack. ' +
+        'Defaults to the moment this watch begins',
+      parseIntAtLeast('ack-after', 0)
+    )
+    .option(
       '--turns <n>',
       'turn boundaries to allow before reporting silence',
       parseIntAtLeast('turns', 1),
@@ -103,16 +122,51 @@ export function register(program: Command): void {
       if (hasToken === Boolean(opts.fresh)) {
         fail('Pass exactly one of --token or --fresh.');
       }
+      // The sender types this against another session's world, where "relative
+      // to here" names a different file – or none. Same rule as --cwd.
+      if (typeof opts.file === 'string' && !isAbsolute(opts.file)) {
+        fail(`--file must be an absolute path, got '${opts.file}'.`);
+      }
       const path = resolveTranscript(opts);
       try {
         const result = await watch(path, {
           token: opts.token,
           fresh: opts.fresh,
+          file: opts.file,
+          nudged: opts.nudged,
+          ackAfter: opts.ackAfter,
           turns: opts.turns,
           pollIntervalMs: opts.pollInterval,
           timeoutMs: opts.timeout,
         });
         console.log(JSON.stringify({ transcript: path, ...result }, null, 2));
+      } catch (err) {
+        fail((err as Error).message);
+      }
+    });
+
+  handoffCmd
+    .command('ack')
+    .description(
+      'Acknowledge a handoff: write accept or decline, with a reason, to the ' +
+        'sidecar beside the handoff file. Run this before any other work.'
+    )
+    .argument('<decision>', 'accept or decline')
+    .argument('[reason...]', 'why – free text, joined into one line')
+    .requiredOption('--file <path>', 'path to the handoff file being acknowledged')
+    .action((decision: string, reason: string[], opts: { file: string }) => {
+      try {
+        const record = writeAck({
+          // The receiver types this in the directory it is working in, so a
+          // relative path is the natural thing to write. Resolving it here is
+          // what puts the sidecar beside the real handoff file.
+          file: resolve(opts.file),
+          decision,
+          reason: reason.join(' '),
+        });
+        // Print what landed on disk, so the target sees its own answer rather
+        // than a "done" it has to take on trust.
+        console.log(JSON.stringify(record, null, 2));
       } catch (err) {
         fail((err as Error).message);
       }

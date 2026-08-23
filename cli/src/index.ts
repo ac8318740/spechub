@@ -28,4 +28,6 @@ for (const mod of commands) {
   mod.register(program);
 }
 
-program.parse();
+// parseAsync, not parse: `handoff watch` has an async action handler, and
+// parse() would return before it settled.
+await program.parseAsync();
