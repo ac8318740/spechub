@@ -124,7 +124,7 @@ Then ask about these settings, in this order:
 
 - **`herdr.integration`**: which agent reports its state to herdr. Set it to the agent the user actually runs, or `none`. Without it, herdr infers state by reading the screen
 - **`gh_dash.repo_paths`**: map each repository to its local clone. Without it, checkout fails. So does any keybinding using `{{.RepoPath}}`, the placeholder gh-dash fills in with that clone's path
-- **`herdr.chord_modifier`**: `alt` (default), `ctrl+alt`, or `none`. A chord is one key combination, such as `alt+d`
+- **`herdr.chord_modifier`**: `alt` (default), `ctrl+alt`, or `none`. A chord is one key combination, such as `alt+f`
   - Recommend `alt`. It is the only family measured to work whichever way the user connects
   - The herdr documentation recommends `ctrl+alt`. That does reach herdr over a plain SSH shell
   - A Windows client attaching with `herdr --remote` never delivers `ctrl+alt`. Every such chord goes silently dead
@@ -233,8 +233,13 @@ same way section 6 hands them a prompt.
 
 `apply` binds the keymap on **this** machine. The terminal emulator on the
 machine the user types on intercepts the chords first. Windows Terminal binds
-`alt+shift+d` to "duplicate pane" by default, so it splits the tab on their own
-machine *and* opens a herdr tab here. Other emulators claim other chords.
+`alt+shift+d` to "duplicate pane" by default and never forwards it, so a
+binding on that chord does nothing here. The diff keys avoid it by sitting on
+`alt+f` and `alt+shift+f`. Other emulators claim other chords.
+
+When the user reports a key doing nothing, have them run `cat -v` in any pane
+and press it. A chord that arrives prints an escape sequence. One that prints
+nothing never left their machine, so the fix belongs in the emulator.
 
 After `apply`, work out which case you are in.
 

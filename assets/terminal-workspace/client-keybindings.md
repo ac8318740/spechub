@@ -16,8 +16,14 @@ Some terminal emulators bind the same chords locally. They swallow the
 keypress, or they act on it **and** forward it, so one press does two things.
 
 The known collision is **`alt+shift+d`**, which Windows Terminal binds to
-"duplicate pane" by default. Pressing it splits the tab on your own machine
-with a new shell, and opens a herdr tab on the remote host.
+"duplicate pane" by default. It splits the tab on your own machine and never
+forwards the key, so the remote host sees nothing. The remote setup avoids
+this one by putting its diff viewer on `alt+f` and `alt+shift+f`. Other
+emulators claim other chords, so the table below still has to be free.
+
+To tell an emulator collision from a remote misconfiguration, run `cat -v` in
+any pane and press the chord. One that arrives prints an escape sequence such
+as `^[Z`. One that prints nothing never left your machine.
 
 ## 2. Unbind, in the terminal emulator only
 
@@ -27,7 +33,8 @@ and do not touch the remote configuration.
 
 | Chord | Used remotely for |
 |---|---|
-| `alt+d` / `alt+shift+d` | diff viewer, popup and tab |
+| `alt+f` / `alt+shift+f` | diff viewer, popup and tab |
+| `alt+x` / `alt+shift+x` | diff comparison picker, popup and tab |
 | `alt+i` / `alt+shift+i` | pull request dashboard, popup and tab |
 | `alt+y` / `alt+shift+y` | file manager, popup and tab |
 | `alt+h` `alt+j` `alt+k` `alt+l` | move between panes |
@@ -66,7 +73,7 @@ Windows Terminal binds three more chords from the same family. Check
 
 ## 4. Confirm exactly one thing happens
 
-Reload or restart the terminal, then SSH in and press `alt+shift+d`. Exactly
+Reload or restart the terminal, then SSH in and press `alt+shift+f`. Exactly
 one thing should happen. A tab opens on the remote host. A local split, or both
 at once, means the unbind did not take.
 

@@ -77,7 +77,7 @@ A workspace is one herdr container of tabs and panes, usually one per repository
 
 1. **Dispatch.** Press `alt+r` to create a worktree workspace. Or ask an agent, and the `new-worktree` skill registers one with herdr for you
 2. **Monitor.** Press `alt+s` for the sidebar, the strip listing every workspace and every agent. A blocked agent needs an answer from you. A done agent has finished and you have not looked yet. Leave a working agent alone
-3. **Review locally.** Press `alt+d` to see what the agent changed. Run the `pre-commit-review` skill in the agent's own pane for a deeper pass
+3. **Review locally.** Press `alt+f` to see what the agent's branch adds to dev. Press `alt+x` to compare something else. Run the `pre-commit-review` skill in the agent's own pane for a deeper pass
 4. **Ship.** The agent commits, pushes, and opens the pull request from its worktree
 5. **Review the pull request.** Press `alt+i` for the dashboard. Press `p` then `]` to reach Files Changed. Press `D` to review it in tuicr, or `S` to hand it to an agent
 6. **Tear down.** Run `herdr worktree remove --workspace <id>`. Then delete the branch
@@ -115,12 +115,13 @@ curl -fsSL https://herdr.dev/install.sh | sh
 gh extension install dlvhdr/gh-dash
 ```
 
-The other six are single static binaries. Download each project's Linux x86_64 release, put the binary in `~/.local/bin`, and `chmod +x` it.
+The other seven are single static binaries. Download each project's Linux x86_64 release, put the binary in `~/.local/bin`, and `chmod +x` it.
 
 | Tool | GitHub repository | Release asset |
 |---|---|---|
 | delta | `dandavison/delta` | `x86_64-unknown-linux-gnu` |
 | diffnav | `dlvhdr/diffnav` | `Linux_x86_64` |
+| fzf | `junegunn/fzf` | `linux_amd64` |
 | tuicr | `agavra/tuicr` | `x86_64-unknown-linux-gnu` |
 | yazi | `sxyazi/yazi` | `x86_64-unknown-linux-gnu`, which also carries `ya` |
 | mermaid-ascii | `AlexanderGrooff/mermaid-ascii` | `Linux_x86_64` |
@@ -167,7 +168,7 @@ On a machine where you did set it true, `setup.sh status` reports the state of b
 
 The server owns the panes and keeps them running whatever happens to your connection. The client draws them. Those are two separate machines in this setup, and which one runs the client is the single decision the rest of this document depends on.
 
-A chord is one key combination, such as `alt+d`. A keymap is the file that says which chord runs which command. The chord family lives in the config as `herdr.chord_modifier`, so changing your mind costs one edit and one `setup.sh apply`, which rewrites the keymap and reloads it.
+A chord is one key combination, such as `alt+f`. A keymap is the file that says which chord runs which command. The chord family lives in the config as `herdr.chord_modifier`, so changing your mind costs one edit and one `setup.sh apply`, which rewrites the keymap and reloads it.
 
 ### 4.1. From your own machine, with `herdr --remote`
 
@@ -275,7 +276,8 @@ Prefix is `ctrl+b`. Chords without it are direct and need no prefix. A popup flo
 | `alt+r` | New worktree workspace |
 | `alt+e` / `alt+minus` | Split right / down |
 | `alt+y` / `alt+shift+y` | File tree in a popup / in a new tab |
-| `alt+d` / `alt+shift+d` | Diff in a popup / in a new tab |
+| `alt+f` / `alt+shift+f` | Diff of your branch against dev, in a popup / in a new tab |
+| `alt+x` / `alt+shift+x` | Pick what to compare, in a popup / in a new tab |
 | `alt+i` / `alt+shift+i` | Dashboard in a popup / in a new tab |
 | `prefix+q` | Detach, leaving everything running |
 | `prefix+x` / `prefix+shift+x` / `prefix+shift+d` | Close pane / tab / workspace |
@@ -341,18 +343,32 @@ split_horizontal = ["prefix+minus", "alt+minus"]
 # A popup floats over the layout and returns you where you were. Each one has
 # a tab variant on the shift chord, which goes through spechub-herdr-tab.
 [[keys.command]]
-key = "alt+d"
+key = "alt+f"
 type = "popup"
 command = "spechub-diff"
-description = "diff (diffnav)"
+description = "diff: branch vs dev"
 width = "90%"
 height = "90%"
 
 [[keys.command]]
-key = "alt+shift+d"
+key = "alt+shift+f"
 type = "shell"
 command = "spechub-herdr-tab diff spechub-diff"
-description = "diff (tab)"
+description = "diff: branch vs dev (tab)"
+
+[[keys.command]]
+key = "alt+x"
+type = "popup"
+command = "spechub-diff pick"
+description = "diff: pick what to compare"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "alt+shift+x"
+type = "shell"
+command = "spechub-herdr-tab diffpick spechub-diff pick"
+description = "diff: pick what to compare (tab)"
 
 [[keys.command]]
 key = "alt+i"
@@ -434,7 +450,9 @@ It names a row rather than a workspace, so it still moves when the rows move.
 
 *You bind the keymap on the dev machine, but the emulator on the machine you type at intercepts the chords. Fix that where the emulator runs.*
 
-Windows Terminal binds `alt+shift+d` to "duplicate pane" by default, so pressing it splits your local tab *and* opens a tab on the dev machine. Other emulators claim other chords. This is true on both attach paths. A local herdr client does not rescue you from it, because the emulator sees the key first either way.
+Windows Terminal binds `alt+shift+d` to "duplicate pane" by default. It never forwards the key, so a binding on it does nothing at all on the dev machine and the local tab splits instead. That is why both diff keys sit on `f`: `alt+f` and `alt+shift+f`, not `alt+d`. Other emulators claim other chords. This is true on both attach paths. A local herdr client does not rescue you from it, because the emulator sees the key first either way.
+
+To confirm an emulator is eating a chord rather than herdr ignoring it, run `cat -v` in any pane and press the key. A chord that arrives prints an escape sequence such as `^[Z`. One that prints nothing never left your machine.
 
 [assets/terminal-workspace/client-keybindings.md](../assets/terminal-workspace/client-keybindings.md)
 lists every chord this setup uses and how to unbind them in the common
@@ -454,7 +472,7 @@ The file tree is yazi, a keyboard-driven file manager that previews whatever the
 cursor sits on. Press `alt+y` for yazi in a popup, which floats and leaves the
 tab layout alone. Press `alt+shift+y` for yazi in a new tab instead.
 
-Every popup works this way: `alt+d` / `alt+shift+d` for diffnav, `alt+i` /
+Every popup works this way: `alt+f` / `alt+shift+f` for diffnav, `alt+i` /
 `alt+shift+i` for gh-dash. A popup is right for a glance, and a tab is right for
 something you will come back to. Both come from the same command, and the tab
 variant goes through `spechub-herdr-tab`. That helper creates the tab in the
@@ -738,24 +756,45 @@ Anything you can type into GitHub's search box becomes a tab. Avoid binding `R`,
 
 ### 8.3. The diff and dashboard helpers
 
-*One key always shows a diff, and another always opens the dashboard scoped to where you are standing.*
+*One key shows what your branch adds to dev. Another picks any comparison. A third opens the dashboard, scoped to where you are standing.*
 
-The `spechub-diff` helper picks the most relevant diff, so one key always shows something useful. A pane often sits in the parent directory that herdr groups a repository's worktree workspaces under, `<root>/<repo>/`, rather than in a checkout. The helper resolves that case too:
+`alt+f` runs `spechub-diff`, which compares the branch you are on against `origin/dev`, committed work only. Repositories with no dev branch fall back to the default branch, read from `origin/HEAD`. The comparison is `git diff <base>...HEAD`, three dots. You see the commits your branch added since the two diverged, never the ones the base picked up meanwhile.
 
-```bash
-#!/usr/bin/env bash
-set -uo pipefail
-if ! git rev-parse --git-dir >/dev/null 2>&1; then
-  echo "Not a git repo: $PWD"; read -rsn1; exit 0
-fi
-if ! git diff --quiet; then
-  git diff | diffnav
-elif ! git diff --cached --quiet; then
-  git diff --cached | diffnav
-else
-  git show HEAD | diffnav
-fi
+A pane often sits in the parent directory that herdr groups a repository's worktree workspaces under, `<root>/<repo>/`, rather than in a checkout. The helper offers a numbered list of the checkouts it finds there.
+
+Every launch opens with a banner naming both sides, because diffnav renders whatever precedes the first `diff --git` line:
+
 ```
+COMPARING  origin/dev  ==>  deployment-map
+base     origin/dev  a84216b  16 hours ago  Merge pull request #44 from
+compare  deployment-map  549e94b  68 minutes ago  chore: integration edits
+showing  commits on deployment-map that origin/dev does not have
+command  git diff origin/dev...HEAD
+```
+
+Base first, then compare, which is the order `git diff` takes its arguments and the order GitHub labels its two compare pickers. The `command` line is real git syntax, so you can paste it into a shell.
+
+The comparison also reaches diffnav's status bar, which stays visible while you walk the file tree. That works because diffnav prints the line following a `commit <sha>` header as the commit subject, so the helper synthesises that header for a plain diff. A single-commit view already carries git's own header and gets no synthetic one.
+
+No banner line may start with a space. diffnav strips leading whitespace, so any indentation collapses and the columns stop lining up.
+
+#### Picking a different comparison
+
+*`alt+x` opens an fzf menu of seven comparisons. Every row reads left to right as base, then compare.*
+
+```
+dev          ==>  my-branch                 committed work only
+dev          ==>  my-branch + uncommitted   committed work plus what is not committed
+main         ==>  my-branch                 committed work only
+main         ==>  my-branch + uncommitted   committed work plus what is not committed
+HEAD         ==>  my uncommitted changes    staged and unstaged changes only
+its parent   ==>  one commit                pick a commit from this branch's history
+any branch   ==>  any branch                pick the base, then the branch to compare
+```
+
+The dev rows appear only where a dev branch exists, and the branch named is the one you are on. Branch lists come from `git for-each-ref` over local and remote branches, newest commit first, with `git log` in the preview pane. The commit list is the last 300 commits, with `git show --stat` in the preview. Picking "any branch" asks twice, prompting `source (compare against)` and then `change (the new work)`.
+
+`apply` installs fzf alongside diffnav. Without fzf the picker says so and falls back to the automatic diff.
 
 `spechub-dash` adds a section for whichever repository you are standing in, then hands a generated config to gh-dash:
 
