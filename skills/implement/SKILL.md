@@ -1,17 +1,16 @@
 ---
 name: implement
-description: Execute implementation work via the TDD pipeline (test-writer -> task-executor -> task-checker). A map is a stored graph of question and work nodes. Claims afk nodes – away from keyboard, meaning nodes an agent settles alone – from the map frontier, the nodes ready to be worked now, when a map exists; runs the same discipline directly on the request when none does. A unit of work carries its own size – one node is a quick change, forty is a long effort, and nothing declares which.
+description: Execute implementation work via the TDD pipeline (test-writer -> task-executor -> task-checker). A map is a stored graph of question and work nodes. Claims afk nodes – away from keyboard, meaning nodes an agent settles alone – from the map frontier, the nodes ready to be worked now, when a map exists; runs the same discipline directly on the request when none does. A unit of work carries its own size – one node is a quick change, forty is a long effort, and nothing declares which. Invoke whenever the way is clear and something needs building, changing or extending, however small. Use quick-fix instead when something is broken and needs a root cause found, and map instead when decisions still need settling before anyone can build.
 argument-hint: "[map name, or the request to implement]"
-disable-model-invocation: true
 ---
 
-## User Input
+## User input
 
 ```text
 $ARGUMENTS
 ```
 
-## What This Skill Does
+## What this skill does
 
 Implements work under the TDD pipeline. The unit of work is a map node when a
 map exists, and the request itself when none does – same discipline either
@@ -20,7 +19,7 @@ checkbox file to maintain.
 
 ## Steps
 
-### 1. Find the Work
+### 1. Find the work
 
 Check the configured tracker for maps (`workflow.maps.tracker` in
 `spechub/project.yaml`; the map skill's `trackers/` docs declare the
@@ -42,17 +41,17 @@ meaning a person must answer them – stop and point the user at
 no tracker writes. This is the whole quick path – a small change is just a
 small unit of work, and nothing has to declare it small.
 
-### 2. Read Project Configuration
+### 2. Read project configuration
 
 Read `spechub/project.yaml` for build/test/lint commands and directory paths.
 
-### 3. Create Feature Branch
+### 3. Create feature branch
 
 Branch from the default branch, named after the map (or a short slug of the
 request). If the branch already exists, ask the user whether to continue on
 it or start fresh.
 
-### 4. Orient, Then Claim
+### 4. Orient, then claim
 
 With a map, orient once per session before claiming:
 
@@ -65,11 +64,12 @@ everything else as a one-line gist. The root holds the destination. Pinned
 nodes hold standing preferences – style rules and constraints that apply to
 the whole effort. The resolved chain above a work node – the already-answered
 questions it hangs off, followed up to the root – carries its why. Read that
-chain before touching code. Also check `node list --map <name> --status claimed` – a claim
-marks a node as being worked, so one left behind by a dead session hides its
-node from the frontier forever. If a claim
-exists and no other session is known to be working it, ask the user and
-release it (`--status open`).
+chain before touching code.
+
+Also check `node list --map <name> --status claimed`. A claim marks a node
+as work in progress. One left behind by a dead session hides its node from
+the frontier forever. If a claim exists and you know of no other session
+working it, ask the user and release it (`--status open`).
 
 Claim each node as you start it:
 
@@ -77,29 +77,29 @@ Claim each node as you start it:
 ~/.claude/spechub/bin/spechub node update <id> --map <name> --status claimed
 ```
 
-Nodes describe behaviour, not paths. **Resolve paths at claim time**: before
-any code change, dispatch parallel explorer subagents over the relevant code
-– as many as there are distinct places to look, not a fixed count – and act
-on what they find.
+Nodes describe behaviour, not paths. **Resolve paths at claim time**. Before
+any code change, dispatch parallel explorer subagents over the relevant code.
+Use as many as there are distinct places to look, not a fixed count. Act on
+what they find.
 
-### 5. Execute Within the Claim
+### 5. Execute within the claim
 
 The pipeline's state lives inside the claim, not on the node. For each
-claimed node (or the bare request), run the Implementation Discipline to
+claimed node (or the bare request), run the Implementation discipline to
 completion:
 
 1. **test-writer subagent** – failing tests from the node's behaviour
    description. Skip for pure config/setup work with no testable behaviour.
 2. **task-executor subagent** – make the tests pass. Executor CANNOT modify
    test files.
-3. **task-checker subagent** – verify: tests pass, full suite passes, test
-   count >= baseline, mock audit, TDD isolation, integration wired, frontend
-   visual verification (if applicable).
+3. **task-checker subagent** – verify tests pass, full suite passes, and
+   test count >= baseline. Also check the mock audit, TDD isolation,
+   integration wired, and frontend visual verification (if applicable).
 
 If the checker fails, route back to the executor with the feedback. If the
 work stalls or the session must stop mid-node, release the claim
-(`--status open`) – the node is plainly open again, and no phase breadcrumb
-is needed.
+(`--status open`). The node is plainly open again, and you need no phase
+breadcrumb.
 
 **Parallelism**: afk nodes run unlimited and in parallel. When 2+ frontier
 nodes touch non-overlapping files, launch an Agent Team where each teammate
@@ -116,9 +116,7 @@ When the checker passes, resolve the node in one call:
 <what was built, which files, what the tests pin down>"
 ```
 
-Write the `## Answer` text for a reader with little context – plain language,
-any term of art defined at first use. It may be read weeks later by someone
-who was not in this conversation.
+Write the `## Answer` text per the `writing` skill.
 
 With no map, skip the tracker write – still invoke `record-context` when a
 decision landed. With a map, then:
@@ -128,7 +126,7 @@ decision landed. With a map, then:
   `hitl`, `--answers <this node>`).
 - Recompute the frontier – resolutions unblock nodes.
 
-### 7. Build Verification
+### 7. Build verification
 
 After each node (and before ending the session), run the commands from
 `spechub/project.yaml`: build, full test suite, lint and typecheck. All must
@@ -142,7 +140,7 @@ Step 7 verification is green. Report: nodes resolved, tests passing, lines
 added/removed. Remind the user: `/spechub:commit` to commit – spec sync
 extracts the durable record from the diff.
 
-## Key Rules
+## Key rules
 
 - **TDD pipeline is mandatory** – test-writer -> task-executor ->
   task-checker. No exceptions except pure config work.

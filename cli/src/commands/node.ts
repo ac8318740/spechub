@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { findProjectRoot } from '../lib/project.js';
-import { requireProject } from '../lib/utils.js';
+import { fail, requireProject } from '../lib/utils.js';
 import {
   NODE_STATUSES,
   NODE_MODES,
@@ -21,11 +21,6 @@ import {
   updateNode,
   walkTree,
 } from '../lib/nodes.js';
-
-function fail(message: string): never {
-  console.error(chalk.red(message));
-  process.exit(1);
-}
 
 function parseStatus(value: string): NodeStatus {
   if (!(NODE_STATUSES as readonly string[]).includes(value)) {

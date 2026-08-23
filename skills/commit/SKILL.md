@@ -1,11 +1,10 @@
 ---
 name: commit
-description: Create git commit(s) with proper pre-commit hook handling, MECE commit messages, safe staging, and mandatory living spec sync. Invoke via /commit.
+description: Create git commit(s) with proper pre-commit hook handling, MECE commit messages, safe staging, and mandatory living spec sync. Invoke whenever work is about to be committed – the user asked to commit, or told you to finish and commit a batch of work. Never commit with raw git commands instead; this skill is the only path that runs spec sync, so bypassing it silently stops living specs from updating. Committing is still the user's call – do not invoke it unprompted on work they have not asked you to land.
 argument-hint: "[scope: 'all', or describe which changes]"
-disable-model-invocation: true
 ---
 
-## User Input
+## User input
 
 ```text
 $ARGUMENTS
@@ -70,9 +69,14 @@ Read `spechub/project.yaml` – if `workflow.spec_sync` is `true` (or not explic
 
 1. Stage files according to scope
 2. Do NOT stage sensitive files (.env, credentials, secrets)
-3. Create the commit with the drafted message and no `Co-Authored-By` trailer
-4. Use HEREDOC format for commit message
-5. Run `git status` after to verify
+3. Run `git diff --cached --name-only -- '*.md'` to list the staged Markdown files
+4. Run `~/.claude/spechub/bin/spechub lint-prose <files>` on that list
+5. Show the lint output to the user
+6. Create the commit with the drafted message and no `Co-Authored-By` trailer
+7. Use HEREDOC format for commit message
+8. Run `git status` after to verify
+
+Skip steps 4 and 5 when that list is empty, because `lint-prose` exits 1 with no paths. The lint warns and never blocks. Commit even when it reports findings.
 
 ## Step 6: Handle Pre-commit Hook Failures
 

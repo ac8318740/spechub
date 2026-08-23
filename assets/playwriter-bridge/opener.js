@@ -10,7 +10,7 @@
 // over the Chrome DevTools Protocol, attaches per tab, needs a manual arming
 // click and lives in a separate Chrome profile. This hands a page to the
 // user's DEFAULT browser with no click anywhere. See
-// docs/adr/0001-document-opener-service.md.
+// docs/adr/0002-document-opener-service.md.
 //
 // Node rather than PowerShell because the laptop already has Node for the
 // relay, and because binding a socket needs no URL ACL reservation, so this

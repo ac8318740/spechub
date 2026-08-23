@@ -11,6 +11,8 @@ reverse SSH tunnel, that lets an agent drive a real browser over the Chrome
 DevTools Protocol. Its job is driving a browser for an agent, not showing a
 page to a person – see **opener** for that.
 
+**durable artifact** – Any text an agent writes that someone reads later without the conversation that produced it. It covers architecture decision records, glossary entries, living specs and their functional requirements, map nodes, handoff files, READMEs and docs, and pull request bodies. Chat replies and commit subject lines are not durable artifacts.
+
 **opener** – a small HTTP service on the user's laptop that accepts a page from
 a development virtual machine, stores it, serves it back on the loopback
 interface, and hands the address to the user's default browser. It is how a

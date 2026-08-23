@@ -98,7 +98,7 @@ key and this suite fails until the docs follow.
 
 ## CLI build discipline
 
-The CLI ships **pre-built and bundled**: `cli/dist/index.js` is a single self-contained file with every runtime dependency (commander, chalk, fast-glob, yaml, zod) inlined by esbuild. Claude Code marketplace plugins are clone-and-run – there is no `npm install` step downstream, so the bundle must work with no `node_modules/` next to it.
+The CLI ships **pre-built and bundled**. `cli/dist/index.js` is a single self-contained file, with esbuild inlining every runtime dependency (commander, chalk, fast-glob, yaml, zod) into it. Claude Code clones and runs a marketplace plugin directly, with no `npm install` step downstream. The bundle must work with no `node_modules/` next to it.
 
 After any change in `cli/src/`:
 
@@ -107,12 +107,13 @@ cd cli
 npm install     # only needed when package.json changed
 npm run build   # rebuilds dist/index.js via esbuild (see build.mjs)
 npm run typecheck  # tsc --noEmit, catches type errors the bundler skips
+npm run lint    # eslint, type-aware rules over src/ (see eslint.config.js)
 git add src/ dist/ package.json package-lock.json
 ```
 
 Both `src/` and `dist/` belong in the same commit. A stale `dist/` ships broken or misleading behavior to every downstream user until the next release.
 
-To verify the bundle survives a fresh install, park `node_modules/` and exercise the bin wrapper:
+To verify the bundle survives a fresh install, park `node_modules/` first. Then exercise the bin wrapper:
 
 ```
 mv node_modules /tmp/nm-park && node bin/spechub.js --help; mv /tmp/nm-park node_modules
@@ -122,7 +123,7 @@ If the bundle is healthy, this prints the full subcommand list. If it throws `Dy
 
 ### Recommended pre-commit hook
 
-Drop this into `.git/hooks/pre-commit` inside the spechub clone (not the marketplace parent), then `chmod +x .git/hooks/pre-commit`. Git ignores hook files, so this stays per-clone.
+Drop this into `.git/hooks/pre-commit` inside the spechub clone (not the marketplace parent). Then run `chmod +x .git/hooks/pre-commit`. Git ignores hook files, so this stays per-clone.
 
 ```bash
 #!/usr/bin/env bash
@@ -136,8 +137,9 @@ if git diff --cached --name-only | grep -q '^cli/src/'; then
 fi
 ```
 
-This runs `npm run build` only when `cli/src/` is part of the staged diff, then
-stages what the build regenerates. If the build fails, the commit aborts.
+This runs `npm run build` (esbuild) only when `cli/src/` is part of the staged
+diff. It then stages what the build regenerates. If the build fails, the commit
+aborts.
 
 The hook is optional and easy to forget to install. CI is what actually enforces
 it: `.github/workflows/ci.yml` rebuilds and fails the run if `cli/dist` or
@@ -154,6 +156,10 @@ the reported version is right whether or not anything rebuilt. It has to work
 that way: the rebuild only fires when `cli/src/` changes, so bumping the plugin
 alone would leave any baked-in copy behind. That is exactly how the CLI came to
 report `0.1.0` while the plugin was at 0.14.2.
+
+## Testing
+
+The repo has two test layers. Run `cd cli && npm test` for the CLI tests. Run `bash tests/run-all.sh` for the hook suites.
 
 ## Codex agent definitions
 
@@ -195,7 +201,7 @@ translation layer.
 1. Bump `.claude-plugin/plugin.json` version. Use semver – patch for fixes, minor for features, major for breaking changes.
 2. Confirm `cli/dist/` is up to date (the pre-commit hook handles this if installed).
 3. Commit via `/commit` from the marketplace repo – it handles the submodule + parent ordering.
-4. The Claude Code plugin cache only repulls when the version changes, so the bump is what triggers downstream upgrades.
+4. The Claude Code plugin cache only repulls when the version changes. The bump is what triggers downstream upgrades.
 
 ### Why the CLI is not on npm
 
@@ -244,10 +250,5 @@ own CLI regardless of PATH.
 
 ## Writing standards
 
-Match the marketplace repo's standards:
-
-- En dashes (–), never em dashes.
-- Short sentences. Plain words.
-- Active voice.
-- No filler, no marketing tone.
-- Write for a reader without context – plain language, every term of art defined at first use.
+Prose follows the `writing` skill in `skills/writing/`. It covers every durable
+artifact this repository ships, the skill files and these docs included.

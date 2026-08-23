@@ -6,7 +6,7 @@
 # %LOCALAPPDATA%\playwriter-bridge\opener-supervisor.log.
 #
 # The opener is what shows a page from a dev VM in this machine's default
-# browser. It is not the bridge - see docs/adr/0001-document-opener-service.md
+# browser. It is not the bridge - see docs/adr/0002-document-opener-service.md
 # for why those are two services and not one.
 #
 # Console hiding is handled by launcher.exe (spawns PowerShell with

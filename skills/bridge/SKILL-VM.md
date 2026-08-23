@@ -62,10 +62,11 @@ and pasting the tail output back to the Windows agent as the handoff
 ### 4. Enable server-side keepalive (required for self-heal)
 
 When the laptop drops abruptly (sleep, network change, VPN flap), the
-half-open SSH session leaves an orphan `sshd` forward channel bound to
-port 19988. The VM only releases it once `sshd` reaps the dead client,
-which takes `ClientAliveInterval × ClientAliveCountMax` seconds. Until
-then the laptop's reconnect hits `remote port forwarding failed`.
+half-open SSH session leaves an `sshd` forward channel bound to port
+19988, now orphaned. The VM only releases it once `sshd` reaps the
+dead client, which takes `ClientAliveInterval × ClientAliveCountMax`
+seconds. Until then the laptop's reconnect hits
+`remote port forwarding failed`.
 
 The Windows `tunnel.ps1` retries a stuck port for ~10 min, so the bridge
 self-heals as long as the reap happens inside that window. Two cases
@@ -106,11 +107,11 @@ printf 'ClientAliveInterval 30\nClientAliveCountMax 3\n' | \
 sudo systemctl reload ssh || sudo systemctl reload sshd
 ```
 
-Re-run the `sudo sshd -T` check and confirm it now reports 30 / 3. If it
-still shows the loose value, the `Include` on this distro is ordered
-differently – edit the drop-in that set it instead of adding a new one.
+Re-run the `sudo sshd -T` check. Confirm it now reports 30 / 3.
+If it still shows the loose value, this distro orders `Include`
+differently. Edit the drop-in that set it instead of adding a new one.
 
-### 5. `vm-free-port.sh` is auto-linked
+### 5. The SessionStart hook auto-links `vm-free-port.sh`
 
 The SpecHub SessionStart hook links the helper to an invariant path on
 each Claude Code launch:
@@ -125,8 +126,8 @@ copy on your `PATH` instead, copy the file and `chmod +x` it – but then you
 own keeping it updated.
 
 The script has a guardrail: it refuses to kill the port holder if that
-holder is your own interactive SSH session. Scoped strictly to port
-19988.
+holder is your own interactive SSH session. The guardrail scopes it
+strictly to port 19988.
 
 ## Routine diagnostics on the VM
 
@@ -136,7 +137,7 @@ holder is your own interactive SSH session. Scoped strictly to port
 ss -lnt 'sport = :19988'
 ```
 
-If empty: the tunnel from the laptop is not connected. Produce a
+If empty: the tunnel from the laptop has not connected. Produce a
 VM-side handoff to the Windows agent – see [`HANDOFF.md`](HANDOFF.md).
 
 ### Does the relay respond?
@@ -155,7 +156,7 @@ half-open – ask the Windows side to restart the tunnel task.
 curl -sS -m 3 http://127.0.0.1:19988/json/list
 ```
 
-`[]` means the extension is not attached to any tab. Ask the user to
+`[]` means the extension has not attached to any tab. Ask the user to
 click the Playwriter icon on a normal web page in the Playwriter Dev
 Chrome profile. (This is a user action, not a coding-agent one, unless
 a Windows agent is available to drive Chrome.)
@@ -190,9 +191,9 @@ with a clear reason. Common outcomes:
   another terminal) and re-run.
 - **Holder is a non-`sshd` process** – the script refuses. Something
   else (local test server, stray `nc`) is on 19988. Stop it manually.
-- **Holder is an orphan `sshd` forward channel** – the script kills it.
-  `ClientAliveInterval` would have prevented this; consider adding the
-  config from step 4.
+- **Holder is an `sshd` forward channel, now orphaned** – the script
+  kills it. `ClientAliveInterval` would have prevented this; consider
+  adding the config from step 4.
 
 After clearing, confirm:
 
@@ -207,13 +208,13 @@ Should be empty.
 - **Rearm the extension on a tab.** That is a click in the user's Chrome,
   inside a third-party extension. Nothing on either machine can press it,
   and no amount of plumbing will change that.
-- Restart the tunnel task, and restart the relay - *unless the opener is
+- Restart the tunnel task, and restart the relay – *unless the opener is
   up*, in which case see the next section. Both are Windows-side scheduled
   tasks, so without the opener this machine cannot reach them.
 
 For anything left, produce a `VM-SIDE HANDOFF` block per
-[`HANDOFF.md`](HANDOFF.md) and hand it to the Windows agent (or tell the
-user to paste it into PowerShell themselves).
+[`HANDOFF.md`](HANDOFF.md). Hand it to the Windows agent, or tell the
+user to paste it into PowerShell themselves.
 
 ## Restarting the laptop's tasks from here
 
@@ -228,7 +229,7 @@ spechub-bridge status            # both machines' view, including the tasks
 spechub-bridge fix [relay|tunnel|both]
 ```
 
-`fix` reports success only once the relay answers here again - a restart that
+`fix` reports success only once the relay answers here again – a restart that
 was accepted is not a bridge that came back. When the opener is not reachable
 either, `spechub-bridge` prints the `VM-SIDE HANDOFF` block for you rather than
 leaving you to write one.
@@ -240,5 +241,5 @@ Arming is still not covered. Nothing changes that.
 - **No relay on the VM.** The Playwriter extension hard-rejects any
   `/extension` client that is not `127.0.0.1`, so the relay must run
   next to Chrome.
-- **No unprompted port scan.** `vm-free-port.sh` is scoped strictly to
-  19988 and refuses anything ambiguous. Do not generalise it.
+- **No unprompted port scan.** `vm-free-port.sh` scopes itself strictly
+  to 19988 and refuses anything ambiguous. Do not generalise it.

@@ -4,9 +4,9 @@ description: "Create a git worktree branched off origin/dev (or origin/main) –
 argument-hint: "[slug or branch name] [then <task>]"
 ---
 
-# New Worktree
+# New worktree
 
-Set up an isolated git worktree, move into it, then carry on with whatever the user attached to the request ("create a worktree, then <do X>"). The worktree setup is the skill; the follow-on task runs normally once cwd is inside it.
+Set up an isolated git worktree. Move into it. Then carry on with the task the user attached to the request, as in "create a worktree, then <do X>". The worktree setup is the skill. The follow-on task runs normally once cwd is inside it.
 
 ## When to use
 
@@ -14,16 +14,16 @@ Trigger on "create a worktree", "new worktree", "spin up a worktree", "make me a
 
 ## Before creating anything
 
-- Confirm a worktree is actually warranted. If the cwd is already in a worktree, or there are uncommitted changes that belong to this task, ask before branching. Do not silently start a second one.
+- Confirm the task actually needs a worktree. If the cwd is already in a worktree, or uncommitted changes belong to this task, ask before branching. Do not silently start a second one.
 - Resolve the MAIN repo root, never a nested worktree path. From anywhere in the repo:
-  - `dirname "$(git rev-parse --git-common-dir)"` gives the main checkout root.
+  - `dirname "$(git rev-parse --git-common-dir)"` gives the main repo root.
   - Never create a worktree inside another worktree. Nested worktree paths have caused real breakage.
 
 ## Pick the inputs
 
 - **Slug**: short kebab-case name for the directory, derived from the task (e.g. `roadmap-gantt`, `feedback-inbox`). If the user named it, use that.
 - **Branch**: `<type>/<slug>` where type is `feat`, `fix`, `chore`, or `docs` to match the work. A bare slug is acceptable if the user gives one. Confirm with the user only if the type is genuinely ambiguous.
-- **Base**: default `origin/dev`. Local `dev` is often behind, so always fetch and branch off the remote ref. Use `origin/main` only for a hotfix or a dev to main promotion, or when the user says so. If unsure which, check the repo's CLAUDE.md / recent PRs before asking.
+- **Base**: default `origin/dev`. Local `dev` is often behind. Fetch first, then branch off the remote ref. Use `origin/main` only for a hotfix or a dev to main promotion, or when the user says so. If unsure which, check the repo's CLAUDE.md / recent PRs before asking.
 
 ## Create it
 
@@ -31,9 +31,9 @@ Always fetch first, then branch off the remote ref.
 
 ### Inside herdr
 
-If `$HERDR_ENV` is set, the session is running in a [herdr](https://herdr.dev) pane. Create the worktree through herdr, then move this pane into the workspace herdr made for it. The session ends up in the sidebar row for the worktree it is actually working in, indented under its parent repo.
+If `$HERDR_ENV` is `1`, the session is running in a [herdr](https://herdr.dev) pane. Create the worktree through herdr, then move this pane into the workspace herdr made for it. The session ends up in the sidebar row for the worktree it is actually working in, indented under its parent repo.
 
-All four steps are one operation. Stopping after step 2 is the old broken behaviour: the session keeps running in the parent repo's workspace while the worktree row holds nothing but an idle shell.
+All four steps are one operation. Stopping after step 2 is the old broken behaviour. The session keeps running in the parent repo's workspace, and the worktree row holds nothing but an idle shell.
 
 #### 1. Keep the source workspace alive
 
@@ -55,22 +55,24 @@ Skip this when the workspace has other tabs, or when it is already a linked work
 
 #### 2. Create the worktree
 
+`<base>` per the base rule above.
+
 ```bash
 cd <main-root> \
   && git fetch origin --quiet \
   && herdr worktree create \
        --cwd "$(pwd)" \
        --branch <branch> \
-       --base origin/dev \
+       --base <base> \
        --label <slug> \
        --no-focus
 ```
 
 `--cwd` must be the MAIN repo root. herdr records it as the workspace's `repo_root`, and the sidebar groups worktree workspaces as indented children under that repo. Pass a nested worktree path and the new workspace groups under the wrong parent.
 
-Do not pass `--path`. herdr places the checkout under its configured root (`worktrees.directory`, default `~/.herdr/worktrees`, giving `<root>/<repo>/<branch-slug>`). Letting the config decide keeps worktrees agent-neutral: the same layout whether Claude, Codex, or another CLI agent works in them.
+Do not pass `--path`. herdr places the checkout under its configured root (`worktrees.directory`, default `~/.herdr/worktrees`, giving `<root>/<repo>/<branch-slug>`). Letting the config decide keeps worktrees agent-neutral – the same layout whether Claude, Codex, or another CLI agent works in them.
 
-Use `--no-focus` here, so the user is not dropped into the spare shell. Focus comes in step 3, with this pane.
+Use `--no-focus` here, so herdr does not drop the user into the spare shell. Focus comes in step 3, with this pane.
 
 Read three values from the JSON rather than assuming any of them:
 
@@ -78,7 +80,7 @@ Read three values from the JSON rather than assuming any of them:
 - `.result.workspace.workspace_id` – where this pane is going
 - `.result.root_pane.pane_id` – the spare shell to close in step 4
 
-Never hardcode the path: a relative `worktrees.directory` resolves against the herdr session's base directory, not the repo passed to `--cwd`, so the path is only knowable from the output.
+Never hardcode the path. A relative `worktrees.directory` resolves against the herdr session's base directory, not the repo you pass to `--cwd`. Only the output tells you where the checkout landed.
 
 #### 3. Move this pane in
 
@@ -86,9 +88,9 @@ Never hardcode the path: a relative `worktrees.directory` resolves against the h
 herdr pane move "$HERDR_PANE_ID" --new-tab --workspace <workspace-id> --focus
 ```
 
-Use `--focus` so the user's view follows the session they were watching, instead of being left on whatever remains behind.
+Use `--focus` so the user's view follows the session they were watching, instead of staying on whatever remains behind.
 
-The pane gets a new workspace-qualified ID. Read it from `.result.move_result.pane.pane_id`. `$HERDR_PANE_ID` still resolves for this process, so it keeps working as a target here, but do not hand the old ID to anything else.
+The pane gets a new workspace-qualified ID. Read it from `.result.move_result.pane.pane_id`. `$HERDR_PANE_ID` still resolves for this process, so it keeps working as a target here. Do not hand the old ID to anything else.
 
 #### 4. Close the spare shell
 
@@ -98,7 +100,7 @@ herdr's create step always spawns a shell in the new workspace. Close it once th
 herdr pane close <root-pane-id>
 ```
 
-Order matters. Close it first and the workspace has no panes left, so herdr closes the workspace and the move in step 3 has nothing to target.
+Order matters. Close it first and the workspace has no panes left. herdr then closes the workspace, so the move in step 3 has nothing to target.
 
 #### If the checkout already exists
 
@@ -110,12 +112,12 @@ herdr worktree open --path <path-to-existing-checkout>
 
 ### Outside herdr
 
-No `$HERDR_ENV`, no pane moving – nothing above applies. Plain git:
+If `$HERDR_ENV` is not `1`, nothing above applies and no pane moves. Use plain git, with `<base>` per the base rule above:
 
 ```bash
 cd <main-root> \
   && git fetch origin --quiet \
-  && git worktree add .claude/worktrees/<slug> -b <branch> origin/dev \
+  && git worktree add .claude/worktrees/<slug> -b <branch> <base> \
   && git -C .claude/worktrees/<slug> log -1 --oneline
 ```
 
@@ -124,9 +126,9 @@ cd <main-root> \
 Change cwd into the worktree before any edits:
 
 - Prefer the `EnterWorktree` tool if available (it moves the session cwd cleanly).
-- Otherwise target the path the create step reported (herdr) or `<main-root>/.claude/worktrees/<slug>` (plain git) for all subsequent work, and confirm with `pwd` + `git branch --show-current`.
+- Otherwise target the path the create step reported (herdr) or `<main-root>/.claude/worktrees/<slug>` (plain git) for all later work. Confirm with `pwd` and `git branch --show-current`.
 
-Under herdr this is still a separate step. The pane move relocated the terminal in the sidebar; it did not change the session's working directory.
+Under herdr this is still a separate step. The pane move relocates the terminal in the sidebar. It does not change the session's working directory.
 
 Confirm out loud which worktree, branch, and base commit you are now on.
 
@@ -135,14 +137,14 @@ Confirm out loud which worktree, branch, and base commit you are now on.
 Continue with whatever followed the worktree request:
 
 - "...then enter plan mode" -> enter plan mode now, from inside the worktree.
-- "...then give me a command to start the dev server" -> hand back a copy-paste one-liner; do not start it yourself unless asked. Use the project's own dev script and do not hand-set env vars. Confirm the right launch command from the repo's CLAUDE.md, package scripts, or `scripts/` rather than guessing.
+- "...then give me a command to start the dev server" -> hand back a copy-paste one-liner. Do not start it yourself unless the user asks. Use the project's own dev script. Do not hand-set env vars. Confirm the right launch command from the repo's CLAUDE.md, package scripts, or `scripts/` rather than guessing.
 - Otherwise just proceed with the task in the new worktree.
 
 ## Cleanup (later, not now)
 
-When the work is merged, the worktree gets torn down. The `teardown-worktree` skill does all of this, including the stale siblings and the branch cleanup, so prefer it over doing the steps by hand. What follows is the shape of what it does.
+When the branch merges, tear the worktree down. The `teardown-worktree` skill does all of this, including the stale siblings and the branch cleanup, so prefer it over doing the steps by hand. What follows is the shape of what it does.
 
-Do this only after confirming the branch is merged/stale, and move your cwd out of the worktree first.
+Confirm the branch has merged or gone stale before you do any of this. Move your cwd out of the worktree first.
 
 Inside herdr, move this pane out of the worktree workspace first, or the teardown kills the session running in it. Then remove the workspace, or the sidebar keeps a row pointing at a deleted checkout. Find the id with `herdr worktree list`, then:
 
@@ -161,7 +163,7 @@ cd <main-root> \
   && git worktree prune
 ```
 
-Use `--force` on remove only when the only uncommitted content is transient. Delete the remote branch (`git push origin --delete <branch>`) only if it was pushed and the user wants it gone. The `ship` skill can do this teardown as its final step.
+Use `--force` on remove only when the only uncommitted content is transient. Delete the remote branch (`git push origin --delete <branch>`) only if the branch exists on origin and the user wants it gone. The `ship` skill can do this teardown as its final step.
 
 ## Never
 
@@ -171,6 +173,6 @@ Use `--force` on remove only when the only uncommitted content is transient. Del
 - Assume where a herdr worktree landed instead of reading the path from its output.
 - Leave the session in the old workspace after creating a herdr worktree. Move this pane in.
 - Close the spare shell before the pane move lands. That closes the workspace with it.
-- Start a long-running dev server unless the user asked; hand back the command instead.
-- Delete a worktree or branch without first confirming it is merged and moving cwd out of it.
+- Start a long-running dev server unless the user asked. Hand back the command instead.
+- Delete a worktree or branch before you confirm it has merged and move your cwd out of it.
 - Leave a herdr workspace pointing at a checkout you removed with plain git.

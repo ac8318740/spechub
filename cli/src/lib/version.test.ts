@@ -14,12 +14,16 @@ const pluginJson = join(
 
 describe('resolveVersion', () => {
   it('matches the plugin manifest, which is the source of truth', () => {
-    const expected = JSON.parse(readFileSync(pluginJson, 'utf-8')).version;
+    const expected = (
+      JSON.parse(readFileSync(pluginJson, 'utf-8')) as { version: string }
+    ).version;
     expect(resolveVersion(import.meta.dirname)).toBe(expected);
   });
 
   it('finds the manifest from the built bundle location too', () => {
-    const expected = JSON.parse(readFileSync(pluginJson, 'utf-8')).version;
+    const expected = (
+      JSON.parse(readFileSync(pluginJson, 'utf-8')) as { version: string }
+    ).version;
     expect(resolveVersion(join(import.meta.dirname, '..', '..', 'dist'))).toBe(
       expected
     );

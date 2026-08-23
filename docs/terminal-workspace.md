@@ -826,7 +826,7 @@ export SPECHUB_OPEN_CMD="ssh laptop open"   # or any command taking a URL
 
 *A small service on your laptop that takes a page from the dev machine, stores it, serves it back, and opens your default browser on it.*
 
-The dev machine has no browser and no way to reach yours. The bridge solved that for agents, but not for reading: it needs a tab armed by hand before every session, and the tab it drives lives in a dedicated Chrome profile rather than your default browser. The opener is the answer for reading, and it is a separate service on purpose - see [ADR 0001](adr/0001-document-opener-service.md).
+The dev machine has no browser and no way to reach yours. The bridge solved that for agents, but not for reading: it needs a tab armed by hand before every session, and the tab it drives lives in a dedicated Chrome profile rather than your default browser. The opener is the answer for reading, and it is a separate service on purpose - see [ADR 0002](adr/0002-document-opener-service.md).
 
 What it does is deliberately small:
 

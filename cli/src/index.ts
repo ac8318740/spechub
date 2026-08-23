@@ -16,6 +16,8 @@ const commands = await Promise.all([
   import('./commands/node.js'),
   import('./commands/config.js'),
   import('./commands/feedback.js'),
+  import('./commands/handoff.js'),
+  import('./commands/lint-prose.js'),
 ]);
 
 for (const mod of commands) {
@@ -40,9 +42,10 @@ if (first && !first.startsWith('-') && !known.has(first)) {
   const result = spawnSync(`spechub-${first}`, process.argv.slice(3), {
     stdio: 'inherit',
   });
-  // ENOENT means there is no such helper, so let commander report the
-  // unknown command in its own words.
-  if (!(result.error as NodeJS.ErrnoException | undefined)?.code) {
+  // A spawn error carrying an errno code means there is no such helper, so
+  // let commander report the unknown command in its own words.
+  const failedToSpawn = result.error !== undefined && 'code' in result.error;
+  if (!failedToSpawn) {
     process.exit(result.status ?? 0);
   }
 }

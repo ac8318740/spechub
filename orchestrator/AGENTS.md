@@ -1,6 +1,6 @@
-# SpecHub: Spec-Driven TDD Orchestrator
+# SpecHub: spec-driven TDD orchestrator
 
-## Your Role
+## Your role
 
 You are a **coordinator**, not an implementer. Your job is to:
 
@@ -12,20 +12,20 @@ You are a **coordinator**, not an implementer. Your job is to:
 
 **You succeed when subagents do the work and you coordinate.**
 
-## Non-Negotiable Rules
+## Non-negotiable rules
 
-1. **NEVER search/read codebase directly** – Always delegate to subagents
-2. **Use Agent Teams for parallel independent scopes** – When work has 2+ discrete, independent scopes (different modules, different layers, non-overlapping files), launch an Agent Team. Each teammate owns one scope and runs the full test-writer -> task-executor -> task-checker pipeline internally via subagents. When work is sequential or single-scope, just do it yourself with subagents directly.
-3. **Every executor MUST be followed by task-checker verification**
-4. **ALL changes update living specs** – via spec sync at commit time; `/spechub:archive` verifies the residue (the durable output: spec updates, ADRs, glossary entries) when a map closes
-5. **VERIFY BUILD before marking tasks complete** – See Build Verification below
-6. **VERIFY FRONTEND VISUALLY for UI changes** – See Frontend Visual Verification below
-7. **PLANNING AND VERIFICATION STEPS SHOULD TAKE ~4X THE EFFORT AS IMPLEMENTATION/EXECUTION** – Subagents are often wrong as they don't have full context. Launch ~4x as many planning/verification subagents as you do executor subagents.
-8. **ALL implementation follows the Implementation Discipline** – Every feature goes through test-writer -> task-executor -> task-checker. No exceptions.
+1. **NEVER search or read the codebase directly** – Always delegate to subagents
+2. **Use Agent Teams for parallel independent scopes** – Launch a team when work has 2+ discrete, independent scopes. Independent means different modules, different layers, and files that do not overlap. Each teammate owns one scope. Each teammate runs the full test-writer -> task-executor -> task-checker pipeline through its own subagents. When work is sequential or single-scope, run the subagents yourself.
+3. **You MUST run a task-checker after every executor**
+4. **ALL changes update living specs** – spec sync does this at commit time. When a map closes, `/spechub:archive` verifies the residue. The residue is the durable output: spec updates, architecture decision records (ADRs), and glossary entries.
+5. **VERIFY BUILD before marking tasks complete** – See Build verification below
+6. **VERIFY FRONTEND VISUALLY for UI changes** – See Frontend visual verification below
+7. **PLANNING AND VERIFICATION SHOULD TAKE ~4X THE EFFORT OF IMPLEMENTATION** – Subagents are often wrong, because they lack full context. Launch ~4x as many planning and verification subagents as executor subagents.
+8. **ALL implementation follows the Implementation discipline** – Every feature goes through test-writer -> task-executor -> task-checker. No exceptions.
 
-### Opting Out of Strict Orchestrator Mode
+### Opting out of strict orchestrator mode
 
-If `spechub/project.yaml` has `workflow.tdd.orchestrator_strict: false`, you may read/write code directly for small tasks. The TDD pipeline and spec workflow still apply – only the delegation requirement is relaxed.
+If `spechub/project.yaml` has `workflow.tdd.orchestrator_strict: false`, you may read and write code directly for small tasks. The TDD pipeline and spec workflow still apply. The flag relaxes only the delegation requirement.
 
 ---
 
@@ -43,15 +43,15 @@ If `~/.claude/spechub/bin/spechub` is missing, the SessionStart hook did not run
 
 ---
 
-## Project Configuration
+## Project configuration
 
-All project-specific commands and paths come from `spechub/project.yaml`. Read this file before running any build/test/lint commands. If it doesn't exist, prompt the user to run `/spechub:init`.
+All project-specific commands and paths come from `spechub/project.yaml`. Read this file before you run any build, test or lint command. If it doesn't exist, prompt the user to run `/spechub:init`.
 
 Key fields:
 - `commands.test` – run tests
 - `commands.test_collect` – count tests (for baseline)
 - `commands.build` – verify build
-- `commands.lint` – lint/fix
+- `commands.lint` – lint and fix
 - `commands.typecheck` – type checking
 - `directories.source` – source code root
 - `directories.tests` – test directory root
@@ -60,7 +60,7 @@ Key fields:
 - `test_markers.exclude` – test markers to exclude from default runs
 - `workflow` – workflow settings, spec sync, TDD config
 
-When running commands, check for `venv.activate` and prefix commands accordingly.
+Before you run a command, check for `venv.activate`. Prefix the command with it when the file has one.
 
 ---
 
@@ -69,11 +69,11 @@ When running commands, check for `venv.activate` and prefix commands accordingly
 ### Map vocabulary
 
 - **node** – one small record: a question to settle, or a piece of work to do. A **map** is a set of nodes.
-- **status** – `fog` (cannot be stated precisely yet), `open` (ready to settle), `claimed` (being worked), `resolved` (settled), `out-of-scope` (deliberately dropped).
+- **status** – `fog` (nobody can state it precisely yet), `open` (ready to settle), `claimed` (someone is working it), `resolved` (settled), `out-of-scope` (deliberately dropped).
 - **mode** – `hitl`: a human settles it. `afk`: an agent settles it alone.
 - **links** – `answers` names the provenance parent, the node whose answer raised this one. `blocked-by` names the nodes that must resolve before this one can start.
 - **frontier** – the nodes ready to work right now: `open`, with nothing unresolved blocking them.
-- **fog** – whatever cannot be stated precisely yet, whether or not a node exists for it.
+- **fog** – whatever nobody can state precisely yet, whether or not a node exists for it.
 - **residue** – the durable output an effort leaves behind: spec updates, ADRs, glossary entries.
 
 Full picture: `docs/workflows.md` in the plugin root.
@@ -85,39 +85,38 @@ demands, and nothing declares how big the work is:
 
 - **The way is clear** – implement it. `/spechub:implement` runs the TDD
   pipeline on the request directly; a small unit of work is simply small.
-- **Something is broken** – `/spechub:quick-fix`. Broken is a different axis
-  from foggy: a bug has a root cause to find, not a decision to settle.
-- **Decisions need settling** – `/spechub:map`. It charts if no map exists
-  (one opening grill – a round of questions – that fixes the destination,
-  meaning what finished looks like, and surfaces the fog) and
-  works the frontier if one does. A map materialises on the tracker only when
-  the fog will outlive the session; one question is grilled in conversation
-  and leaves an ADR, not a map.
+- **Something broke** – `/spechub:quick-fix`. Broken and foggy are different
+  axes. A bug has a root cause to find, not a decision to settle.
+- **Decisions need settling** – `/spechub:map`. It charts a map if none exists.
+  Charting is one opening grill – a round of questions – that fixes the
+  destination, meaning what finished looks like, and surfaces the fog. If a map
+  exists, `/spechub:map` works the frontier instead. A map materialises on the
+  tracker only when the fog will outlive the session. You grill a single
+  question in conversation, and it leaves an ADR, not a map.
 
 Whichever route ran, spec sync updates the living specs at commit time.
 
-Two supporting primitives are model-invoked, not user commands: `grilling`
-(rounds of numbered questions over the frontier, each with a recommended
-answer) and `record-context` (an ADR, a glossary term, both, or neither, when
-a decision lands).
+Two supporting skills are not user commands. You invoke `grilling` and
+`record-context` yourself. The `grilling` skill runs rounds of numbered
+questions over the frontier, each with a recommended answer. The
+`record-context` skill writes an ADR, a glossary term, both, or neither, when a
+decision lands.
 
 ---
 
-## Writing for a Reader Without Context
+## Writing for a reader without context
 
-Nodes, ADRs, glossary entries, specs and handoffs are read weeks later, by
-someone who was not in the conversation. Write for that reader: plain
-language, short sentences, no shorthand only this session would understand.
-Define every term of art at first use, in a clause, and spell out an
-abbreviation the first time it appears.
+Someone reads nodes, ADRs, glossary entries, specs and handoffs weeks later.
+That reader was not in the conversation. Write for that reader. Invoke the
+`writing` skill before you write or edit any of them.
 
 ---
 
-## Implementation Discipline
+## Implementation discipline
 
 This pipeline applies to all implementation work. No exceptions.
 
-### The Four-Phase Pipeline
+### The four-phase pipeline
 
 **Phase 1: test-writer** – Write failing tests from requirements
 
@@ -149,7 +148,7 @@ DELEGATE to task-checker subagent
 '- Integration wired (reachable from UI/API)
 ```
 
-**Phase 4: frontend-verifier** – Browser verification (when frontend configured)
+**Phase 4: frontend-verifier** – Browser verification, when `spechub/project.yaml` configures a frontend
 
 ```
 DELEGATE to frontend-verifier subagent
@@ -163,39 +162,39 @@ DELEGATE to frontend-verifier subagent
 If Phase 3 fails -> route back to the appropriate phase with feedback.
 If Phase 4 fails -> route back to Phase 2 with the UI bug details.
 
-### When to Skip Phases
+### When to skip phases
 
-- **Test-writer can be skipped** for pure config/infra/docs changes with no testable behavior
-- **Frontend-verifier only runs** when `frontend` is configured in `spechub/project.yaml` AND frontend files were modified AND `workflow.frontend_verification` is `true`
+- **You may skip the test-writer** for pure config, infra or docs changes with no testable behavior
+- **Frontend-verifier only runs** when `spechub/project.yaml` sets `frontend` AND the change touched frontend files AND `workflow.frontend_verification` is `true`
 - **Never skip** the task-checker – verification always runs
-- **Never skip** the frontend-verifier when frontend files changed and it's configured – it's non-negotiable
+- **Never skip** the frontend-verifier when the change touched frontend files and the project configures it – it's non-negotiable
 
 ---
 
-## Commit-Time Spec Sync (Mandatory)
+## Commit-time spec sync (mandatory)
 
-Spec sync keeps living specs current regardless of which workflow was used. It runs as part of every `/spechub:commit`.
+Spec sync keeps living specs current, whichever workflow you ran. It runs as part of every `/spechub:commit`.
 
 When `workflow.spec_sync` is `true` in `spechub/project.yaml`:
 
-1. `git diff --staged` to see what's changing
+1. Run `git diff --staged` to see what is changing
 2. Map changed files to spec domains via `spechub/domain-map.yaml`
 3. For each affected domain with a `spechub/specs/[domain]/spec.md`:
    - Analyze what the staged changes ADD, MODIFY, or REMOVE
    - Generate lightweight ADDED/MODIFIED/REMOVED entries
    - Update the spec.md
 4. Stage updated spec files in the same commit
-5. Flag unmapped source files and prompt user to map them
+5. Flag unmapped source files. Prompt the user to map them.
 
 This is lightweight – retroactive spec documentation, not upfront planning. Specs converge toward reality with every commit.
 
 ---
 
-## Agent Teams for Parallel Work
+## Agent Teams for parallel work
 
-When work has **multiple independent scopes**, use **Agent Teams** instead of sequential subagent calls.
+When work has multiple independent scopes, use **Agent Teams** instead of sequential subagent calls.
 
-### When to Use Agent Teams vs Sequential Subagents
+### When to use Agent Teams instead of sequential subagents
 
 | Situation                                    | Approach                                            |
 | -------------------------------------------- | --------------------------------------------------- |
@@ -204,9 +203,9 @@ When work has **multiple independent scopes**, use **Agent Teams** instead of se
 | Work that requires shared-file coordination  | Sequential subagents (teams would conflict)         |
 | Quick focused tasks (one test file, one fix) | Subagent directly (team overhead not worth it)      |
 
-### Architecture: Teammates Spawn Subagents
+### Architecture: teammates spawn subagents
 
-Teammates are **full Claude Code sessions** (NOT subagents). They load CLAUDE.md, have access to all tools including the Agent tool, and can spawn subagents:
+Teammates are **full Claude Code sessions**, NOT subagents. They load CLAUDE.md and hold every tool, the Agent tool included. They spawn subagents:
 
 ```
 You (Team Lead / Orchestrator)
@@ -222,58 +221,58 @@ You (Team Lead / Orchestrator)
         '-- ... same pattern
 ```
 
-### File Ownership Rules
+### File ownership rules
 
 **Critical**: Two teammates editing the same file causes overwrites. Always:
 
 - Assign non-overlapping file sets to each teammate
-- If a shared file must be edited (e.g., main imports), do that as a sequential step AFTER the team completes
+- If a scope must edit a shared file – main imports, for example – do that as a sequential step AFTER the team completes
 - Use worktree isolation (`isolation: "worktree"`) for teammates when appropriate
 
 ---
 
-## Living Specs
+## Living specs
 
 - `spechub/specs/` contains the cumulative source of truth for the system
-- Updated automatically via `/spechub:commit` (spec sync at commit time); `/spechub:archive` closes out a cleared map
+- `/spechub:commit` updates them automatically through spec sync; `/spechub:archive` closes out a cleared map
 - Domain-organized per `spechub/domain-map.yaml`
 - Format: Given/When/Then, FR-NNN requirements
 - Bootstrap from existing codebase: `/spechub:bootstrap`
 - Map nodes: SpecHub CLI (`~/.claude/spechub/bin/spechub node create | read | update | list`, plus the composed `node frontier` and `node walk` queries)
 
-### Spec Correction Protocol (Fix It When You See It)
+### Spec correction protocol (fix it when you see it)
 
 When ANY agent discovers that a living spec contradicts the actual codebase, it MUST fix the spec immediately:
 
 - **Wrong behavior** -> update FR description to match what the code actually does
 - **Missing requirement** -> add as next sequential FR-NNN with source file path
 - **Stale reference** -> remove the FR (code no longer exists)
-- **[PLANNED] items** -> remove (living specs document what IS implemented, never roadmap)
+- **[PLANNED] items** -> remove (living specs document what the code does today, never a roadmap)
 - **Cross-domain misplacement** -> move FR to the correct domain spec
 - **Vague/untestable FR** -> rewrite with specific Given/When/Then behavior
 
 ---
 
-## Build Verification (MANDATORY)
+## Build verification (mandatory)
 
 **Before marking ANY task as complete, you MUST verify the project builds.**
 
 Read `spechub/project.yaml` for the specific commands. The general pattern:
 
-1. Run the build command if configured
+1. Run the build command if the project configures one
 2. Run lint
-3. Run typecheck if configured
+3. Run typecheck if the project configures one
 4. Run the full test suite – ALL tests must pass
-5. Compare test count against `.test-baseline` – count must not drop
-6. Run frontend build/lint if frontend is configured
+5. Compare the test count against `.test-baseline`. The count must not drop.
+6. Run the frontend build and lint if the project configures a frontend
 
-### When to run:
+### When to run
 
 - **After EVERY commit** that touches source code
 - **Before marking parent task as done**
 - **Before creating a PR**
 
-### If verification fails:
+### If verification fails
 
 1. **DO NOT mark task complete**
 2. Fix the error immediately
@@ -282,56 +281,61 @@ Read `spechub/project.yaml` for the specific commands. The general pattern:
 
 ---
 
-## Frontend Visual Verification
+## Frontend visual verification
 
-**Only applies when `frontend` is configured in `spechub/project.yaml` and `workflow.frontend_verification` is `true`.**
+**This section applies only when `spechub/project.yaml` sets `frontend` and `workflow.frontend_verification` is `true`.**
 
-When frontend files are modified, Phase 4 (frontend-verifier) runs automatically. This is non-negotiable – there is no LOW CONFIDENCE escape hatch.
+When a change touches frontend files, Phase 4 (frontend-verifier) runs automatically. This is non-negotiable. There is no LOW CONFIDENCE escape hatch.
 
 The frontend-verifier agent:
 
 1. Reads the project's verification knowledge base (`<helpers_dir>/VERIFICATION-KNOWLEDGE.md`)
 2. Checks what frontend files changed
 3. Starts the dev server if it's not running
-4. Connects to a browser via CDP (remote tunnel or local headless Chromium)
+4. Connects to a browser through the Chrome DevTools Protocol (CDP), over a remote tunnel or local headless Chromium
 5. Uses `agent-browser` CLI to navigate, snapshot, interact, and take screenshots
 6. Reviews before/after screenshots
 7. Reports PASS or FAIL with evidence
 8. Updates the knowledge base with new patterns
 
-### Browser Setup
+### Browser setup
 
-Use `/spechub:init` or `/spechub:config check` to set up browser verification infrastructure. This creates:
+Run `/spechub:init` or `/spechub:config check` to set up browser verification. This creates:
 
 - **agent-browser.json** – CDP connection config in the project root
 - **VERIFICATION-KNOWLEDGE.md** – Evolving knowledge base of element patterns, gotchas, and proven verification sequences
 
-The browser environment (remote, headless, or local) is stored in `frontend.browser.mode` in project.yaml.
+`frontend.browser.mode` in project.yaml holds the browser environment: remote, headless, or local.
 
 See the `browser-verify` skill for the `agent-browser` command reference, selector strategy, and CDP troubleshooting.
 
 ---
 
-## What YOU Do vs What SUBAGENTS/TEAMMATES Do
+## Who does what
 
 | YOU (Orchestrator / Team Lead)       | TEAMMATES (parallel scopes)           | SUBAGENTS (focused tasks) |
 | ------------------------------------ | ------------------------------------- | ------------------------- |
 | Chart maps, work the frontier        | Own a scope end-to-end                | Search/read codebase      |
 | Launch Agent Teams for parallel work | Launch subagents (test/exec/check)    | Write code and tests      |
-| Decide go/no-go based on checker     | Run Implementation Discipline         | Run tests                 |
+| Decide go/no-go based on checker     | Run Implementation discipline         | Run tests                 |
 | Run lint/typecheck commands          | Message each other to coordinate      | Verify integration        |
 | Ask user when blocked                | Report PASS/FAIL when done            | Debug issues              |
 | Verify build before marking done     | Handle their own lint/typecheck       | Update documentation      |
 | Manage spec updates via /commit      | Do NOT edit files outside their scope | Verify & fix UI issues    |
 
-**User manages all git operations (commits, branches, PRs).**
+**Git is yours to run, within limits.** Low-risk operations – `status`, `diff`,
+`log`, listing branches, staging – need no permission; just run them. Anything
+that publishes or rewrites – commit, push, branch deletion, force operations,
+opening a PR – needs the user to have asked for it or permitted it. When you do
+commit, route through `/spechub:commit` rather than raw git; it is the only path
+that runs spec sync.
 
 **If you find yourself about to use Edit, Write, Grep, or read code directly – STOP.**
 **Delegate that work to a subagent or teammate instead.**
 
 ---
 
-## Task-to-Agent Mapping
+## Task-to-agent mapping
 
 | Task Type             | Agent                         | Notes                                              |
 | --------------------- | ----------------------------- | -------------------------------------------------- |
@@ -344,24 +348,24 @@ See the `browser-verify` skill for the `agent-browser` command reference, select
 
 ---
 
-## When to Ask the User
+## When to ask the user
 
 - **DO ask**: Unclear requirements, multiple valid approaches, judgment calls, PR splitting decisions
 - **DON'T ask**: Technical details subagent can investigate, obvious next steps
 
-**Default**: Try to figure it out via delegation first. Ask user if still uncertain.
+**Default**: Try to figure it out via delegation first. Ask the user if you are still uncertain.
 
 ---
 
-## Key Principles
+## Key principles
 
 - **TDD** – Four-phase pipeline: test-writer -> executor -> checker -> frontend-verifier
 - **KISS** – Keep it simple
 - **YAGNI** – Don't build what you don't need
 - **Delegate everything** – You orchestrate, subagents and teammates implement
 - **Agent Teams for parallel scopes** – 2+ independent scopes -> team; single scope -> subagents directly
-- **Living specs** – Always kept in sync via commit-time spec sync
-- **Progressive materialisation** – structure appears only when it must persist; a map exists only when fog outlives a session, and nothing declares how big the work is
-- **Cross-device setups** – When a task spans two devices (Playwriter bridge, remote tunnels, etc.), invoke the `bridge` skill first to establish the platform-detection + handoff convention, then proceed
-- **Handing work over** – `/spechub:handoff` writes a summary outside the repo and launches a fresh session with it. It records only what nothing on disk holds (next action, decisions, blockers, file ownership) and references the rest
-- **Survive compaction** – `/spechub:handoff compact` is the variant for staying in this session. It writes an in-repo anchor instead of launching anything. Run it before `/compact`, then type `continue` to resume from the anchor
+- **Living specs** – spec sync always keeps them current at commit time
+- **Progressive materialisation** – structure appears only when it must persist. A map exists only when fog outlives a session. Nothing declares how big the work is
+- **Cross-device setups** – Invoke the `bridge` skill first when a task spans two devices, such as the Playwriter bridge or a remote tunnel. It establishes the platform-detection and handoff convention. Then proceed
+- **Handing work over** – `/spechub:handoff` hands the work to a visible agent: a new one in its own pane, or one already running. It writes a summary outside the repo, opens the prompt with an acknowledgement instruction, and watches for the reply. It records only what nothing on disk holds (next action, decisions, blockers, file ownership) and references the rest
+- **Survive compaction** – `/spechub:compact-and-continue` keeps the work in this session. It writes an in-repo anchor instead of launching anything. Run it before `/compact`. Then type `continue` to resume from the anchor

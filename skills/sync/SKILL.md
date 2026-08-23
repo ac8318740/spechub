@@ -4,7 +4,7 @@ description: Update living specs in spechub/specs/ from recent code changes. Cal
 argument-hint: "[file-paths or 'staged']"
 ---
 
-## User Input
+## User input
 
 ```text
 $ARGUMENTS
@@ -14,68 +14,81 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Purpose
 
-Analyze code changes and update the cumulative living specs in `spechub/specs/` to reflect what changed. This is the "fast path" mechanism that keeps specs current even when the full spec workflow is skipped.
+This skill analyzes code changes. It updates the cumulative living specs in
+`spechub/specs/` to reflect what changed. It is the "fast path" mechanism
+that keeps specs current even when a workflow skips full spec planning.
 
-## Step 1: Determine Change Scope
+## Step 1: determine change scope
 
-1. If `$ARGUMENTS` is "staged" or called from `/commit`: Use `git diff --cached`
+1. If `$ARGUMENTS` is "staged", or `/commit` calls this skill, use `git diff --cached`
 2. If `$ARGUMENTS` contains file paths: Diff those files against HEAD
 3. If no arguments: Use `git diff HEAD` (staged + unstaged)
 
-Extract from diff: files added/modified/deleted, functions/classes changed.
+Extract from the diff: files added/modified/deleted, functions/classes changed.
 
-## Step 2: Map Changes to Domains
+## Step 2: map changes to domains
 
 1. Read `spechub/domain-map.yaml`
 2. Match changed files against domain path patterns
 3. Group changes by domain
 4. Skip files outside all domains (tests, config, docs)
 
-If no domains affected: report "No spec-relevant changes" and exit.
+If the diff affects no domains, report "No spec-relevant changes". Then exit.
 
-## Step 3: Generate Lightweight Deltas
+## Step 3: generate lightweight deltas
 
 For each affected domain:
 
-1. Read `spechub/specs/[domain]/spec.md` (if exists)
+1. Read `spechub/specs/[domain]/spec.md` (if it exists)
 2. Analyze changes:
    - New functions/endpoints/components -> ADDED requirements
    - Modified signatures or behavior -> MODIFIED requirements
    - Deleted functions/endpoints -> REMOVED requirements
 
-FR entries are written for a reader who has not seen the diff – plain behaviour
-statements, no internal shorthand.
+Write each functional requirement (FR) entry per the `writing` skill.
 
-## Step 4: Apply Deltas
+**Example**
+
+```markdown
+### FR-014: The handoff anchor loads once
+
+- **Description**: The SessionStart hook injects `spechub/HANDOFF.md` after a
+  compaction, then moves the file into `spechub/handoffs/`.
+- **Behavior**: Given `spechub/HANDOFF.md` carries the `spechub_handoff`
+  marker, When a session starts with source `compact`, Then the hook injects
+  the file and retires it.
+- **Source**: `hooks/session-start-handoff.sh`
+```
+
+## Step 4: apply deltas
 
 For each affected domain:
 
-- If spec exists: merge ADDED/MODIFIED/REMOVED into it
-- If no spec exists: create minimal spec with ADDED entries and a comment:
+- If the spec exists, merge ADDED/MODIFIED/REMOVED into it
+- If no spec exists, create a minimal spec with ADDED entries and a comment:
   `<!-- Auto-generated from code changes. Run /bootstrap for full spec. -->`
 
-Write each merged FR for a reader who has not seen the diff – plain behaviour
-statements, no internal shorthand.
+Write each merged FR per the `writing` skill.
 
-## Step 5: Glossary Check
+## Step 5: glossary check
 
 Glossaries live in `CONTEXT.md` at the repo root (cross-domain terms) and
 `spechub/specs/[domain]/CONTEXT.md` (domain terms). If neither exists, skip.
 
-For each glossary term, check whether the diff renames or deletes an
-identifier matching it (function, class, table, config key, route). If so,
-surface it in the report:
+For each glossary term, check the diff. Look for a renamed or deleted
+identifier that matches it: function, class, table, config key, route. If
+so, surface it in the report:
 
 ```
 Glossary: 'ticket' may be stale – the diff renames Ticket to WorkItem
 ```
 
-**Never edit the glossary and never block the commit.** For specs the code
-wins; for the glossary the human wins – it records vocabulary humans agreed
-on, so only a human decision changes it. Surfacing the drift is the whole
-job.
+Never edit the glossary. Never block the commit. For specs, the code wins.
+For the glossary, the human wins. The glossary records vocabulary that
+humans agreed on, so only a human decision changes it. This check only
+surfaces the drift.
 
-## Step 6: Report
+## Step 6: report
 
 ```
 Spec sync: [N] domains updated
@@ -85,13 +98,13 @@ Spec sync: [N] domains updated
 
 ## Integration with /commit
 
-When called from `/commit`:
+When `/commit` calls this skill:
 
-1. Receives staged diff as context
+1. Receives the staged diff as context
 2. Runs silently (no user prompts)
-3. Returns list of modified spec files for staging
-4. Minimal output to not interrupt commit flow
+3. Returns a list of modified spec files for staging
+4. Outputs minimal detail so it does not interrupt the commit flow
 
-## Spec Correction (Fix It When You See It)
+## Spec correction (fix it when you see it)
 
 While reading existing specs to generate deltas, if you notice ANY existing FR that contradicts the code in the diff, fix it immediately.

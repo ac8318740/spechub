@@ -1,1 +1,2 @@
-- [0001](0001-document-opener-service.md) – A document opener service on the laptop, separate from the Playwriter bridge
+- [0001](0001-ste-writing-standard.md) – One plain-language writing standard based on ASD-STE100
+- [0002](0002-document-opener-service.md) – A document opener service on the laptop, separate from the Playwriter bridge

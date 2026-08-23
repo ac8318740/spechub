@@ -1,0 +1,35 @@
+profile: node-typescript
+
+workflow:
+  spec_sync: true
+  grilling:
+    questions: tool      # tool | inline
+  maps:
+    tracker: github
+  tdd:
+    strict: true
+    orchestrator_strict: true
+  frontend_verification: false
+  handoff:
+    agent: "claude"
+    ack_turns: 5
+    self_invoke: true
+    nudge_warn: 200000
+    nudge_severe: 500000
+
+commands:
+  test: "npm --prefix cli test"
+  test_collect: null
+  build: "npm --prefix cli run build"
+  lint: "npm --prefix cli run lint"
+  typecheck: "npm --prefix cli run typecheck"
+  format: null
+
+directories:
+  source: "cli/src/"
+  tests: "tests/"
+
+test_markers:
+  exclude: null
+
+venv: null

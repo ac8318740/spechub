@@ -2037,5 +2037,5 @@ if [ -f "$FREEPORT" ]; then
 fi
 
 
-printf '\n%d passed, %d failed\n' "$pass" "$fail"
+printf '\nResult: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
