@@ -1,0 +1,49 @@
+name: tag-release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .claude-plugin/plugin.json
+
+permissions:
+  contents: write
+
+jobs:
+  tag-release:
+    name: tag-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # Tag only when this push actually changed the version, and only when the
+      # tag is not already there. Re-running the job is a no-op.
+      - name: Tag the release
+        run: |
+          set -euo pipefail
+          read_version() {
+            git show "$1:.claude-plugin/plugin.json" 2>/dev/null | jq -r '.version // empty'
+          }
+          new="$(read_version HEAD)"
+          old="$(read_version HEAD~1 || true)"
+          if [ -z "$new" ]; then
+            echo "tag-release: no version in .claude-plugin/plugin.json at HEAD" >&2
+            exit 1
+          fi
+          if [ "$new" = "$old" ]; then
+            echo "tag-release: version unchanged at $new, nothing to tag."
+            exit 0
+          fi
+          tag="v${new}"
+          git fetch --tags --no-recurse-submodules --quiet
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "tag-release: ${tag} already exists, nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "spechub ${new}"
+          git push origin "refs/tags/${tag}"
+          echo "tag-release: created ${tag}."
