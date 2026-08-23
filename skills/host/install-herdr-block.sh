@@ -47,6 +47,7 @@ TOTAL=1
 BLOCK_START='# >>> spechub terminal-workspace >>>'
 BLOCK_END='# <<< spechub terminal-workspace <<<'
 BLOCK_TABLE='[worktrees]'
+# shellcheck disable=SC2088  # the literal "~/" is what gets written into config.toml; herdr expands it
 DEFAULT_WORKTREE_DIR='~/.herdr/worktrees'
 # Where the kernel release string lives on Linux. An option overrides it, which
 # is what lets a test hand the Windows Subsystem for Linux check its own file.

@@ -195,6 +195,7 @@ if [ -n "${HOME:-}" ]; then
   case "$herdr_root" in
     "") herdr_root="${HOME}/.herdr/worktrees" ;;
     "~") herdr_root="$HOME" ;;
+    # shellcheck disable=SC2088  # matching a literal "~/" prefix read from config.toml, then expanding it
     "~/"*) herdr_root="${HOME}/${herdr_root#\~/}" ;;
   esac
 
