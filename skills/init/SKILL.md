@@ -253,7 +253,70 @@ curl -s --max-time 3 http://localhost:19988/json/version
 
 **If "Skip"**: Leave `frontend.browser` unset and skip writing `agent-browser.json`. Tell the user to run `/spechub:config set frontend.browser.mode <mode>` later.
 
-## Step 7: report
+## Step 7: offer the writing output style (optional)
+
+The plugin ships an output style. Claude Code shows it as `spechub:ac-writing-style`. It applies the `writing` skill's plain-language rules to every chat reply. Offer it here. Never set it without asking.
+
+### 7a. Report the current state
+
+Read `outputStyle` from the user file and both project files:
+
+```bash
+python3 - <<'PY'
+import json, pathlib
+for p in ["~/.claude/settings.json", ".claude/settings.local.json", ".claude/settings.json"]:
+    f = pathlib.Path(p).expanduser()
+    try:
+        print(p, json.loads(f.read_text()).get("outputStyle"))
+    except FileNotFoundError:
+        print(p, "(no file)")
+    except json.JSONDecodeError:
+        print(f"{p}: malformed JSON")
+PY
+```
+
+Tell the user which of the three files sets `outputStyle`, and to what. `.claude/settings.local.json` wins over `.claude/settings.json`, which wins over `~/.claude/settings.json`.
+
+### 7b. Ask once
+
+```json
+{
+  "question": "Apply the spechub:ac-writing-style output style?",
+  "options": [
+    {"label": "Global (recommended)", "description": "Write outputStyle into ~/.claude/settings.json, so it applies in every project"},
+    {"label": "This project only", "description": "Write outputStyle into .claude/settings.local.json, which overrides the global value here"},
+    {"label": "Skip", "description": "Leave the output style as it is"}
+  ]
+}
+```
+
+### 7c. Write the choice
+
+Load the chosen file as JSON, set the one key, then dump it back. Use `python3` or `jq`. Never edit the file with a regular expression, because that corrupts the other keys. If the chosen file has malformed JSON, stop and report it instead of overwriting it.
+
+```bash
+python3 - <<'PY'
+import json, pathlib, sys
+f = pathlib.Path("~/.claude/settings.json").expanduser()   # or .claude/settings.local.json
+f.parent.mkdir(parents=True, exist_ok=True)
+try:
+    data = json.loads(f.read_text()) if f.exists() else {}
+except json.JSONDecodeError:
+    sys.exit(f"{f}: malformed JSON, aborting")
+data["outputStyle"] = "spechub:ac-writing-style"
+f.write_text(json.dumps(data, indent=2) + "\n")
+PY
+```
+
+If the user chose global and a project file also sets `outputStyle`, say so. Offer to remove that key. The project value overrides the global one.
+
+### 7d. Say when it takes effect
+
+Tell the user the style applies after `/clear`, or in a new session. Say that `/config` -> Output style writes project scope only, which is why this step offers the global path. Source: https://code.claude.com/docs/en/output-styles.md.
+
+Claude Code has no command-line flag for this. `claude config` does not exist, and Claude Code dropped the `/output-style` command. Do not invent either.
+
+## Step 8: report
 
 ```
 ## SpecHub Initialized
@@ -269,6 +332,7 @@ Frontend:     [verified/not configured]
 Browser:      [agent-browser installed / not applicable]
 Config:       spechub/project.yaml
 Domain map:   spechub/domain-map.yaml ([n] domains / starter – fill in)
+Output style: spechub:ac-writing-style (global) | (project) | not set
 CLAUDE.md:    untouched (orchestrator loads via SessionStart hook)
 
 Next: describe what you want to build, or run /spechub:bootstrap for existing code.
