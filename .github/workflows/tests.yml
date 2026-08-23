@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run the shell suites
+        run: bash tests/run-all.sh
+
+      # `npm ci` needs a lockfile. Fall back to `npm install` when there is none.
+      - name: Install the CLI dependencies
+        run: |
+          set -euo pipefail
+          if [ -f cli/package-lock.json ]; then
+            npm --prefix cli ci
+          else
+            npm --prefix cli install
+          fi
+
+      - name: Run the CLI tests
+        run: npm --prefix cli test
