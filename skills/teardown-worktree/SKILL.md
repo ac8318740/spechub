@@ -134,24 +134,58 @@ Say in the plan which checks ran and which did not, once per worktree, so nobody
 
 #### herdr's answer
 
-Check the workspace holding each worktree:
+A herdr workspace holds tabs, and each tab holds panes. One status for the whole workspace therefore says nothing about the other tabs in it. So enumerate the panes before every removable verdict.
+
+Start with the cheap hint:
 
 ```bash
 herdr worktree list
 herdr workspace list
 ```
 
-Treat `working`, `blocked`, `idle` and `done` as a live agent. Skip it. Only `unknown` makes a worktree a candidate.
+Treat `working`, `blocked`, `idle` and `done` as a live agent. Skip the worktree, and run no further check on it.
 
 `idle` does not mean empty. In herdr it means an agent is present and waiting for input, which is exactly the state a session someone left open sits in. Reading `idle` as nobody home is the quickest way to destroy a running session.
 
-`unknown` is not proof of an empty pane either, so confirm what is actually running before removing anything:
+`unknown` never makes a worktree removable on its own. It summarises a whole workspace, and a second tab running an agent hides behind that one word.
+
+So list every pane of the workspace holding the worktree:
+
+```bash
+herdr pane list --workspace <workspace-id>
+```
+
+The listing covers every tab, not only the focused one. Each entry carries `pane_id`, `tab_id`, `agent`, `agent_status`, `cwd` and `foreground_cwd`.
+
+Exclude this session's own pane by identifier, never by status. The own pane is the one whose `pane_id` equals `$HERDR_PANE_ID`. Every other pane still counts, whatever the workspace `agent_status` said.
+
+The `w26` teardown skipped this step. It read its own workspace's `done` as its own verdict, removed the workspace, and killed a live session in the second tab. Excluding by `pane_id` keeps every other pane inside the check. The step 3 rules then stop the removal.
+
+Then read what actually runs in each remaining pane:
 
 ```bash
 herdr pane process-info --pane <pane-id>
 ```
 
-Skip the worktree when `foreground_processes` holds an agent. Skip it too when a foreground program is running with a `cwd` inside the worktree, an editor or `gh dash` for example. That is not an agent, but deleting the directory under it still breaks it. Close it deliberately or leave the worktree alone.
+Any one of these three makes the worktree a skip:
+
+- The pane's `agent_status` is `working`, `blocked`, `idle` or `done`.
+- `foreground_processes` holds an agent, `claude` or `codex` for example.
+- A foreground process has a `cwd` inside the worktree's checkout path.
+
+The third case is not an agent. An editor or `gh dash` counts here. Deleting the directory under it still breaks it. Close it deliberately, or leave the worktree alone.
+
+One `cwd` never blocks: a path carrying the `(deleted)` marker. That shell sits in a directory somebody already removed, as step 2 describes. It holds nothing.
+
+Cross-check the pane count against the tabs, every time:
+
+```bash
+herdr tab list --workspace <workspace-id>
+```
+
+Sum `pane_count` across the tabs. A sum above the number of rows `pane list` returned means the enumeration missed something. Skip the worktree and report it.
+
+Name every blocking pane in the plan, so the user can close it deliberately.
 
 #### Orca's answer
 
@@ -186,7 +220,9 @@ Nothing holds agent state, so nothing can confirm liveness. Classification then 
 
 ### Show it
 
-Print one table: worktree, branch, whether the local branch goes, whether the remote branch goes, and the reason. Then ask once.
+Print one table with six columns: worktree, branch, whether the local branch goes, whether the remote branch goes, blocking panes, and the reason. Then ask once.
+
+The blocking panes column names each pane that blocks the removal, pane id first and process name after – `w26:p2 claude` for example. Leave the cell empty when nothing blocks. The user then knows which pane to close.
 
 ## 2. Move this session out
 
@@ -239,28 +275,38 @@ There is no pane and no workspace, so the cwd move described above is the whole 
 
 Every removal through herdr or plain git passes `--force`. Orca is the exception, and its own branch below says why. `--force` is necessary here, not a shortcut. Plain `git worktree remove` refuses on any worktree containing submodules with "working trees containing submodules cannot be moved or removed". That refusal hits every worktree in a repo that has them. Forcing is safe only because step 1 already proved the tree clean. It is never a way past uncommitted changes.
 
+The hard rule: never run `worktree remove --force` on a workspace that still holds a pane other than this session's own. Forcing waives herdr's own check, so the pane enumeration is the only guard left. Enumerate the panes again immediately before the call. Refuse the removal while any other pane remains.
+
 Take the branch each checkout's `owner` names, not the branch `active` names. Decide per worktree: one checkout in the plan can belong to herdr while the next is plain git.
 
-Before each removal, confirm the live-agent checks from step 1 still hold. Both tools, every time, because neither sees the other's sessions.
+Before each removal, confirm the live-agent checks from step 1 still hold. Both tools, every time, because neither sees the other's sessions. A pane can open between the plan and the removal, so re-read the panes rather than trusting the plan.
 
 ### Owner: herdr
 
 Which command to use depends on whether herdr still holds a workspace for the worktree. Read `open_workspace_id` from `herdr worktree list`.
 
-With a workspace, let herdr do it, so the sidebar row goes with the worktree:
+With a workspace, enumerate its panes first:
+
+```bash
+herdr pane list --workspace <workspace-id>
+```
+
+Exclude the pane whose `pane_id` equals `$HERDR_PANE_ID`. Refuse the removal while any other pane remains. Name those pane ids to the user and move to the next worktree.
+
+With the workspace clear, let herdr do it, so the sidebar row goes with the worktree:
 
 ```bash
 herdr worktree remove --workspace <workspace-id> --force
 ```
 
-Without one, plain git:
+Without a workspace, plain git:
 
 ```bash
 git -C <main-root> worktree remove --force <path>
 git -C <main-root> worktree prune
 ```
 
-The worktree this session just left usually has no workspace any more. Moving the last pane out closes the workspace but leaves the worktree on disk. That one takes the plain git path.
+The worktree this session just left may still have a workspace. Moving the last pane out closes the workspace, and a pane in a second tab keeps it open. So read `open_workspace_id` from `herdr worktree list` again after step 2. A workspace id still set means the pane enumeration above runs on that workspace too, before you remove anything.
 
 ### Owner: orca
 
@@ -316,7 +362,9 @@ State what went and what stayed:
 
 - Remove a worktree this session is standing in. Move out first.
 - Remove a worktree whose herdr workspace reports a `working`, `blocked`, `idle` or `done` agent. `idle` means present and waiting, not absent.
-- Decide on `agent_status` alone. Confirm with `herdr pane process-info` before removing.
+- Decide on the workspace `agent_status` alone. List the panes and read `herdr pane process-info` for each one before removing.
+- Read the workspace `agent_status` as this session's own verdict. Exclude your own pane by `$HERDR_PANE_ID` instead.
+- Remove a workspace that still holds a pane other than your own.
 - Reach for `EnterWorktree` to get back to the main checkout. It rejects the main working tree.
 - Force past uncommitted changes. Skip and report instead.
 - Reach for `git branch -D` when `-d` refuses.
