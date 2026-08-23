@@ -144,7 +144,7 @@ awk "/^  SPECHUB_ARGS=.*py \"\\\$HERDR_CFG\" <<'PY'\$/{f=1; next} f && /^PY\$/{e
   "$SETUP" > "$KEYMAP"
 BEGIN_MARK="# >>> spechub terminal-workspace >>>"
 END_MARK="# <<< spechub terminal-workspace <<<"
-args() { echo "$1|~/.herdr/worktrees|alt+d|alt+i|alt+y|alt+shift+y|alt+shift+d|alt+shift+i|$BEGIN_MARK|$END_MARK"; }
+args() { echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|$BEGIN_MARK|$END_MARK"; }
 
 cat > "$WORK/hand.toml" <<'T'
 [keys]
@@ -153,9 +153,14 @@ next_tab = ["prefix+n", "alt+right"]
 my_own_setting = "untouched"
 
 [[keys.command]]
-key = "alt+d"
+key = "alt+f"
 type = "popup"
 command = "my-old-diff"
+
+[[keys.command]]
+key = "alt+0"
+type = "popup"
+command = "my-own-tool"
 
 [theme]
 name = "catppuccin"
@@ -172,9 +177,16 @@ run_keymap alt "$WORK/merged.toml"
 if parses "$WORK/merged.toml"; then ok "merging onto a hand-written keymap stays valid TOML"
 else no "merging onto a hand-written keymap stays valid TOML"; fi
 
+# Eight managed blocks, plus the one hand-written binding on a key this
+# script does not claim. The hand-written alt+f is dropped, because TOML
+# forbids two commands on one key and the managed one has to win.
 count=$(grep -c '^\[\[keys.command\]\]' "$WORK/merged.toml")
-if [ "$count" = "6" ]; then ok "managed custom commands replace, not duplicate ($count)"
-else no "expected 6 [[keys.command]] blocks, found $count"; fi
+if [ "$count" = "9" ]; then ok "managed custom commands replace, not duplicate ($count)"
+else no "expected 9 [[keys.command]] blocks, found $count"; fi
+
+if grep -q 'my-own-tool' "$WORK/merged.toml" && ! grep -q 'my-old-diff' "$WORK/merged.toml"
+then ok "a hand-written binding survives unless it collides with a managed key"
+else no "a hand-written binding survives unless it collides with a managed key"; fi
 
 if grep -q 'my_own_setting' "$WORK/merged.toml" && grep -q 'catppuccin' "$WORK/merged.toml"
 then ok "unmanaged settings survive the merge"

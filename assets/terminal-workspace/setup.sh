@@ -116,7 +116,15 @@ write_helpers() {
         "$BIN"/spechub-yazi-tab "$BIN"/spechub-tab "$BIN"/spechub-renumber
   cat > "$BIN/spechub-diff" <<'H'
 #!/usr/bin/env bash
-# Show the most relevant diff in diffnav. Installed by spechub.
+# Show a git diff in diffnav, with a banner naming what is being compared.
+#
+#   spechub-diff        this branch against dev, committed work only (alt+f)
+#   spechub-diff pick   choose the comparison from a menu (alt+x)
+#   spechub-diff auto   first non-empty of working tree, staged, last commit
+#
+# Every launch prepends a COMPARING block to the diff. diffnav renders whatever
+# precedes the first "diff --git" line, which is how git show's commit header
+# reaches the screen, so the block lands at the top of the content pane.
 set -uo pipefail
 pick_checkout() {
   # herdr groups worktrees as <root>/<repo>/<branch-slug>, so a pane often
@@ -142,21 +150,162 @@ pick_checkout() {
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   pick_checkout || { echo "No git checkout here: $PWD"; echo "Press any key..."; read -rsn1; exit 0; }
 fi
-show() {  # show <label> <git-args...>; refuses to launch on an empty diff
-  local label="$1"; shift
+
+BRANCH=$(git branch --show-current 2>/dev/null) || BRANCH=""
+[ -n "$BRANCH" ] || BRANCH="HEAD (detached)"
+
+# ---- refs -----------------------------------------------------------------
+ref_exists() { git rev-parse --verify --quiet "$1" >/dev/null 2>&1; }
+first_ref() { local r; for r in "$@"; do ref_exists "$r" && { echo "$r"; return 0; }; done; return 1; }
+dev_ref()     { first_ref origin/dev dev; }          # the server's dev wins over a stale local one
+              # default_compare falls back to the default branch only where no dev branch exists
+default_ref() {
+  local d; d=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)
+  [ -n "$d" ] && { echo "$d"; return 0; }
+  first_ref origin/main main origin/master master
+}
+tip() {  # tip <ref> -> "1b298bd . 4 hours ago . Merge pull request ..."
+  # kept short: diffnav's content pane is narrower than the popup, so a long
+  # line wraps and the banner stops looking like a banner.
+  git log -1 --format='%h  %ar  %s' "$1" 2>/dev/null | cut -c1-70
+}
+
+# ---- banner ---------------------------------------------------------------
+banner() {  # banner <source-label> <change-label> <what> <command>
+  # No line may start with a space: diffnav strips leading whitespace, so any
+  # indentation collapses and columns stop lining up.
+  printf 'COMPARING  %s  ==>  %s\n' "$1" "$2"
+  # base and compare repeat their ref so each row ties back to the first line.
+  [ -n "${SRC_TIP:-}" ] && printf 'base     %s\n' "$(printf '%s  %s' "$1" "$SRC_TIP" | cut -c1-70)"
+  [ -n "${CHG_TIP:-}" ] && printf 'compare  %s\n' "$(printf '%s  %s' "$2" "$CHG_TIP" | cut -c1-70)"
+  printf 'showing  %s\n' "$3"
+  printf 'command  %s\n' "$4"
+}
+launch() {  # launch <source> <change> <what> <git-args...>
+  local src="$1" chg="$2" what="$3"; shift 3
+  local cmd="git $*"
   local tmp; tmp=$(mktemp); git "$@" > "$tmp" 2>/dev/null
   if grep -q '^diff --git' "$tmp"; then
-    [ -n "$label" ] && echo "$label"; diffnav < "$tmp"
+    # diffnav puts the line after "commit <sha>" in its status bar, and the bar
+    # stays put while you walk the file tree. A git show stream carries its own
+    # header, so only a plain diff needs one synthesised.
+    { [ "${1:-}" = diff ] && printf 'commit %s\n' "$(git rev-parse HEAD 2>/dev/null)"
+      banner "$src" "$chg" "$what" "$cmd"; echo; cat "$tmp"; } | diffnav
   else
-    echo "Nothing to show: $label"; echo "  $(git log -1 --format='%h %s' 2>/dev/null)"
+    banner "$src" "$chg" "$what" "$cmd"
+    echo; echo "  No difference between these two. Nothing to show."
+    local dirty; dirty=$(git status --porcelain 2>/dev/null | grep -cv '^??')
+    if [ "${dirty:-0}" -gt 0 ]; then
+      echo "  You do have $dirty file(s) changed but not committed."
+      echo "  Press alt+x and pick \"my uncommitted changes\" to see them."
+    else
+      echo "  Press alt+x to compare something else."
+    fi
     echo; echo "Press any key..."; read -rsn1
   fi
   rm -f "$tmp"
 }
-if ! git diff --quiet; then show "" diff
-elif ! git diff --cached --quiet; then show "(staged)" diff --cached
-# -m --first-parent so a merge commit shows its diff instead of just a header
-else show "(no pending changes - last commit)" show HEAD -m --first-parent; fi
+
+# ---- comparisons ----------------------------------------------------------
+against() {  # against <base-ref> <committed|everything>
+  local base="$1" mode="$2" mb
+  SRC_TIP=$(tip "$base")
+  mb=$(git merge-base "$base" HEAD 2>/dev/null); mb=${mb:0:9}
+  [ -n "$mb" ] || { echo "No common history between $base and $BRANCH."
+                    echo; echo "Press any key..."; read -rsn1; return 1; }
+  if [ "$mode" = committed ]; then
+    CHG_TIP=$(tip HEAD)
+    launch "$base" "$BRANCH" \
+      "commits on $BRANCH that $base does not have" \
+      diff "$base...HEAD"
+  else
+    CHG_TIP="the files as they sit on disk right now"
+    launch "$base" "$BRANCH plus my uncommitted changes" \
+      "everything $BRANCH has since it left $base, committed or not" \
+      diff "$mb"
+  fi
+}
+local_only() {
+  SRC_TIP=$(tip HEAD); CHG_TIP="the files as they sit on disk right now"
+  launch "the newest commit on $BRANCH" "my uncommitted changes" \
+    "edits I have made but not committed, staged or not" diff HEAD
+}
+one_commit() {  # one_commit <sha>
+  SRC_TIP=$(tip "$1^" 2>/dev/null); CHG_TIP=$(tip "$1")
+  launch "the commit just before $1" "commit $1" "what this one commit changed" \
+    show "$1" -m --first-parent
+}
+auto() {  # fallback when there is no branch comparison to make; $1 says why
+  local why="${1:-nothing new to compare against another branch}"
+  if ! git diff --quiet || ! git diff --cached --quiet; then local_only
+  else SRC_TIP=$(tip HEAD^ 2>/dev/null); CHG_TIP=$(tip HEAD)
+       launch "$BRANCH one commit back" "$BRANCH at its newest commit" \
+         "$why, and nothing is uncommitted, so here is that commit alone" \
+         show HEAD -m --first-parent; fi
+}
+
+# ---- picker ---------------------------------------------------------------
+strip_ansi() { sed 's/\x1b\[[0-9;]*m//g'; }
+pick_ref() {  # pick_ref <prompt> -> a branch name
+  git for-each-ref --sort=-committerdate --format='%(refname:short)' \
+      refs/heads refs/remotes 2>/dev/null | grep -v '^origin/HEAD$' \
+    | fzf --prompt="$1 > " --no-multi --cycle --preview-window='right,60%' \
+          --preview='git log --oneline --decorate --color=always -20 {}'
+}
+pick_commit() {  # pick_commit -> a short sha
+  git log --oneline --decorate --color=always -300 2>/dev/null \
+    | fzf --ansi --prompt="commit > " --no-multi --cycle --preview-window='right,60%' \
+          --preview='git show --stat --color=always {1}' \
+    | strip_ansi | awk '{print $1}'
+}
+pick() {
+  command -v fzf >/dev/null 2>&1 || { echo "fzf is not installed."; echo; auto; return; }
+  local dev def choice a b
+  dev=$(dev_ref); def=$(default_ref)
+  local -a rows=()
+  row() { rows+=("$(printf '%s\t%-24s ==>  %-30s %s' "$1" "$2" "$3" "$4")"); }
+  [ -n "$dev" ] && [ "$dev" != "$BRANCH" ] && {
+    row dev-committed  "$dev" "$BRANCH"                "committed work only"
+    row dev-everything "$dev" "$BRANCH + uncommitted"  "committed work plus what is not committed"; }
+  [ -n "$def" ] && [ "$def" != "$BRANCH" ] && [ "$def" != "$dev" ] && {
+    row def-committed  "$def" "$BRANCH"                "committed work only"
+    row def-everything "$def" "$BRANCH + uncommitted"  "committed work plus what is not committed"; }
+  row local  "HEAD"        "my uncommitted work" "staged and unstaged changes only"
+  row commit "its parent"  "one commit"          "pick a commit from this branch's history"
+  row branch "any branch"  "any branch"          "pick the source, then the branch to compare"
+  choice=$(printf '%s\n' "${rows[@]}" \
+    | fzf --delimiter=$'\t' --with-nth=2.. --no-multi --cycle \
+          --prompt="diff > " --header="on $BRANCH   ·   source ==> change" \
+    | cut -f1)
+  case "$choice" in
+    dev-committed)  against "$dev" committed ;;
+    dev-everything) against "$dev" everything ;;
+    def-committed)  against "$def" committed ;;
+    def-everything) against "$def" everything ;;
+    local)          local_only ;;
+    commit)         a=$(pick_commit); [ -n "$a" ] && one_commit "$a" ;;
+    branch)         a=$(pick_ref "source (compare against)") ; [ -z "$a" ] && exit 0
+                    b=$(pick_ref "change (the new work)")    ; [ -z "$b" ] && exit 0
+                    SRC_TIP=$(tip "$a"); CHG_TIP=$(tip "$b")
+                    launch "$a" "$b" "commits on $b that $a does not have" diff "$a...$b" ;;
+    *)              exit 0 ;;
+  esac
+}
+
+# ---- entry ----------------------------------------------------------------
+default_compare() {  # alt+f: the newest commit on this branch, against origin/dev
+  local base; base=$(dev_ref) || base=$(default_ref)
+  # Only when this checkout IS the base branch is there nothing to compare.
+  if [ -z "$base" ] || [ "$base" = "$BRANCH" ] || [ "origin/$BRANCH" = "$base" ]; then
+    auto "$BRANCH is the branch everything else compares against"; return; fi
+  against "$base" committed
+}
+case "${1:-}" in
+  "")   default_compare ;;
+  pick) pick ;;
+  auto) auto ;;
+  *)    echo "usage: spechub-diff [pick|auto]"; exit 2 ;;
+esac
 H
   chmod +x "$BIN/spechub-diff"
 
@@ -1550,28 +1699,38 @@ apply_herdr() {
   have herdr || { say "herdr not installed, skipping keymap"; return 0; }
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
   local mod wt diffkey dashkey filekey filetabkey difftabkey dashtabkey
+  local pickkey picktabkey
   mod=$(cfg_get herdr.chord_modifier alt)
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
-  diffkey=$(cfg_get diffnav.popup_key "alt+d")
+  # f, not d: Windows Terminal keeps alt+shift+d for "duplicate pane", so the
+  # tab half of a d pair never reaches herdr. Both diff keys sit on f instead.
+  diffkey=$(cfg_get diffnav.popup_key "alt+f")
   dashkey=$(cfg_get gh_dash.popup_key "alt+i")
   filekey=$(cfg_get yazi.popup_key "alt+y")
   filetabkey=$(cfg_get yazi.tab_key "alt+shift+y")
-  difftabkey=$(cfg_get diffnav.tab_key "alt+shift+d")
+  difftabkey=$(cfg_get diffnav.tab_key "alt+shift+f")
   dashtabkey=$(cfg_get gh_dash.tab_key "alt+shift+i")
-  [ "$(cfg_get diffnav.enabled true)" = "true" ] || { diffkey=""; difftabkey=""; }
+  pickkey=$(cfg_get diffnav.pick_key "alt+x")
+  picktabkey=$(cfg_get diffnav.pick_tab_key "alt+shift+x")
+  [ "$(cfg_get diffnav.enabled true)" = "true" ] \
+    || { diffkey=""; difftabkey=""; pickkey=""; picktabkey=""; }
   [ "$(cfg_get gh_dash.enabled true)" = "true" ] || { dashkey=""; dashtabkey=""; }
   [ "$(cfg_get yazi.enabled true)"    = "true" ] || { filekey=""; filetabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
-mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+(mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey,
+ pickkey, picktabkey, begin, end) = os.environ["SPECHUB_ARGS"].split("|")
 
 # key, command, description, herdr custom-command type, popup size.
 # type "shell" takes no size: herdr rejects width/height on a non-popup.
 CUSTOM = [
-    (diffkey,    "spechub-diff",                  "diff (diffnav)",     "popup", "90%"),
-    (difftabkey, "spechub-herdr-tab diff spechub-diff", "diff (tab)",         "shell", None),
+    (diffkey,    "spechub-diff",                  "diff: branch vs dev", "popup", "90%"),
+    (difftabkey, "spechub-herdr-tab diff spechub-diff", "diff: branch vs dev (tab)", "shell", None),
+    (pickkey,    "spechub-diff pick",             "diff: pick what to compare", "popup", "90%"),
+    (picktabkey, "spechub-herdr-tab diffpick spechub-diff pick",
+                                                  "diff: pick what to compare (tab)", "shell", None),
     (dashkey,    "spechub-dash",                  "PR dashboard",       "popup", "95%"),
     (dashtabkey, "spechub-herdr-tab dash spechub-dash", "PR dashboard (tab)", "shell", None),
     (filekey,    "yazi",                          "file tree",          "popup", "95%"),
@@ -2258,9 +2417,9 @@ PY
 case "$ACTION" in
   status)
     echo "config: $CFG $([ -f "$CFG" ] && echo '(found)' || echo '(missing, using defaults)')"
-    for t in herdr delta diffnav tuicr yazi glow mermaid-ascii gh; do
+    for t in herdr delta diffnav fzf tuicr yazi glow mermaid-ascii gh; do
       case "$t" in
-        gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; *) k="$t" ;;
+        gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; fzf) k=diffnav ;; *) k="$t" ;;
       esac
       printf '  %-13s %-14s enabled=%s\n' "$t" "$(have "$t" && echo installed || echo 'not installed')" \
         "$(cfg_get "$k.enabled" true)"
@@ -2319,6 +2478,8 @@ case "$ACTION" in
     fi
     [ "$(cfg_get delta.enabled true)"   = "true" ] && install_binary delta dandavison/delta x86_64-unknown-linux-gnu
     [ "$(cfg_get diffnav.enabled true)" = "true" ] && install_binary diffnav dlvhdr/diffnav Linux_x86_64
+    # fzf drives the comparison picker behind spechub-diff pick.
+    [ "$(cfg_get diffnav.enabled true)" = "true" ] && install_binary fzf junegunn/fzf linux_amd64
     write_helpers
     [ "$(cfg_get tuicr.enabled true)"   = "true" ] && apply_tuicr
     apply_yazi

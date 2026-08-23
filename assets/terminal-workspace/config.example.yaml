@@ -20,7 +20,7 @@ herdr:
   # A terminal multiplexer. One program holds many terminal sessions and keeps
   # them running after you disconnect.
   #
-  # A chord is one key combination, such as alt+d. herdr normally wants a
+  # A chord is one key combination, such as alt+f. herdr normally wants a
   # prefix key first. You press the prefix, release it, then press the second
   # key. A chord modifier replaces those two steps with one combination.
   #
@@ -66,11 +66,17 @@ gh_dash:
 
 diffnav:
   enabled: true
-  # A diff viewer with a file tree. The popup shows the most relevant diff:
-  # unstaged, else staged, else HEAD.
-  popup_key: "alt+d"
-  # Same tool, a new tab instead of a popup.
-  tab_key: "alt+shift+d"
+  # A diff viewer with a file tree. The popup compares the branch you are on
+  # against origin/dev, committed work only, and names both sides in a banner.
+  # Repos without a dev branch fall back to the default branch.
+  popup_key: "alt+f"
+  # Same comparison, a new tab instead of a popup.
+  tab_key: "alt+shift+f"
+  # An fzf menu of comparisons: against dev or the default branch, with or
+  # without uncommitted work, one commit, or any branch against any branch.
+  pick_key: "alt+x"
+  # Same menu, a new tab instead of a popup.
+  pick_tab_key: "alt+shift+x"
 
 delta:
   enabled: true
