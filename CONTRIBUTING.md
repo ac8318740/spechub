@@ -7,6 +7,7 @@
 agents/                      – subagent definitions
 hooks/                       – SessionStart hook (CLI symlink + orchestrator injection)
 skills/                      – slash-command skills
+output-styles/               – output styles (ac-writing-style)
 cli/                         – Node.js CLI (TypeScript source + built dist/)
 TROUBLESHOOTING.md           – downstream install diagnostics for Claude Code
 ```

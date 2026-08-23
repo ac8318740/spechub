@@ -238,6 +238,17 @@ CODE=$?
 check "exits 1"                                     '[ "$CODE" -eq 1 ]'
 check "stderr mentions the removed shipped path"     'grep -q "skills/foo/SKILL.md" "$ERR"'
 
+# --- Case 13: output-styles/ is shipped, so adding a style needs a bump ------
+echo "Case 13: output-styles/ac-writing-style.md added, no version bump"
+REPO="$WORK/case13"
+make_base_repo "$REPO"
+new_branch "$REPO" feature
+(cd "$REPO" && mkdir -p output-styles && echo "style" > output-styles/ac-writing-style.md && git add output-styles && git commit -q -m "add output style")
+run_gate "$REPO" main feature
+CODE=$?
+check "exits 1"                                     '[ "$CODE" -eq 1 ]'
+check "stderr mentions the output style file"       'grep -q "output-styles/ac-writing-style.md" "$ERR"'
+
 echo ""
 echo "----------------------------------------"
 printf 'Result: %d passed, %d failed\n' "$pass" "$fail"

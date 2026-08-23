@@ -129,6 +129,10 @@ For work with open decisions, chart it with `/spechub:map` first.
 | `task-checker` | TDD Phase 3 – verifies everything (mock audit, regression, TDD isolation) |
 | `frontend-verifier` | TDD Phase 4 – real browser verification via agent-browser CLI (when frontend configured) |
 
+## Output style
+
+The plugin ships one output style, `ac-writing-style`. It applies the `writing` skill's plain-language rules and the `visual-docs` skill's Minto pyramid to every chat reply. A reply leads with the answer, keeps one idea per sentence, names the actor, and uses no em dash or emoji. Select it with `/output-style` once per project, or set `outputStyle` in `~/.claude/settings.json` for every project. The plugin never forces it on.
+
 ## Language profiles
 
 - **python** – pytest, ruff, mypy
