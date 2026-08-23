@@ -72,6 +72,7 @@ yazi:
   popup_key: "alt+y"          # floating, does not change the tab layout
   tab_key: "alt+shift+y"      # opens a real tab instead
   browser_key: "b"            # hovered file -> the browser you are sitting at
+  line_numbers_key: "#"       # preview markdown as source, line numbers down the left
   show_hidden: true
 
 markdown:

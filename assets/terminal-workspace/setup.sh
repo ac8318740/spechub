@@ -247,13 +247,17 @@ H
 #   spechub-md FILE.md              render to the terminal
 #   spechub-md --preview FILE.md    render into a preview pane: width from
 #                                   $COLUMNS, straight to stdout, no pager
+#   spechub-md --numbered FILE.md   the source instead, line numbers down the
+#                                   left, for quoting a line back in a review
+#   spechub-md --toggle-line-numbers  flip which of the two --preview shows
 #   spechub-md --diagram N FILE.md  one diagram alone, with horizontal scroll
 #   spechub-md --serve FILE.md      serve it for a real browser, print the link
 #   spechub-md --html FILE.md       print that same page as one HTML document
 #   spechub-md --browser FILE.md    open it in the browser you are sitting at
 #
-# While reading, b opens the page in that browser. $SPECHUB_MD_BROWSER_KEY
-# moves it.
+# While reading, b opens the page in that browser and # switches between the
+# rendered document and its source with line numbers. $SPECHUB_MD_BROWSER_KEY
+# and $SPECHUB_MD_LINE_NUMBERS_KEY move them.
 #
 # Text, not images, is deliberate: herdr emits the kitty graphics protocol and
 # no terminal reachable from Windows or Android renders that, and e-ink panels
@@ -269,8 +273,12 @@ OPENER="${SPECHUB_OPENER_URL:-http://127.0.0.1:19989}"
 # The opener refuses anything without this, so its absence is the same as the
 # opener being down - which is exactly how the route probe treats it.
 OPENER_TOKEN="${XDG_CONFIG_HOME:-$HOME/.config}/spechub/opener.token"
-SERVE=0; ONLY=0; PREVIEW=0; HTML=0; BROWSER=0
-usage() { echo "usage: spechub-md [--preview] [--diagram N] [--serve|--html|--browser] FILE.md" >&2; exit 1; }
+SERVE=0; ONLY=0; PREVIEW=0; HTML=0; BROWSER=0; NUMBERED=0; TOGGLE=0
+usage() { echo "usage: spechub-md [--preview] [--numbered] [--toggle-line-numbers] [--diagram N] [--serve|--html|--browser] FILE.md" >&2; exit 1; }
+# The preview pane and the key that flips it are two processes that never meet,
+# so the choice between the rendered view and the source lives in a file both
+# of them can find. One name, defined once, is what keeps them agreeing.
+LINE_NUMBER_FLAG="${XDG_STATE_HOME:-$HOME/.local/state}/spechub/md-line-numbers"
 # A loop rather than a fixed order, so --preview composes with --diagram and
 # a caller can pass them either way round.
 while [ $# -gt 0 ]; do
@@ -279,12 +287,29 @@ while [ $# -gt 0 ]; do
     --html)    HTML=1; shift ;;
     --browser) BROWSER=1; shift ;;
     --preview) PREVIEW=1; shift ;;
+    --numbered) NUMBERED=1; shift ;;
+    --toggle-line-numbers) TOGGLE=1; shift ;;
     --diagram) ONLY="${2:-1}"; shift; [ $# -gt 0 ] && shift ;;
     --)        shift; break ;;
     --*)       usage ;;
     *)         break ;;
   esac
 done
+# The toggle names no file: it changes what the next preview will draw and has
+# nothing to draw itself. So it answers here, before the file check below.
+if [ "$TOGGLE" = "1" ]; then
+  if [ -e "$LINE_NUMBER_FLAG" ]; then
+    rm -f "$LINE_NUMBER_FLAG"
+    echo "spechub-md: markdown previews render again"
+  else
+    # A machine that has never had a state directory is every machine the
+    # first time, so make it rather than fail on it.
+    mkdir -p "$(dirname "$LINE_NUMBER_FLAG")" && : > "$LINE_NUMBER_FLAG" \
+      || { echo "spechub-md: could not write $LINE_NUMBER_FLAG" >&2; exit 1; }
+    echo "spechub-md: markdown previews show source with line numbers"
+  fi
+  exit 0
+fi
 # --preview, --serve and --html are three answers to the same question - where
 # does this end up - so at most one can be true. A preview pane is somewhere to
 # read, not somewhere to run a server or hand a document out of.
@@ -292,6 +317,23 @@ if [ $((SERVE + PREVIEW + HTML + BROWSER)) -gt 1 ]; then
   echo "spechub-md: --preview, --serve, --html and --browser do different things - pick one" >&2
   exit 1
 fi
+# --numbered answers a different question - which of the two views - so it
+# composes with --preview and with nothing else. The others all want the
+# rendered document, and numbered source is not one.
+if [ "$NUMBERED" = "1" ] && [ $((SERVE + HTML + BROWSER)) -gt 0 ]; then
+  echo "spechub-md: --numbered prints the source, so --serve, --html and --browser have nothing to render" >&2
+  exit 1
+fi
+# The flag is what the file manager's key flips, and the pane is the only
+# place it applies: every other route was asked for a rendered document by
+# name, and the opener menu lists the numbered read as its own entry.
+#
+# --diagram is the exception the pane itself holds. It names one drawing to
+# show, which is a different question from which of the two views the pane is
+# on, and a reader who left the flag set and then asked for a diagram still
+# wants the diagram. So an explicit --diagram outranks the flag. An explicit
+# --numbered still wins over it, for the same reason in the other direction.
+if [ "$PREVIEW" = "1" ] && [ "$ONLY" = "0" ] && [ -e "$LINE_NUMBER_FLAG" ]; then NUMBERED=1; fi
 # Node labels set a diagram's width, so padding cannot rescue a wide one.
 # Tightening still buys roughly a third of the height back.
 PAD="${SPECHUB_MD_PAD:--x 2 -y 2}"
@@ -319,11 +361,17 @@ trap "rm -f /tmp/spechub-md.$$.md /tmp/spechub-md-out.$$.md /tmp/spechub-md-art.
 # passed through the binding, because this script already knows the file.
 BROWSE_STATUS=65
 BROWSE_KEY="${SPECHUB_MD_BROWSER_KEY:-b}"
+# The same trick a second time, for the other thing a reader wants mid-document.
+# Wanting a line number happens while reading too - that is the moment you are
+# about to quote one - and by then the file list with its own binding is not in
+# front of you. So the key means the same thing in both places.
+NUMBER_STATUS=66
+NUMBER_KEY="${SPECHUB_MD_LINE_NUMBERS_KEY:-#}"
 KEYS="/tmp/spechub-md-keys.$$"
 
 # A preview pane cannot page, so the same render goes straight to stdout.
 emit() {
-  local f="$1"; shift
+  local f="$1" nk rc; shift
   if [ "$PREVIEW" = "1" ]; then cat "$f"; return; fi
   # The binding is a less feature, so only less is handed it. Setting
   # LESSKEYIN for a pager that never reads it is at best noise, and acting on
@@ -333,10 +381,32 @@ emit() {
       # b is back-a-page in less. ^B and PageUp both still do that, so this
       # costs nothing (measured). LESSKEYIN wants less 582 or newer; older
       # versions ignore it and quietly keep b as it was.
-      printf '#command\n%s quit A\n' "$BROWSE_KEY" > "$KEYS"
+      #
+      # lesskey reads a line starting with # as a comment, so the key that
+      # means line numbers has to be escaped or the binding is silently
+      # dropped and the key does nothing but ring the bell - measured on less
+      # 590, and how this arrived as a bug report. Only a leading # needs it:
+      # backslash means something of its own to lesskey, and \b would bind
+      # backspace rather than the letter.
+      case "$NUMBER_KEY" in
+        '#'*) nk="\\$NUMBER_KEY" ;;
+        *)    nk="$NUMBER_KEY" ;;
+      esac
+      { printf '#command\n'
+        printf '%s quit A\n' "$BROWSE_KEY"
+        printf '%s quit B\n' "$nk"
+      } > "$KEYS"
       LESSKEYIN="$KEYS" "$@" "$f"
-      if [ "$?" = "$BROWSE_STATUS" ]; then
+      rc=$?
+      if [ "$rc" = "$BROWSE_STATUS" ]; then
         "$0" --browser "$FILE"
+        exit $?
+      fi
+      if [ "$rc" = "$NUMBER_STATUS" ]; then
+        # One key, both directions: the view you are not in is the one it
+        # takes you to. $FILE is the markdown throughout, never the rendered
+        # temp copy, so either re-read starts from the source again.
+        if [ "$NUMBERED" = "1" ]; then "$0" "$FILE"; else "$0" --numbered "$FILE"; fi
         exit $?
       fi
       ;;
@@ -369,6 +439,35 @@ for line in f.read_text().split("\n"):
 f.write_text("\n".join(lines) + "\n")
 PY
 }
+
+# Rendered markdown has no line numbers, and a reader who wants to quote a
+# line back in a review needs the file's own. The gutter is as wide as the
+# largest number in it, so the source stays on one column whatever the length.
+numbered() {  # numbered <file> -> stdout
+  local total width avail
+  total=$(awk 'END { print NR }' "$1")
+  width=${#total}
+  [ "$width" -lt 3 ] && width=3
+  if [ "$PREVIEW" = "1" ]; then
+    # A wrapped line makes the gutter lie about which source line you are
+    # looking at, and a pane has no arrow keys to pan with, so it chops.
+    avail=$((COLS - width - 2))
+    [ "$avail" -lt 1 ] && avail=1
+    awk -v w="$width" -v a="$avail" \
+      '{ printf "%" w "d  %s\n", NR, substr($0, 1, a) }' "$1"
+  else
+    awk -v w="$width" '{ printf "%" w "d  %s\n", NR, $0 }' "$1"
+  fi
+}
+
+if [ "$NUMBERED" = "1" ]; then
+  numbered "$FILE" > /tmp/spechub-md.$$.md
+  # -S chops rather than wraps, so the arrow keys pan across a long line
+  # instead of the gutter losing its column. emit sends a pane straight to
+  # stdout and keeps the browser key working in the pager, both unchanged.
+  emit /tmp/spechub-md.$$.md less -SR
+  exit 0
+fi
 
 # --browser names a destination rather than a rendering: work out where the
 # browser actually is, then pick the delivery that reaches it. spechub-open
@@ -1805,13 +1904,27 @@ if "opener.markdown" not in taken:
     parts.append("""
 # The preview pane is narrow, so a wide diagram shows its placeholder there.
 # Enter opens the same renderer full width, where more of them fit.
+#
+# %s is what yazi substitutes for the files being opened, already quoted. Not
+# "$@": an opener template is run as `sh -c '<run>'` with nothing after it, so
+# $0 is "sh" and $@ is empty - measured on yazi 26.8.15, where "$@" left
+# spechub-md with no file at all and Enter did nothing but print its usage.
 [[opener.markdown]]
-run = 'spechub-md "$@"'
+run = 'spechub-md %s'
 block = true
 desc = "Read (spechub-md)"
 
+# Rendered markdown has no line number to quote back in a review, so the same
+# file is also readable as its own source. Second, not first: it answers a
+# narrower question than reading does, and still a readier one than editing.
+# Enter takes the first entry, so O is the key that offers this one.
 [[opener.markdown]]
-run = '${EDITOR:-vi} "$@"'
+run = 'spechub-md --numbered %s'
+block = true
+desc = "Read with line numbers"
+
+[[opener.markdown]]
+run = '${EDITOR:-vi} %s'
 block = true
 desc = "Edit"
 """)
@@ -1864,12 +1977,12 @@ PY
   # [mgr], which is one key that TOML forbids declaring twice. Only the second
   # collides with the entry below, and telling them apart takes the text - both
   # spellings parse to the same list.
-  SPECHUB_ARGS="$(cfg_get yazi.browser_key "b")|$BEGIN|$END" \
+  SPECHUB_ARGS="$(cfg_get yazi.browser_key "b")|$(cfg_get yazi.line_numbers_key "#")|$BEGIN|$END" \
     py "$HOME/.config/yazi/keymap.toml" <<'PY'
 import os, re, sys
 
 path = sys.argv[1]
-key, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+key, numkey, begin, end = os.environ["SPECHUB_ARGS"].split("|")
 text = open(path).read() if os.path.isfile(path) else ""
 # Drop any previous managed region, both to stay idempotent and so what is
 # left to inspect below is exactly the keymap the user wrote.
@@ -1912,6 +2025,20 @@ if not claimed(text):
         """run = 'shell --block -- spechub-md --browser "%h"'\n"""
         'desc = "Open in the browser you are sitting at"'
     )
+    # Flipping the flag changes nothing a reader can see: the pane already
+    # holds the view it drew before the key was pressed. So the binding is two
+    # actions, and peek redraws it.
+    #
+    # --block, though the toggle has nothing to say. Detached, yazi spawns it
+    # and runs peek immediately, and the pane is redrawn while the flag is
+    # still whatever it was - a race the reader settles by pressing the key
+    # twice. Blocking costs a frame and wins it outright.
+    parts.append(
+        "[[mgr.prepend_keymap]]\n"
+        f'on = "{numkey}"\n'
+        "run = [ 'shell --block -- spechub-md --toggle-line-numbers', 'peek --force' ]\n"
+        'desc = "Preview markdown as source with line numbers"'
+    )
 
 # The markers go down even when the binding was conceded, so the shell below
 # can read the region back and see what is missing from it.
@@ -1922,8 +2049,9 @@ PY
   local kmwritten; kmwritten="$(sed -n "/$BEGIN/,/$END/p" "$HOME/.config/yazi/keymap.toml")"
   case "$kmwritten" in *prepend_keymap*) ;; *)
     say "yazi: your keymap.toml already sets mgr.prepend_keymap as an inline"
-    say "     array, which this binding cannot sit beside. Add it there"
-    say "     yourself:  shell --block -- spechub-md --browser \"%h\"" ;;
+    say "     array, which these bindings cannot sit beside. Add them there"
+    say "     yourself:  shell --block -- spechub-md --browser \"%h\""
+    say "     and:       [ 'shell --block -- spechub-md --toggle-line-numbers', 'peek --force' ]" ;;
   esac
   say "yazi config written"
 }
