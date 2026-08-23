@@ -365,10 +365,10 @@ keys both open yazi's help.
 Icons come from a Nerd Font. Without one they render as tofu; install any Nerd
 Font and select it in your terminal.
 
-tuicr was the file tree before yazi and is no longer wired to a key. It stays
-for what it is good at, reading diffs and reviewing pull requests, which
-gh-dash hands to it. The command `tuicr --file .` still browses a tree if you
-want it.
+tuicr was the file tree before yazi. yazi took that job, and tuicr kept the
+one it is better at: reading diffs and reviewing pull requests. gh-dash hands
+it work on the `D` key, which runs `tuicr pr <number>` in the local clone. The
+command `tuicr --file .` still browses a tree if you want it.
 
 ### 6.2. The fork build is temporary
 
@@ -638,9 +638,9 @@ repoPaths:
 keybindings:
   prs:
     - key: D
-      name: tree diff
+      name: review (tuicr)
       command: >
-        gh pr diff {{.PrNumber}} --repo {{.RepoName}} | diffnav
+        cd {{.RepoPath}} && tuicr pr {{.PrNumber}}
     - key: S
       name: agent review
       command: >
@@ -716,7 +716,7 @@ Can not approve your own pull request.
 | `ctrl+d` / `ctrl+u` | Scroll the preview, vim style |
 | `e` | Expand the description |
 | `d` | Built-in diff |
-| `D` | diffnav, with the file tree |
+| `D` | Open the pull request in tuicr and review it there |
 | `S` | Hand the pull request to an agent |
 | `C` or `space` | Check the branch out locally |
 | `w` | Watch checks |
@@ -881,7 +881,7 @@ Documents outlive the session that rendered them, which is what lets a page stil
 2. **Monitor.** `alt+s` shows the sidebar. Blocked needs an answer, done finished and you have not looked, working means leave it alone
 3. **Review locally.** `alt+d` shows what the agent changed. Run the `pre-commit-review` skill in the agent's own pane for a deeper pass
 4. **Ship.** The agent commits, pushes, and opens the pull request from its worktree
-5. **Review the pull request.** `alt+i`, then `p` and `]` to reach Files Changed, `D` for the tree view, `S` to hand it to an agent
+5. **Review the pull request.** `alt+i`, then `p` and `]` to reach Files Changed, `D` to review it in tuicr, `S` to hand it to an agent
 6. **Tear down.** `herdr worktree remove --workspace <id>`, then delete the branch
 
 ## 10. Traps

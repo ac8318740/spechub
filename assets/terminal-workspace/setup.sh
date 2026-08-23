@@ -2028,12 +2028,15 @@ if tw.get("sections"):
 if tw.get("repo_paths"):
     cfg["repoPaths"] = tw["repo_paths"]
 kb = tw.get("keybindings", {}) or {}
-MANAGED = ("tree diff", "agent review", "open in browser")
+# "tree diff" is the old name for the review key, kept here so re-applying
+# over a config written before the rename drops it rather than leaving two
+# bindings on the same key.
+MANAGED = ("review (tuicr)", "tree diff", "agent review", "open in browser")
 prs = [k for k in (cfg.get("keybindings", {}) or {}).get("prs", [])
        if k.get("name") not in MANAGED]
-if kb.get("tree_diff"):
-    prs.append({"key": kb["tree_diff"], "name": "tree diff",
-                "command": "gh pr diff {{.PrNumber}} --repo {{.RepoName}} | diffnav\n"})
+if kb.get("review"):
+    prs.append({"key": kb["review"], "name": "review (tuicr)",
+                "command": "cd {{.RepoPath}} && tuicr pr {{.PrNumber}}\n"})
 if kb.get("agent_review"):
     prs.append({"key": kb["agent_review"], "name": "agent review",
                 "command": 'cd {{.RepoPath}} && claude "/code-review {{.PrNumber}}"\n'})

@@ -702,6 +702,47 @@ print(sum(1 for v in ("prs", "issues") for k in kb.get(v, []) if k.get("key") ==
   fi
 fi
 
+# D is the review keybinding: gh_dash.keybindings.review in the terminal
+# workspace yaml, mirroring the o-binding checks above but for tuicr review.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  printf 'gh_dash:\n  keybindings:\n    review: D\n' > "$WORK/gh-tw-review.yaml"
+  printf 'prSections:\n- {title: Mine, filters: "is:open"}\n' > "$WORK/gh-dash-review.yml"
+  SPECHUB_CFG="$WORK/gh-tw-review.yaml" python3 "$GHKB" "$WORK/gh-dash-review.yml" >/dev/null 2>&1
+  if python3 - "$WORK/gh-dash-review.yml" <<'GHCHK'
+import sys, yaml
+kb = (yaml.safe_load(open(sys.argv[1])) or {}).get("keybindings", {})
+binds = [k for k in kb.get("prs", []) if k.get("key") == "D"]
+assert len(binds) == 1, kb.get("prs")
+b = binds[0]
+assert b.get("name") == "review (tuicr)", b
+assert b.get("command", "").strip() == "cd {{.RepoPath}} && tuicr pr {{.PrNumber}}", b
+GHCHK
+  then ok "apply_ghdash binds D to review (tuicr) for prs"
+  else no "apply_ghdash binds D to review (tuicr) for prs"; fi
+else
+  ok "apply_ghdash D keybinding skipped (no PyYAML)"
+fi
+
+# "tree diff" is the old name for the same D key. Re-applying over a config
+# written before the rename must prune it rather than leave two D bindings
+# stacked on the prs view.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  printf 'keybindings:\n  prs:\n  - {key: D, name: tree diff, command: "gh pr diff {{.PrNumber}} --repo {{.RepoName}} | diffnav"}\n' \
+    > "$WORK/gh-dash-review.yml"
+  SPECHUB_CFG="$WORK/gh-tw-review.yaml" python3 "$GHKB" "$WORK/gh-dash-review.yml" >/dev/null 2>&1
+  if python3 - "$WORK/gh-dash-review.yml" <<'GHCHK'
+import sys, yaml
+kb = (yaml.safe_load(open(sys.argv[1])) or {}).get("keybindings", {})
+binds = [k for k in kb.get("prs", []) if k.get("key") == "D"]
+assert len(binds) == 1, kb.get("prs")
+assert binds[0].get("name") == "review (tuicr)", binds[0]
+GHCHK
+  then ok "re-applying prunes the old 'tree diff' D binding rather than stacking it"
+  else no "re-applying prunes the old 'tree diff' D binding rather than stacking it"; fi
+else
+  ok "tree diff prune check skipped (no PyYAML)"
+fi
+
 # The route that always works: a terminal, and nothing else. script gives the
 # helper a pty, which is what tells it to draw a link rather than give up.
 screen=$(printf x | bare script -qec 'SPECHUB_OPEN_BRIDGE=off spechub-open https://example.com/pr/9' /dev/null 2>/dev/null)

@@ -106,7 +106,7 @@ gh_dash:
   # ctrl+d by default, which is fine in vim and awkward everywhere else.
   page_keys: true
   keybindings:
-    # Pipe the selected pull request into diffnav.
-    tree_diff: "D"
+    # Open the selected pull request in tuicr, which reviews it in place.
+    review: "D"
     # Hand the selected pull request to an agent. Empty disables it.
     agent_review: "S"
