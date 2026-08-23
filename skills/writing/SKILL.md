@@ -172,7 +172,7 @@ A bullet or a cell that runs as a full sentence keeps its period.
 
 ## What this skill leaves to others
 
-This skill owns words, sentences, paragraphs, and heading style. Document shape belongs to the `visual-docs` skill, which owns the Minto pyramid, SCQA openings, MECE sections, and diagram-first structure. Chat replies and commit subject lines sit outside the standard.
+This skill owns words, sentences, paragraphs, and heading style. Document shape belongs to the `visual-docs` skill. That skill owns the Minto pyramid, SCQA (situation, complication, question, answer) openings, MECE (mutually exclusive, collectively exhaustive) sections, and diagram-first structure. Chat replies and commit subject lines sit outside the standard.
 
 Straight quotes are the only quotes. The two tables in `vocabulary.md` hold every replaced word and every replaced mark.
 

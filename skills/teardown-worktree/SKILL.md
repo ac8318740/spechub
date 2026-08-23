@@ -4,9 +4,9 @@ description: "Retire finished git worktrees – move this session back to the ma
 argument-hint: "[worktree name, or nothing to scan the whole repo]"
 ---
 
-# Teardown Worktree
+# Teardown worktree
 
-Retire finished worktrees. Move this session out first, then remove the checkouts, then delete the branches they were on.
+Retire finished worktrees. Move this session out first. Remove the worktrees next. Delete the branches they were on last.
 
 Removing a worktree this session is standing in, or one whose herdr workspace holds a running agent, destroys live work. The order below exists to prevent that. Follow it.
 
@@ -22,7 +22,7 @@ One repo per run: the repo that owns the cwd. Resolve its main checkout from any
 dirname "$(git rev-parse --git-common-dir)"
 ```
 
-Submodules are separate repos with their own worktrees and their own remote. If the repo has submodules carrying worktrees, say so and offer a second run against each. Never scan them silently.
+Submodules are separate repos with their own worktrees and their own remote. If the repo has submodules carrying worktrees, say so. Offer a second run against each. Never scan them silently.
 
 ## 1. Build the plan
 
@@ -42,11 +42,11 @@ Skip the main checkout. Classify each remaining worktree on three checks.
 git -C <path> status --porcelain --ignore-submodules=all
 ```
 
-`--ignore-submodules=all` is not optional. Without it, a submodule checked out ahead of its committed pointer reads as uncommitted work, so every worktree in a repo with submodules looks dirty and nothing is ever cleaned up.
+`--ignore-submodules=all` is not optional. Without it, a submodule checked out ahead of its committed pointer reads as uncommitted work. Then every worktree in a repo with submodules looks dirty, and you never remove any of them.
 
-Report pointer drift in the plan anyway, from `git -C <path> submodule status`, so a real pending bump stays visible instead of being silently ignored.
+Report pointer drift in the plan anyway, from `git -C <path> submodule status`. That way a real pending bump stays visible, and the ignore flag does not hide it.
 
-Any output from the status check means skip. Do not remove it, do not force it. List it at the end with what it holds.
+Any output from the status check means skip. Do not remove it. Do not force it. List it at the end with what it holds.
 
 ### Merged
 
@@ -64,7 +64,7 @@ A squash merge leaves the branch tip unreachable from either, so the ancestor ch
 gh pr list --head <branch> --state merged --json number,mergedAt
 ```
 
-Merged by either test counts as merged. Merged by neither means skip and report.
+Merged by either test counts as merged. Merged by neither means skip. Report it.
 
 ### Live agent
 
@@ -75,7 +75,7 @@ herdr worktree list
 herdr workspace list
 ```
 
-Treat `working`, `blocked`, `idle` and `done` as a live agent and skip. Only `unknown` makes a worktree a candidate.
+Treat `working`, `blocked`, `idle` and `done` as a live agent. Skip it. Only `unknown` makes a worktree a candidate.
 
 `idle` does not mean empty. In herdr it means an agent is present and waiting for input, which is exactly the state a session someone left open sits in. Reading `idle` as nobody home is the quickest way to destroy a running session.
 
@@ -95,14 +95,14 @@ Print one table: worktree, branch, whether the local branch goes, whether the re
 
 Do this before removing anything, and only after approval.
 
-`EnterWorktree` cannot do this. It rejects the main checkout outright, "is the main working tree, not a linked worktree", so no tool call walks the session cwd back. `ExitWorktree` only unwinds a worktree this session entered with `EnterWorktree`, and is a no-op for a session that launched inside one.
+`EnterWorktree` cannot do this. It rejects the main checkout outright, "is the main working tree, not a linked worktree". So no tool call walks the session cwd back. `ExitWorktree` only unwinds a worktree this session entered with `EnterWorktree`. It is a no-op for a session that launched inside one.
 
-The removal itself is what moves the session. Run it from the main checkout against an absolute path and the harness resets the session cwd to the main checkout on its own. Confirm with `pwd` afterwards.
+The removal itself is what moves the session. Run it from the main checkout against an absolute path. The harness then resets the session cwd to the main checkout on its own. Confirm with `pwd` afterwards.
 
 - Entered with `EnterWorktree`: call `ExitWorktree` with `action: "keep"` first. Keep, not remove: step 3 owns the removal, and `remove` refuses on a worktree entered by path.
-- Launched inside the worktree: no call needed. Take the pane with you below, remove the checkout in step 3, then confirm the new cwd.
+- Launched inside the worktree: no call needed. Take the pane with you below. Remove the worktree in step 3. Confirm the new cwd after.
 
-Under herdr, move the pane out first, or step 3 deletes the checkout under a pane still sitting in that workspace.
+Under herdr, move the pane out first, or step 3 deletes the worktree under a pane still sitting in that workspace.
 
 Find the main repo's workspace in `herdr workspace list`: `worktree.repo_root` is the main checkout and `worktree.is_linked_worktree` is `false`. More than one workspace can match, since any pane opened at the repo root qualifies. Prefer the one whose label is the repo name, and ask when it stays ambiguous. Then:
 
@@ -110,7 +110,7 @@ Find the main repo's workspace in `herdr workspace list`: `worktree.repo_root` i
 herdr pane move "$HERDR_PANE_ID" --new-tab --workspace <main-workspace-id> --focus
 ```
 
-If no such workspace exists, because it was closed earlier, create one first:
+If no such workspace exists because it closed earlier, create one first:
 
 ```bash
 herdr workspace create --cwd <main-root> --label <repo-name> --no-focus
@@ -118,11 +118,11 @@ herdr workspace create --cwd <main-root> --label <repo-name> --no-focus
 
 The pane's own shell keeps the deleted directory as its cwd, which `herdr pane process-info` reports as `(deleted)`. That is cosmetic, and only visible once the agent exits and hands the prompt back.
 
-## 3. Remove the checkouts
+## 3. Remove the worktrees
 
 Which command to use depends on whether herdr still holds a workspace for the worktree. Read `open_workspace_id` from `herdr worktree list`.
 
-With a workspace, let herdr do it, so the sidebar row goes with the checkout:
+With a workspace, let herdr do it, so the sidebar row goes with the worktree:
 
 ```bash
 herdr worktree remove --workspace <workspace-id> --force
@@ -135,9 +135,9 @@ git -C <main-root> worktree remove --force <path>
 git -C <main-root> worktree prune
 ```
 
-`--force` is required, not a shortcut. Plain `git worktree remove` refuses on any worktree containing submodules with "working trees containing submodules cannot be moved or removed", which is every worktree in a repo that has them. Forcing is safe only because step 1 already proved the tree clean. It is never a way past uncommitted changes.
+`--force` is necessary here, not a shortcut. Plain `git worktree remove` refuses on any worktree containing submodules with "working trees containing submodules cannot be moved or removed". That refusal hits every worktree in a repo that has them. Forcing is safe only because step 1 already proved the tree clean. It is never a way past uncommitted changes.
 
-The worktree this session just left usually has no workspace any more. Moving the last pane out closes the workspace but leaves the checkout on disk, so that one takes the plain git path.
+The worktree this session just left usually has no workspace any more. Moving the last pane out closes the workspace but leaves the worktree on disk. That one takes the plain git path.
 
 ## 4. Delete the branches
 
@@ -150,7 +150,7 @@ git -C <main-root> push origin --delete <branch>
 
 Use `branch -d`, never `-D`. If `-d` refuses, the merge test was wrong. Stop and report rather than forcing.
 
-Skip the remote delete when the branch was never pushed, or when merging the pull request already deleted it. The `git fetch origin --prune` from step 1 keeps a branch GitHub already removed from looking like work to do.
+Skip the remote delete when nobody ever pushed the branch, or when merging the pull request already deleted it. The `git fetch origin --prune` from step 1 keeps a branch GitHub already removed from looking like work to do.
 
 ## 5. Report
 
@@ -170,5 +170,5 @@ State what went and what stayed:
 - Reach for `git branch -D` when `-d` refuses.
 - Call a branch unmerged on the ancestor check alone. Check the pull request before deciding.
 - Delete a remote branch with no merged pull request and no ancestor in an integration branch.
-- Remove a checkout with plain git while herdr still holds a workspace for it. That leaves a sidebar row pointing at nothing.
+- Remove a worktree with plain git while herdr still holds a workspace for it. That leaves a sidebar row pointing at nothing.
 - Scan a submodule's worktrees without saying so.

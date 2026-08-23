@@ -16,7 +16,7 @@ decision and the reasoning behind it. Write one only when the decision is:
 1. **Hard to reverse** – undoing it later means real rework, not an edit.
 2. **Surprising without context** – a competent newcomer would ask "why on
    earth is it like this?"
-3. **A real trade-off** – something was genuinely given up. A choice with no
+3. **A real trade-off** – the decision gives something up. A choice with no
    losing side needs no record.
 
 Most decisions meet none of these. Do not lower the bar – an ADR that records
@@ -24,8 +24,8 @@ an obvious choice buries the ones that matter.
 
 ### Writing one
 
-- Path: `docs/adr/NNNN-slug.md`. Number is the highest existing number plus
-  one, zero-padded to four digits. Create the directory lazily. If the file
+- Path: `docs/adr/NNNN-slug.md`. The number is the highest existing number
+  plus one, zero-padded to four digits. Create the directory lazily. If the file
   for that number appeared since you scanned (a parallel teammate wrote one),
   renumber to the new highest plus one. In agent teams, ADR writing is a
   shared-file concern – route it through the orchestrator or the sequential
@@ -42,10 +42,10 @@ an obvious choice buries the ones that matter.
 ```markdown
 # One invariant path for the command line tool
 
-Every skill calls the SpecHub command line tool as
+Every skill calls the command line tool for SpecHub as
 `~/.claude/spechub/bin/spechub`. The SessionStart hook repoints that symlink
-at the copy inside the current plugin cache. A version bump moves the target,
-and no skill file changes.
+at the copy inside the current plugin cache. A version bump moves the target.
+No skill file changes.
 
 ## Considered options
 
@@ -55,14 +55,14 @@ agent context and a continuous integration run each start without that PATH.
 ## Consequences
 
 A skill that runs before the hook finds no symlink. An absent symlink means
-the hook did not run, so the fix is to restart Claude Code.
+the hook has not run. The fix is to restart Claude Code.
 ```
 
-### The index is generated
+### You generate the index
 
-After writing any ADR, rewrite `docs/adr/index.md` in full: one line per
-ADR, sorted by number ascending, number and slug from the filename, title
-from the file's first heading:
+After writing any ADR, rewrite `docs/adr/index.md` in full, with one line
+per ADR. Sort the lines by number, ascending. Each line takes its number
+and slug from the filename, and its title from the file's first heading:
 
 ```markdown
 - [0001](0001-one-node-type.md) – One node type for questions and work
@@ -79,7 +79,7 @@ sharpened a fuzzy term, coined one – record it:
 - **Cross-domain terms** go in `CONTEXT.md` at the repo root.
 - **Domain terms** go in `spechub/specs/<domain>/CONTEXT.md`, beside that
   domain's `spec.md`. Find the domain in `spechub/domain-map.yaml`.
-- Both files are created lazily, and there is no index file –
+- Create both files lazily; there is no index file –
   `domain-map.yaml` already lists every domain.
 
 Format: a `# Glossary` heading, then one `**term** – definition` line per
@@ -88,8 +88,8 @@ term, alphabetical, one or two sentences each. Each definition follows the
 specs, no scratch content. The moment it accepts anything else it becomes
 another document competing with the living specs.
 
-**The human wins.** A glossary records the vocabulary humans agreed on, so it
-is never rewritten to match code. If code and glossary disagree, surface the
+**The human wins.** A glossary records the vocabulary humans agreed on.
+Nobody rewrites it to match code. If code and glossary disagree, surface the
 disagreement to the user; only a human decision changes the entry.
 
 ## Neither

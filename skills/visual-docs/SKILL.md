@@ -5,9 +5,9 @@ description: "Write or restructure documentation that leads with a diagram and d
 
 # visual-docs
 
-*A reader should understand the shape of a system from one diagram, then find every detail in a section that maps to a part of that diagram.*
+*A reader should see the system's shape from one diagram. They then find every detail in a section that maps to a part of it.*
 
-Most technical docs fail the same way: they explain in reading order rather than importance order, so the reader assembles the picture themselves and only knows what mattered at the end. This skill inverts that. One diagram carries the whole shape, and the section structure is derived from the diagram rather than invented alongside it.
+Most technical docs fail the same way. They explain in reading order rather than importance order, so the reader assembles the picture themselves and only knows what mattered at the end. This skill inverts that. One diagram carries the whole shape. This skill derives the section structure from the diagram rather than inventing it independently.
 
 This skill owns document shape. Prose follows the `writing` skill.
 
@@ -46,8 +46,8 @@ reuse the diagram's node labels verbatim. This is mechanical, not stylistic:
 
 Three exemptions, and only these three:
 
-**Start and end boxes.** A box showing what comes in or what is left behind is not
-a step, so there is nothing to write a section about. In a workflow diagram, the
+**Start and end boxes.** A box for what comes in, or what remains after, is not
+a step and needs no section. In a workflow diagram, the
 incoming request and the final stored output are both this.
 
 **Two boxes, one command.** Sometimes two boxes are worth drawing separately
@@ -61,7 +61,7 @@ system, so no box should exist for it.
 Anything else without a match is a defect in one of the two. Do not add a section
 to justify a node, or a node to justify a section.
 
-End the lead diagram with a mapping table when the doc has more than four sections, so the reader can jump from a box to its detail.
+End the lead diagram with a mapping table when the doc has more than four sections. It lets the reader jump from a box to its detail.
 
 ## 2. Minto pyramid
 
@@ -78,13 +78,13 @@ End the lead diagram with a mapping table when the doc has more than four sectio
 | **Question**     | the question the complication raises             |
 | **Answer**       | your answer, stated flat – this is the takeaway  |
 
-The answer goes in the opening, never at the end. A reader who stops after four sentences must still leave with the conclusion. Compress the situation and complication ruthlessly – one clause each is often enough – but never skip straight to the answer, because an answer with no complication reads as an arbitrary assertion.
+The answer goes in the opening, never at the end. A reader who stops after four sentences must still leave with the conclusion. Compress the situation and complication ruthlessly – one clause each is often enough. Never skip straight to the answer. An answer with no complication reads as an arbitrary assertion.
 
 ### 2.2. The vertical rule
 
 *A heading's takeaway must summarise everything under it, and nothing else.*
 
-Under every H2 and H3, one italic line stating the section's point. Test it by deleting the section body: if the takeaway no longer tells the reader what they need, it was a label rather than a summary. Headings like "Overview" or "Details" always fail this, because they describe the section's position instead of its content.
+Under every H2 and H3, one italic line stating the section's point. Test it by deleting the section body. If the takeaway no longer tells the reader what they need, it was a label rather than a summary. Headings like "Overview" or "Details" always fail this, because they describe the section's position instead of its content.
 
 ### 2.3. The horizontal rule
 
@@ -108,7 +108,7 @@ Then order the siblings deliberately, and say which order you used if it is not 
 
 *One diagram carries the doc. Others are local aids and are optional.*
 
-### 3.1. Pick the type from the question being answered
+### 3.1. Pick the type from the question the diagram answers
 
 | Question                        | Diagram              |
 | ------------------------------- | -------------------- |
@@ -158,7 +158,7 @@ The `<br/>` line carries the file, agent, or command name. Someone who knows the
 4. **Write the SCQA opening.** Do this before the body, so the body has a claim to support
 5. **Fill each section.** Takeaway line first, then detail
 6. **Check MECE across siblings**, then verify every node has a section and every section has a node
-7. **Verify the diagram renders.** Mermaid fails silently in some viewers – check the fenced block parses and no label contains an unescaped quote or bracket
+7. **Verify the diagram renders.** Mermaid fails silently in some viewers. Check that the fenced block parses, with no unescaped quote or bracket in any label
 
 ## 6. Anti-patterns
 

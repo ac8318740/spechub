@@ -4,7 +4,7 @@ description: Anchor the session's load-bearing state so it survives an imminent 
 argument-hint: "[focus note – what must not be lost]"
 ---
 
-## User Input
+## User input
 
 ```text
 $ARGUMENTS
@@ -15,29 +15,30 @@ that must survive above all else.
 
 # Compact and continue
 
-Compaction replaces the conversation with a summary. The summary is better
-than any template at carrying narrative, but it is lossy, and a handful of
-items are too load-bearing to risk losing. This skill writes those items to an
-anchor file that a SessionStart hook re-injects the moment the session resumes,
+Compaction replaces the conversation with a summary. The summary carries the
+narrative better than any template, but it is lossy. A handful of items are
+too load-bearing to risk losing. This skill writes those items to an anchor
+file. A SessionStart hook re-injects the file the moment the session resumes,
 so the work continues here rather than moving to a fresh agent.
 
 ## Only the lead session runs this
 
 Run `[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" ]` before anything else. If it is
-set, you are a subagent or a teammate: stop, and tell whoever launched you that
-this skill runs only in the lead session, and that a subagent or teammate should
-report its state to the lead instead – in its final message, or by
-`SendMessage` – and let the lead hand off or compact. The reason: a child
-session would write the lead's quiet marker and the shared `spechub/HANDOFF.md`
-anchor, both of which belong to the lead alone.
+set, you are a subagent or a teammate. Stop. Tell whoever launched you that
+this skill runs only in the lead session. A subagent or a teammate reports its
+state to the lead instead – in its final message, or by `SendMessage`. The lead
+then hands off or compacts.
+
+A child session would write the lead's quiet marker and the shared
+`spechub/HANDOFF.md` anchor. Both belong to the lead alone.
 
 ## The rule that governs the anchor
 
 *Reference state. Never copy it.*
 
 An anchor that restates the repository is a second copy of the repository,
-correct only at the instant it was written. Anything the resumed session can
-run a command to learn, it should run the command.
+correct only at the instant you wrote it. If the resumed session can learn
+something by running a command, it should run the command.
 
 | Do not write it down        | The resumed session gets it from                                                 |
 | --------------------------- | -------------------------------------------------------------------------------- |
@@ -56,21 +57,21 @@ conversation holds it.
 
 ## What only an anchor can carry
 
-*Five things. Nothing on disk records them, so if they are not written they are
-lost.*
+*Five things. Nothing on disk records them, so the resumed session loses
+anything you leave out.*
 
 1. **Next action** – the single concrete thing to do first
-2. **Decisions made** – so they are not reopened and re-argued
+2. **Decisions made** – so the resumed session does not reopen and re-argue them
 3. **Open questions and blockers** – including anything waiting on the user
-4. **Agent-team file ownership** – each scope, its agent, its non-overlapping
-   file set, and any shared file to touch only after the team finishes. Not
-   derivable from anything
+4. **Agent-team file ownership** – each scope, its agent, and its
+   non-overlapping files. Name any shared file to touch only after the team
+   finishes. Nothing derives it
 5. **Suggested skills** – which skills the resumed session should invoke, by name
 
 Omit any that do not apply. Do not pad.
 
-The anchor is read by a session that no longer has this conversation – plain
-language, no unexplained shorthand.
+A session that no longer has this conversation reads the anchor. Prose follows
+the `writing` skill.
 
 ## Redaction
 
@@ -82,33 +83,42 @@ not optional.
 
 ## Write the anchor
 
-Write `spechub/HANDOFF.md`. The frontmatter is **mandatory and machine-read** –
-the hook ignores any file without the marker, so a user's own unrelated
-`HANDOFF.md` is never touched:
+Write `spechub/HANDOFF.md`. The frontmatter is **mandatory and machine-read**.
+The hook ignores any file without the marker, so it never touches a user's own
+unrelated `HANDOFF.md`. Set `map` to the name of the active map, or to
+`ad-hoc` when none is active. Set `created` to the current time, in ISO 8601
+UTC. The title repeats the `map` value.
+
+**Example** – the anchor for a session working the `tracker-backend` map:
 
 ```markdown
 ---
 spechub_handoff: 1
-map: <map name, or "ad-hoc" when none is active>
-created: <ISO 8601 UTC>
+map: tracker-backend
+created: 2026-08-22T14:05:00Z
 ---
-# SpecHub handoff – <map name or "ad-hoc">
+# SpecHub handoff – tracker-backend
 
 ## Next action
-<the single concrete next step>
+Fix the two `node frontier` cases in `cli/src/lib/frontier.test.ts` that fail
+on a map with no resolved nodes.
 
 ## Decisions made
-- <decision, so it is not reopened>
+- The files backend ships first. It needs no network, so a fresh clone works
+  offline.
+- One node type covers both questions and work. Node 14 holds the reasoning.
 
 ## Open questions / blockers
-- <...>
+- Node 21 waits on the user. Does a resolved node keep its `blocked-by` links?
 
 ## Agent-team plan
-- Scope A – <agent> – files: <non-overlapping set>
-- After team (shared files, sequential): <list>
+- Scope A – cli-nodes-opus – files: `cli/src/lib/frontier.ts`, `cli/src/lib/frontier.test.ts`
+- Scope B – hooks-sonnet – files: `hooks/session-start-handoff.sh`
+- After team (shared files, sequential): `cli/src/index.ts`, `README.md`
 
 ## Suggested skills
-- <skill name> – <why>
+- implement – the frontier holds three work nodes an agent can settle alone
+- record-context – node 14 settled a term the glossary does not hold yet
 
 ## References
 - Map state: `~/.claude/spechub/bin/spechub node walk` and `~/.claude/spechub/bin/spechub node frontier`
@@ -118,40 +128,40 @@ created: <ISO 8601 UTC>
 ## Silence the context-pressure nudge
 
 With the anchor written, write the quiet marker. The context-pressure Stop hook
-reads it and stays silent for the rest of this session – the compaction is
-already arranged, so there is nothing left to nudge about:
+reads the marker and stays silent for the rest of this session. You have
+already arranged the compaction, so the hook has nothing left to nudge about:
 
 ```bash
 d="${SPECHUB_CONTEXT_PRESSURE_DIR:-${TMPDIR:-/tmp}/spechub-context-pressure}"
 [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && mkdir -p "$d" && : > "$d/${CLAUDE_CODE_SESSION_ID}.quiet" || true
 ```
 
-`CLAUDE_CODE_SESSION_ID` is this session's own id – the gate at the top ruled
-out the child sessions where it would name the parent instead – so the marker
-lands exactly where the hook looks for it. If the variable is unset, skip this
-step and tell the user: the hook will keep nudging, which is noisy but harmless.
-The marker is cleared automatically when the session compacts, because the hook
-resets its state on `SessionStart` with `source: compact`, so the nudge can
-return once the context grows again.
+`CLAUDE_CODE_SESSION_ID` is this session's own id, so the marker lands exactly
+where the hook looks for it. The gate at the top ruled out the child sessions,
+where the variable names the parent instead. If the variable is unset, skip
+this step. Tell the user that the hook keeps nudging, which is noisy but
+harmless. The hook clears the marker when the session compacts. It resets its
+state on `SessionStart` with `source: compact`, so the nudge returns once the
+context grows again.
 
 ## Hand over the compact line
 
-A skill cannot run `/compact` itself, so write the user a `/compact` line
-steered at this work – naming the next action and anything they flagged in the
-focus note.
+A skill cannot run `/compact` itself. Write the user a `/compact` line steered
+at this work. Name the next action, and anything they flagged in the focus
+note.
 
-Tell them: run that `/compact` line, then type `continue`. The hook re-injects
-the anchor and retires it, so it can never load twice.
+Tell them to run that `/compact` line, then to type `continue`. The hook
+re-injects the anchor and retires it, so the anchor never loads twice.
 
 `spechub/HANDOFF.md` is transient working state. If `.gitignore` does not cover
-it, say so – it holds conversation content and should not be committed.
+it, say so. The file holds conversation content, so nobody should commit it.
 
 ## Notes
 
-- **The reload fires only when the session start source is `compact`.** Not on
-  a fresh start, on resuming an earlier session, or after clearing the context,
-  so a stale anchor never leaks into unrelated work. Moving the work to a
-  genuinely new session is the `handoff` skill's job
+- **The reload fires only when the session start source is `compact`**. It
+  does not fire on a fresh start, on resuming an earlier session, or after
+  clearing the context. A stale anchor therefore never leaks into unrelated
+  work. The `handoff` skill moves the work to a genuinely new session
 - **Consume-once.** The hook retires the anchor as it injects it, moving it to
   `spechub/handoffs/<map>/<created>.md` (legacy
   `spechub/changes/<name>/handoffs/` when that directory still exists).

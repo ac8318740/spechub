@@ -11,7 +11,7 @@ You can delete it. As of 0.8.0, the orchestrator instructions load automatically
 ## Why remove it
 
 - **Silent staleness.** The path pins your project to a single plugin version. Upgrades leave the `@import` pointing at old orchestrator rules.
-- **Time-bomb breakage.** Claude Code cleans up orphaned plugin versions from its cache after 7 days. Once the pinned version is gone, the `@import` path 404s.
+- **Time-bomb breakage.** Claude Code cleans up orphaned plugin versions from its cache after 7 days. Once Claude Code removes the pinned version, the `@import` path 404s.
 - **Duplication.** Leaving the line in place while running 0.8.0+ loads the same content twice – harmless but wasteful.
 
 ## What to do
@@ -20,4 +20,4 @@ You can delete it. As of 0.8.0, the orchestrator instructions load automatically
 2. Remove any line matching `@import .../plugins/cache/ac8318740-plugins/spechub/<version>/CLAUDE.md`.
 3. Save the file. No other changes needed.
 
-Next time you start a session in that project, SpecHub's orchestrator instructions load via the hook – nothing else is required.
+Next time you start a session in that project, SpecHub's orchestrator instructions load via the hook, and you do nothing else.
