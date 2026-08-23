@@ -262,7 +262,7 @@ It cannot attach to `chrome://` and `about:` pages.
 The opener shows a page from a dev VM in this laptop's default browser. It is
 a second service, not part of the bridge. The bridge carries CDP to a Chrome
 the extension drives. The opener takes a document and opens a tab. See
-`docs/adr/0004-document-opener-service.md` for why these stay apart.
+`docs/adr/0006-document-opener-service.md` for why these stay apart.
 
 Two tasks run it:
 

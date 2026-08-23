@@ -51,5 +51,6 @@ if (first && !first.startsWith('-') && !known.has(first)) {
 }
 
 // parseAsync, not parse: `handoff watch` has an async action handler, and
-// parse() would return before it settled.
+// `config check` probes the machine on a promise. parse() would return
+// before either settled.
 await program.parseAsync();

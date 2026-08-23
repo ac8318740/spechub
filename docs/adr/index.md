@@ -1,4 +1,6 @@
 - [0001](0001-ste-writing-standard.md) – One plain-language writing standard based on ASD-STE100
 - [0002](0002-version-gate-not-auto-bump.md) – A PR gate enforces the version bump; CI never bumps it
 - [0003](0003-handoff-ack-command.md) – Handoff acknowledgement is a CLI command, not a reply
-- [0004](0004-document-opener-service.md) – A document opener service on the laptop, separate from the Playwriter bridge
+- [0004](0004-dev-setup-per-host.md) – Dev setup is declared per host, not per project
+- [0005](0005-two-orchestrators-per-host.md) – Two orchestrators coexist on one host, and a checkout's path names its owner
+- [0006](0006-document-opener-service.md) – A document opener service on the laptop, separate from the Playwriter bridge

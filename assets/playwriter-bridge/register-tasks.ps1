@@ -13,7 +13,7 @@
 # The opener gets its own tunnel task rather than a second -R on the bridge's
 # connection. ssh runs with ExitOnForwardFailure=yes, so one wedged port fails
 # the whole connection – sharing one would mean a stuck opener port takes the
-# bridge down too. See docs/adr/0004-document-opener-service.md.
+# bridge down too. See docs/adr/0006-document-opener-service.md.
 #
 # The tasks run as the current user, so the ssh-agent named pipe (SID-ACL'd
 # to the user) stays reachable and no password is ever stored. Each task

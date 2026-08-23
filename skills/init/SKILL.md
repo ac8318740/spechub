@@ -11,6 +11,23 @@ allowed-tools: AskUserQuestion, Read, Write, Edit, Bash, Glob, Grep
 $ARGUMENTS
 ```
 
+## Step 0: check the host setup
+
+The dev setup of the machine – which orchestrator hosts terminal panes and git
+worktrees, which browser-verification modes work here – is declared per host,
+not per project. The same repository opens on several machines with different
+setups, so those answers live in the global config of the SpecHub command-line
+interface, under the `host.*` keys, and `/spechub:host` is what writes them.
+Init reports the host setup; init does not ask for it.
+
+```bash
+~/.claude/spechub/bin/spechub config get host
+```
+
+Exit code 0 prints the declared axes. Exit code 2 means nothing is declared on
+this machine yet. On exit 2, tell the user to run `/spechub:host`, then carry on
+– a project can be initialised before its machine is declared.
+
 ## Step 1: detect and propose defaults
 
 Scan the project root for `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`, etc. If empty, infer from `$ARGUMENTS`. Read the matching profile from the plugin's `profiles/` directory.
@@ -166,7 +183,20 @@ Evolving reference for browser-based verification. Updated by the frontend-verif
 
 ### 6c. Browser environment setup
 
-Ask the user which browser environment they'll use via AskUserQuestion:
+The host declares which browser modes are available on this machine – the
+`host.browser.*` keys written by `/spechub:host`. This question records the
+*project's* preference, which is a different thing: what the project would like
+to use, out of what the machine can do. Offer only the modes the host declares
+available. When the host has declared nothing, offer all three and tell the user
+to run `/spechub:host`, so the preference can later be resolved against a real
+machine.
+
+Ask the user which browser environment they'll use via AskUserQuestion.
+
+The block below is the full menu, not the question to ask verbatim. Drop the
+entry for any mode the host declares unavailable before asking, and leave the
+rest of the block as it stands. When the host has declared nothing – no
+`host.browser.*` keys are set – there is nothing to drop, so ask it as written.
 
 ```json
 {
@@ -175,7 +205,7 @@ Ask the user which browser environment they'll use via AskUserQuestion:
     {"label": "Remote browser (Playwriter bridge)", "description": "Best experience – drive Chrome on your desktop/laptop via the Playwriter extension over SSH. Choose this if you develop on a remote VM."},
     {"label": "Headless (automatic)", "description": "The frontend-verifier launches headless Chromium when needed. No setup required. Choose this for CI or if you don't need to see the browser."},
     {"label": "Local with display", "description": "Launch a visible browser on this machine. Choose this for desktop Linux, macOS, or WSL with display access."},
-    {"label": "Skip for now", "description": "I'll set this up later via /spechub:config set frontend.browser.mode"}
+    {"label": "Skip for now", "description": "I'll set this up later – /spechub:host to declare what this machine can do, /spechub:config set frontend.browser.mode for the project's preference"}
   ]
 }
 ```
@@ -330,6 +360,7 @@ Orchestrator: [strict/relaxed]
 Spec sync:    [enabled/disabled]
 Frontend:     [verified/not configured]
 Browser:      [agent-browser installed / not applicable]
+Host:         [pane/worktree tool + browser modes declared / not declared – run /spechub:host]
 Config:       spechub/project.yaml
 Domain map:   spechub/domain-map.yaml ([n] domains / starter – fill in)
 Output style: spechub:ac-writing-style (global) | (project) | not set
@@ -337,6 +368,16 @@ CLAUDE.md:    untouched (orchestrator loads via SessionStart hook)
 
 Next: describe what you want to build, or run /spechub:bootstrap for existing code.
 ```
+
+The `Host:` line and the `Orchestrator:` line four rows above it are unrelated,
+so fill each in from its own source. `Orchestrator:` is this project's
+delegation policy – whether the coordinator may write code itself (`relaxed`) or
+must hand every piece of it to a subagent (`strict`) – and it comes from
+`workflow.tdd.orchestrator_strict` in `project.yaml`. `Host:` is about the
+machine rather than the project: which tool hosts terminal panes and git
+worktrees (herdr, Orca, or none) and which browser-verification modes work here.
+The pane/worktree tool and the browser modes are both declared by
+`/spechub:host` and read from the global config, not from `project.yaml`.
 
 ## project.yaml schema
 
