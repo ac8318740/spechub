@@ -1,0 +1,20 @@
+# Domain Map: maps source paths to spec domains
+# Read by spec sync, /spechub:archive, /spechub:bootstrap
+
+domains:
+  skills:
+    paths:
+      - skills/
+    description: The workflow skills – the prose instructions an agent follows for each SpecHub command and model-invoked technique
+  agents:
+    paths:
+      - agents/
+    description: The TDD pipeline subagents – test-writer, task-executor, task-checker, frontend-verifier
+  cli:
+    paths:
+      - cli/src/
+    description: The bundled spechub CLI – map nodes, project config, init and archive commands
+  hooks:
+    paths:
+      - hooks/
+    description: Claude Code session hooks – SessionStart symlink maintenance and handoff delivery
