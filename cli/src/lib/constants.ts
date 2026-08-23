@@ -7,6 +7,7 @@ export const MAPS_DIR = 'maps';
 export const SPECS_DIR = 'specs';
 export const ARCHIVE_DIR = 'archive';
 export const CONFIG_FILE = 'config.yaml';
+export const PROJECT_FILE = 'project.yaml';
 export const DOMAIN_MAP_FILE = 'domain-map.yaml';
 
 /**

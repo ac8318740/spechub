@@ -11285,7 +11285,7 @@ var init_source = __esm({
 // src/lib/constants.ts
 import { join } from "node:path";
 import { homedir } from "node:os";
-var SPECHUB_DIR, CHANGES_DIR, MAPS_DIR, SPECS_DIR, ARCHIVE_DIR, CONFIG_FILE, VOCABULARY_PATH, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE, GLOBAL_DATA_DIR;
+var SPECHUB_DIR, CHANGES_DIR, MAPS_DIR, SPECS_DIR, ARCHIVE_DIR, CONFIG_FILE, PROJECT_FILE, VOCABULARY_PATH, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE, GLOBAL_DATA_DIR;
 var init_constants = __esm({
   "src/lib/constants.ts"() {
     "use strict";
@@ -11295,6 +11295,7 @@ var init_constants = __esm({
     SPECS_DIR = "specs";
     ARCHIVE_DIR = "archive";
     CONFIG_FILE = "config.yaml";
+    PROJECT_FILE = "project.yaml";
     VOCABULARY_PATH = join("skills", "writing", "vocabulary.md");
     GLOBAL_CONFIG_DIR = join(
       process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
@@ -11318,6 +11319,10 @@ function fail(message, hint) {
 }
 function ensureDir(path) {
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
+}
+function readYaml(path) {
+  if (!existsSync(path)) return null;
+  return (0, import_yaml.parse)(readFileSync(path, "utf-8"));
 }
 function readMarkdown(path) {
   if (!existsSync(path)) return null;
@@ -16230,19 +16235,485 @@ var init_node = __esm({
   }
 });
 
+// src/lib/global-config.ts
+import { existsSync as existsSync8, mkdirSync as mkdirSync2, readFileSync as readFileSync5, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname2 } from "node:path";
+function hostAxis(key) {
+  return HOST_AXES.find((axis) => axis.key === key);
+}
+function unknownHostKey(key) {
+  const allowed = HOST_AXES.map((axis) => axis.key).join(", ");
+  return new ConfigValidationError(`Unknown config key "${key}". Allowed host keys: ${allowed}`);
+}
+function hostIsASection() {
+  return new ConfigValidationError(
+    "`host` is a section; set an axis such as host.orchestrator"
+  );
+}
+function assertReadableKey(key) {
+  if (key.startsWith("host.") && !hostAxis(key)) throw unknownHostKey(key);
+}
+function assertSettableKey(key) {
+  if (key === "host") throw hostIsASection();
+  assertReadableKey(key);
+}
+function readGlobalConfig(file) {
+  if (!existsSync8(file)) return {};
+  const raw = readFileSync5(file, "utf-8");
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    throw new ConfigFileError(`Could not parse ${file}: ${err.message}`);
+  }
+}
+function writeGlobalConfig(config, file) {
+  mkdirSync2(dirname2(file), { recursive: true });
+  writeFileSync3(file, JSON.stringify(config, null, 2) + "\n", "utf-8");
+}
+function parseValue(key, raw) {
+  if (key !== "host" && !key.startsWith("host.")) {
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+    if (raw.trim() !== "" && !Number.isNaN(Number(raw))) return Number(raw);
+    return raw;
+  }
+  assertSettableKey(key);
+  const axis = hostAxis(key);
+  if (axis.kind === "enum") {
+    if (!axis.values.includes(raw)) {
+      throw new ConfigValidationError(
+        `Invalid value "${raw}" for ${key}. Allowed values: ${axis.values.join(", ")}`
+      );
+    }
+    return raw;
+  }
+  const normalized = raw.toLowerCase();
+  if (TRUE_VALUES.includes(normalized)) return true;
+  if (FALSE_VALUES.includes(normalized)) return false;
+  throw new ConfigValidationError(
+    `Invalid value "${raw}" for ${key}. Expected a boolean: ${TRUE_VALUES.join("/")} or ${FALSE_VALUES.join("/")}`
+  );
+}
+function setKey(config, key, value) {
+  assertSettableKey(key);
+  const next = structuredClone(config);
+  const parts = key.split(".");
+  const leaf = parts.pop();
+  let cursor = next;
+  for (const part of parts) {
+    const child = cursor[part];
+    if (typeof child !== "object" || child === null || Array.isArray(child)) {
+      cursor[part] = {};
+    }
+    cursor = cursor[part];
+  }
+  cursor[leaf] = value;
+  return next;
+}
+function unsetKey(config, key) {
+  assertReadableKey(key);
+  const next = structuredClone(config);
+  const parts = key.split(".");
+  const leaf = parts.pop();
+  let cursor = next;
+  for (const part of parts) {
+    const child = cursor[part];
+    if (typeof child !== "object" || child === null || Array.isArray(child)) {
+      return { config: next, removed: false };
+    }
+    cursor = child;
+  }
+  if (!(leaf in cursor)) return { config: next, removed: false };
+  delete cursor[leaf];
+  return { config: next, removed: true };
+}
+function getKey(config, key) {
+  assertReadableKey(key);
+  let cursor = config;
+  for (const part of key.split(".")) {
+    if (typeof cursor !== "object" || cursor === null || Array.isArray(cursor)) {
+      cursor = void 0;
+      break;
+    }
+    cursor = cursor[part];
+  }
+  if (cursor !== void 0) return { status: "set", value: cursor };
+  const required = key === "host" ? true : hostAxis(key)?.required ?? false;
+  return { status: "unset", required };
+}
+function inertDependency(config, key) {
+  const dependency = hostAxis(key)?.meaningfulWhen;
+  if (!dependency) return void 0;
+  const current = getKey(config, dependency.key);
+  const met = current.status === "set" && current.value === dependency.value;
+  return met ? void 0 : dependency;
+}
+var HOST_AXES, ConfigValidationError, ConfigFileError, TRUE_VALUES, FALSE_VALUES;
+var init_global_config = __esm({
+  "src/lib/global-config.ts"() {
+    "use strict";
+    HOST_AXES = [
+      {
+        key: "host.orchestrator",
+        kind: "enum",
+        required: true,
+        values: ["herdr", "orca", "none"]
+      },
+      { key: "host.browser.remote", kind: "boolean", required: true },
+      { key: "host.browser.headless", kind: "boolean", required: true },
+      { key: "host.browser.local", kind: "boolean", required: true },
+      { key: "host.preview.tailscale_serve", kind: "boolean", required: false },
+      {
+        key: "host.element_picker",
+        kind: "enum",
+        required: false,
+        values: ["stagewise", "orca-design-mode", "none"]
+      },
+      {
+        // How Orca runs: `local` is a desktop app on the developer's own machine,
+        // `remote` a headless `orca serve` elsewhere, viewed through a paired
+        // client. Says nothing about anything unless Orca is the orchestrator.
+        key: "host.orca.topology",
+        kind: "enum",
+        required: false,
+        values: ["local", "remote"],
+        meaningfulWhen: { key: "host.orchestrator", value: "orca" }
+      }
+    ];
+    ConfigValidationError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "ConfigValidationError";
+      }
+    };
+    ConfigFileError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "ConfigFileError";
+      }
+    };
+    TRUE_VALUES = ["true", "yes", "on"];
+    FALSE_VALUES = ["false", "no", "off"];
+  }
+});
+
+// src/lib/host-status.ts
+function isBrowserAxis(key) {
+  return BROWSER_AXIS_KEY_SET.has(key);
+}
+function requiredHostAxisKeys({ hasFrontend }) {
+  return HOST_AXES.filter((axis) => axis.required).filter((axis) => hasFrontend || !isBrowserAxis(axis.key)).map((axis) => axis.key);
+}
+function fallbackBrowserMode(declared) {
+  return BROWSER_MODE_PRIORITY.find((mode) => declared[mode] === true);
+}
+function declaredBrowserModes(config) {
+  const declared = {};
+  for (const mode of BROWSER_MODE_PRIORITY) {
+    const result = getKey(config, BROWSER_AXIS_KEYS[mode]);
+    if (result.status === "set" && typeof result.value === "boolean") {
+      declared[mode] = result.value;
+    }
+  }
+  return declared;
+}
+function record(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return void 0;
+  return value;
+}
+function projectHostContext(projectYaml, hasProject = true) {
+  const project = record(projectYaml);
+  const frontend = project ? project.frontend : void 0;
+  const hasFrontend = hasProject && frontend !== void 0 && frontend !== null;
+  const browser = record(frontend)?.browser;
+  const rawMode = record(browser)?.mode;
+  const preferredMode = BROWSER_MODE_PRIORITY.find((mode) => mode === rawMode);
+  const rawPort = record(browser)?.cdp_port;
+  const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : preferredMode === "remote" ? DEFAULT_REMOTE_CDP_PORT : DEFAULT_CDP_PORT;
+  return { hasProject, hasFrontend, preferredMode, cdpPort };
+}
+var BROWSER_MODE_PRIORITY, BROWSER_AXIS_KEYS, BROWSER_AXIS_KEY_SET, ORCHESTRATOR_PROBES, CHROMIUM_BINARIES, DEFAULT_REMOTE_CDP_PORT, DEFAULT_CDP_PORT;
+var init_host_status = __esm({
+  "src/lib/host-status.ts"() {
+    "use strict";
+    init_global_config();
+    BROWSER_MODE_PRIORITY = ["remote", "headless", "local"];
+    BROWSER_AXIS_KEYS = {
+      remote: "host.browser.remote",
+      headless: "host.browser.headless",
+      local: "host.browser.local"
+    };
+    BROWSER_AXIS_KEY_SET = new Set(Object.values(BROWSER_AXIS_KEYS));
+    ORCHESTRATOR_PROBES = {
+      herdr: { binary: "herdr", args: ["api"] },
+      orca: { binary: "orca-ide", args: ["status", "--json"] }
+    };
+    CHROMIUM_BINARIES = [
+      "chromium",
+      "chromium-browser",
+      "google-chrome",
+      "google-chrome-stable"
+    ];
+    DEFAULT_REMOTE_CDP_PORT = 19988;
+    DEFAULT_CDP_PORT = 9555;
+  }
+});
+
+// src/lib/host-probe.ts
+import { spawnSync } from "node:child_process";
+import { accessSync, constants } from "node:fs";
+import { request } from "node:http";
+import { delimiter, join as join10 } from "node:path";
+function binaryOnPath(binary) {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (!dir) continue;
+    try {
+      accessSync(join10(dir, binary), constants.X_OK);
+      return true;
+    } catch {
+    }
+  }
+  return false;
+}
+function firstBinaryOnPath(binaries) {
+  return binaries.find(binaryOnPath);
+}
+function commandSucceeds(binary, args) {
+  const result = spawnSync(binary, [...args], {
+    stdio: "ignore",
+    timeout: PROBE_TIMEOUT_MS,
+    shell: false
+  });
+  return result.status === 0;
+}
+function cdpPortAnswers(port, host = "127.0.0.1") {
+  return new Promise((resolve6) => {
+    let settled = false;
+    const finish = (answered) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      req.destroy();
+      resolve6(answered);
+    };
+    const req = request(
+      { host, port, path: "/json/version", method: "GET", timeout: PROBE_TIMEOUT_MS },
+      (res) => {
+        res.resume();
+        finish(true);
+      }
+    );
+    const deadline = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
+    req.on("timeout", () => finish(false));
+    req.on("error", () => finish(false));
+    req.end();
+  });
+}
+var PROBE_TIMEOUT_MS;
+var init_host_probe = __esm({
+  "src/lib/host-probe.ts"() {
+    "use strict";
+    PROBE_TIMEOUT_MS = 2e3;
+  }
+});
+
 // src/commands/config.ts
 var config_exports = {};
 __export(config_exports, {
   register: () => register6
 });
-import { existsSync as existsSync8, readFileSync as readFileSync5, writeFileSync as writeFileSync3 } from "node:fs";
-function readGlobalConfig() {
-  if (!existsSync8(GLOBAL_CONFIG_FILE)) return {};
-  return JSON.parse(readFileSync5(GLOBAL_CONFIG_FILE, "utf-8"));
+import { join as join11 } from "node:path";
+function reportingUserErrors(action) {
+  try {
+    action();
+  } catch (err) {
+    if (err instanceof ConfigValidationError || err instanceof ConfigFileError) {
+      console.error(source_default.red(err.message));
+      process.exit(1);
+    }
+    throw err;
+  }
 }
-function writeGlobalConfig(config) {
-  ensureDir(GLOBAL_CONFIG_DIR);
-  writeFileSync3(GLOBAL_CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf-8");
+async function reportingUserErrorsAsync(action) {
+  try {
+    await action();
+  } catch (err) {
+    if (err instanceof ConfigValidationError || err instanceof ConfigFileError) {
+      console.error(source_default.red(err.message));
+      process.exit(1);
+    }
+    throw err;
+  }
+}
+function qualifier(key, required) {
+  if (key !== "host" && !hostAxis(key)) return "";
+  return ` (${required ? "required" : "optional"})`;
+}
+function loadProjectContext() {
+  const root = findProjectRoot();
+  if (!root) return projectHostContext(void 0, false);
+  return projectHostContext(readYaml(join11(root, SPECHUB_DIR, PROJECT_FILE)), true);
+}
+async function detectHostAxes(wanted, project) {
+  const detected = /* @__PURE__ */ new Map();
+  if (wanted.has("host.orchestrator")) {
+    const running = Object.keys(ORCHESTRATOR_PROBES).find(
+      (name) => firstBinaryOnPath([ORCHESTRATOR_PROBES[name].binary]) !== void 0
+    );
+    if (running) detected.set("host.orchestrator", running);
+  }
+  const chromiumKeys = [BROWSER_AXIS_KEYS.headless, BROWSER_AXIS_KEYS.local].filter(
+    (key) => wanted.has(key)
+  );
+  if (chromiumKeys.length > 0 && firstBinaryOnPath(CHROMIUM_BINARIES)) {
+    for (const key of chromiumKeys) detected.set(key, true);
+  }
+  if (wanted.has(BROWSER_AXIS_KEYS.remote) && project.hasFrontend) {
+    if (await cdpPortAnswers(project.cdpPort)) detected.set(BROWSER_AXIS_KEYS.remote, true);
+  }
+  return detected;
+}
+async function hostAxisStatuses(config, project) {
+  const required = new Set(requiredHostAxisKeys({ hasFrontend: project.hasFrontend }));
+  const declared = /* @__PURE__ */ new Map();
+  for (const axis of HOST_AXES) {
+    const result = getKey(config, axis.key);
+    if (result.status === "set") declared.set(axis.key, result.value);
+  }
+  const undeclared = new Set(HOST_AXES.map((axis) => axis.key).filter((key) => !declared.has(key)));
+  const detected = await detectHostAxes(undeclared, project);
+  return HOST_AXES.map((axis) => {
+    const base = { key: axis.key, required: required.has(axis.key) };
+    if (declared.has(axis.key)) {
+      return { ...base, status: "declared", value: declared.get(axis.key) };
+    }
+    if (detected.has(axis.key)) {
+      return { ...base, status: "detected", value: detected.get(axis.key) };
+    }
+    return { ...base, status: "unset" };
+  });
+}
+function formatValue(status) {
+  if (status.status === "unset") return source_default.dim("-");
+  return typeof status.value === "string" ? status.value : JSON.stringify(status.value);
+}
+function printHostAxes(project, axes) {
+  console.log(source_default.bold("Host"));
+  for (const axis of axes) {
+    const status = axis.status === "declared" ? source_default.green("declared") : source_default.dim(axis.status);
+    console.log(
+      `  ${axis.key.padEnd(AXIS_KEY_WIDTH)}  ${formatValue(axis).padEnd(10)}  ${status.padEnd(8)}  ${source_default.dim(axis.required ? "required" : "optional")}`
+    );
+  }
+  const where = !project.hasProject ? "no SpecHub project here" : project.hasFrontend ? `project frontend: browser mode ${project.preferredMode ?? "unspecified"}, CDP port ${project.cdpPort}` : "project has no frontend configured";
+  console.log(source_default.dim(`
+${where}`));
+}
+function checkRequiredAxes(report, config, project) {
+  report.heading("Required host axes are set");
+  const why = project.hasFrontend ? " (this project has a frontend)" : "";
+  for (const key of requiredHostAxisKeys({ hasFrontend: project.hasFrontend })) {
+    const result = getKey(config, key);
+    if (result.status === "set") {
+      report.line("pass", `${key} = ${JSON.stringify(result.value)}`);
+    } else {
+      const note = isBrowserAxis(key) ? why : "";
+      report.missing(`${key} is unset${note} - set it with \`spechub config set ${key} <value>\``);
+    }
+  }
+}
+function checkOrchestrator(report, config) {
+  report.heading("Declared orchestrator responds");
+  const result = getKey(config, "host.orchestrator");
+  if (result.status !== "set") {
+    report.line("info", "host.orchestrator is unset - nothing to probe");
+    return;
+  }
+  const orchestrator = result.value;
+  if (orchestrator === "none") {
+    report.line("pass", "host.orchestrator is none - nothing to probe");
+    return;
+  }
+  const probe = ORCHESTRATOR_PROBES[orchestrator];
+  if (!probe) {
+    report.line("info", `host.orchestrator is ${String(orchestrator)} - no probe known`);
+    return;
+  }
+  const command = [probe.binary, ...probe.args].join(" ");
+  if (!firstBinaryOnPath([probe.binary])) {
+    report.line("fail", `${probe.binary} is not on PATH (host.orchestrator is ${orchestrator})`);
+    return;
+  }
+  if (!commandSucceeds(probe.binary, probe.args)) {
+    report.line("fail", `\`${command}\` did not answer (host.orchestrator is ${orchestrator})`);
+    return;
+  }
+  report.line("pass", `\`${command}\` answered`);
+}
+async function browserModeWorks(mode, project) {
+  if (mode === "remote") {
+    const ok = await cdpPortAnswers(project.cdpPort);
+    return {
+      ok,
+      detail: ok ? `CDP port ${project.cdpPort} answered` : `nothing answered on CDP port ${project.cdpPort}`
+    };
+  }
+  const binary = firstBinaryOnPath(CHROMIUM_BINARIES);
+  return {
+    ok: binary !== void 0,
+    detail: binary ? `found ${binary} on PATH` : `no Chromium or Chrome binary on PATH (looked for ${CHROMIUM_BINARIES.join(", ")})`
+  };
+}
+async function checkDeclaredBrowserModes(report, config, project) {
+  report.heading("Declared browser modes work");
+  const declared = declaredBrowserModes(config);
+  let probed = false;
+  for (const mode of BROWSER_MODE_PRIORITY) {
+    const key = BROWSER_AXIS_KEYS[mode];
+    if (declared[mode] !== true) continue;
+    probed = true;
+    const { ok, detail } = await browserModeWorks(mode, project);
+    report.line(ok ? "pass" : "fail", `${key} is true and ${detail}`);
+  }
+  if (!probed) report.line("info", "no browser mode is declared true - nothing to probe");
+}
+function checkPreferredBrowserMode(report, config, project) {
+  report.heading("Project's preferred browser mode is available");
+  if (!project.hasFrontend || !project.preferredMode) {
+    report.line("info", "this project states no browser mode preference");
+    return;
+  }
+  const preferred = project.preferredMode;
+  const declared = declaredBrowserModes(config);
+  if (declared[preferred] === true) {
+    report.line("pass", `project prefers ${preferred} and this host declares it available`);
+    return;
+  }
+  const fallback = fallbackBrowserMode(declared);
+  if (fallback) {
+    report.line(
+      "pass",
+      `project prefers ${preferred}, which this host does not declare; falling back to ${fallback}`
+    );
+    return;
+  }
+  report.line(
+    "fail",
+    `project prefers ${preferred}, but this host declares no browser mode available (set one of ${BROWSER_MODE_PRIORITY.map((m) => BROWSER_AXIS_KEYS[m]).join(", ")} to true)`
+  );
+}
+function checkOptionalAxes(report, config) {
+  report.heading("Optional axes (informational only)");
+  for (const axis of HOST_AXES.filter((a) => !a.required)) {
+    const result = getKey(config, axis.key);
+    if (result.status !== "set") {
+      report.line("info", `${axis.key} is unset`);
+      continue;
+    }
+    const dependency = inertDependency(config, axis.key);
+    const note = dependency ? ` - inert unless ${dependency.key} is ${dependency.value}` : "";
+    report.line("info", `${axis.key} = ${JSON.stringify(result.value)}${note}`);
+  }
 }
 function register6(program3) {
   const configCmd = program3.command("config").description("Manage global configuration");
@@ -16250,50 +16721,133 @@ function register6(program3) {
     console.log(GLOBAL_CONFIG_FILE);
   });
   configCmd.command("list").description("Show all settings").option("--json", "output as JSON").action((opts) => {
-    const config = readGlobalConfig();
-    if (opts.json) {
-      console.log(JSON.stringify(config, null, 2));
-      return;
-    }
-    if (Object.keys(config).length === 0) {
-      console.log(source_default.dim("No configuration set."));
-      return;
-    }
-    for (const [key, value] of Object.entries(config)) {
-      console.log(`${key} = ${JSON.stringify(value)}`);
-    }
+    reportingUserErrors(() => {
+      const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+      if (opts.json) {
+        console.log(JSON.stringify(config, null, 2));
+        return;
+      }
+      if (Object.keys(config).length === 0) {
+        console.log(source_default.dim("No configuration set."));
+        return;
+      }
+      for (const [key, value] of Object.entries(config)) {
+        console.log(`${key} = ${JSON.stringify(value)}`);
+      }
+    });
+  });
+  configCmd.command("show").description("Show the host setup: every axis, declared or merely detected").option("--json", "output as JSON").action(async (opts) => {
+    await reportingUserErrorsAsync(async () => {
+      const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+      const project = loadProjectContext();
+      const axes = await hostAxisStatuses(config, project);
+      if (opts.json) {
+        console.log(
+          JSON.stringify(
+            { hasProject: project.hasProject, hasFrontend: project.hasFrontend, axes },
+            null,
+            2
+          )
+        );
+        return;
+      }
+      printHostAxes(project, axes);
+    });
+  });
+  configCmd.command("check").description("Check the host setup against what this machine can actually do").action(async () => {
+    await reportingUserErrorsAsync(async () => {
+      const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+      const project = loadProjectContext();
+      const report = new CheckReport();
+      checkRequiredAxes(report, config, project);
+      checkOrchestrator(report, config);
+      await checkDeclaredBrowserModes(report, config, project);
+      checkPreferredBrowserMode(report, config, project);
+      checkOptionalAxes(report, config);
+      report.finish();
+    });
   });
   configCmd.command("get").description("Get a config value").argument("<key>", "config key").action((key) => {
-    const config = readGlobalConfig();
-    if (key in config) {
-      const value = config[key];
-      console.log(typeof value === "string" ? value : JSON.stringify(value));
-    } else {
-      process.exit(1);
-    }
+    reportingUserErrors(() => {
+      const result = getKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
+      if (result.status === "unset") {
+        console.error(source_default.yellow(`${key} is unset${qualifier(key, result.required)}`));
+        process.exit(2);
+      }
+      console.log(
+        typeof result.value === "string" ? result.value : JSON.stringify(result.value)
+      );
+    });
   });
   configCmd.command("set").description("Set a config value").argument("<key>", "config key").argument("<value>", "config value").action((key, value) => {
-    const config = readGlobalConfig();
-    if (value === "true") config[key] = true;
-    else if (value === "false") config[key] = false;
-    else if (!isNaN(Number(value))) config[key] = Number(value);
-    else config[key] = value;
-    writeGlobalConfig(config);
-    console.log(source_default.green(`Set ${key} = ${JSON.stringify(config[key])}`));
+    reportingUserErrors(() => {
+      const parsed = parseValue(key, value);
+      const config = setKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key, parsed);
+      writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
+      console.log(source_default.green(`Set ${key} = ${JSON.stringify(parsed)}`));
+      const dependency = inertDependency(config, key);
+      if (dependency) {
+        console.error(
+          source_default.yellow(
+            `Warning: ${key} has no effect unless ${dependency.key} is ${dependency.value}`
+          )
+        );
+      }
+    });
   });
   configCmd.command("unset").description("Remove a config value").argument("<key>", "config key").action((key) => {
-    const config = readGlobalConfig();
-    delete config[key];
-    writeGlobalConfig(config);
-    console.log(source_default.green(`Removed ${key}`));
+    reportingUserErrors(() => {
+      const { config, removed } = unsetKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
+      if (!removed) {
+        console.log(source_default.dim(`${key} was not set`));
+        return;
+      }
+      writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
+      console.log(source_default.green(`Removed ${key}`));
+    });
   });
 }
+var AXIS_KEY_WIDTH, CheckReport;
 var init_config = __esm({
   "src/commands/config.ts"() {
     "use strict";
     init_source();
     init_constants();
+    init_global_config();
+    init_host_status();
+    init_host_probe();
+    init_project();
     init_utils();
+    AXIS_KEY_WIDTH = Math.max(...HOST_AXES.map((axis) => axis.key.length));
+    CheckReport = class {
+      number = 0;
+      failed = false;
+      missingRequired = false;
+      counts = { pass: 0, fail: 0, info: 0 };
+      heading(title) {
+        this.number += 1;
+        console.log(source_default.bold(`
+${this.number}. ${title}`));
+      }
+      line(outcome, message) {
+        this.counts[outcome] += 1;
+        if (outcome === "fail") this.failed = true;
+        const label = outcome === "pass" ? source_default.green("PASS") : outcome === "fail" ? source_default.red("FAIL") : source_default.dim("INFO");
+        console.log(`   ${label} ${message}`);
+      }
+      /** A required axis is unset: reported like any failure, but it sets exit 2. */
+      missing(message) {
+        this.missingRequired = true;
+        this.line("fail", message);
+      }
+      finish() {
+        console.log(
+          `
+${this.counts.pass} passed, ${this.counts.fail} failed, ${this.counts.info} informational`
+        );
+        process.exitCode = this.missingRequired ? 2 : this.failed ? 1 : 0;
+      }
+    };
   }
 });
 
@@ -16386,15 +16940,15 @@ function writeAck(args) {
   if (!existsSync9(file)) {
     throw new Error(`No handoff file at ${file}. Check the path the handoff gave you.`);
   }
-  const record = {
+  const record2 = {
     decision,
     reason: normaliseReason(args.reason),
     sessionId: resolveSessionId(args.sessionId),
     at: (/* @__PURE__ */ new Date()).toISOString()
   };
-  writeAtomically(ackPath(file), `${JSON.stringify(record, null, 2)}
+  writeAtomically(ackPath(file), `${JSON.stringify(record2, null, 2)}
 `);
-  return record;
+  return record2;
 }
 function readAck(file) {
   let raw;
@@ -16432,10 +16986,10 @@ var init_ackfile = __esm({
 // src/lib/ackwatch.ts
 import { readFileSync as readFileSync7, statSync as statSync2 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { basename, join as join10 } from "node:path";
+import { basename, join as join12 } from "node:path";
 function transcriptPath(cwd, sessionId, projectsDir) {
-  const base = projectsDir ?? join10(homedir2(), ".claude", "projects");
-  return join10(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
+  const base = projectsDir ?? join12(homedir2(), ".claude", "projects");
+  return join12(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
 }
 function parseAck(text) {
   const match = ACK_PATTERN.exec(text ?? "");
@@ -16459,21 +17013,21 @@ function parseLines(lines) {
   }
   return records;
 }
-function isSidechain(record) {
-  return record.isSidechain === true;
+function isSidechain(record2) {
+  return record2.isSidechain === true;
 }
-function isDelivery(record, token) {
-  if (record.type !== "queue-operation" || record.operation !== "remove") return false;
-  const content = record.content;
+function isDelivery(record2, token) {
+  if (record2.type !== "queue-operation" || record2.operation !== "remove") return false;
+  const content = record2.content;
   if (typeof content !== "string") return false;
   return content.startsWith(CROSS_SESSION_PREFIX) && content.includes(token);
 }
-function isTurnBoundary(record) {
-  return record.type === "assistant" && record.message?.stop_reason === "end_turn";
+function isTurnBoundary(record2) {
+  return record2.type === "assistant" && record2.message?.stop_reason === "end_turn";
 }
-function findSendMessage(record) {
-  if (record.type !== "assistant") return void 0;
-  const content = record.message?.content;
+function findSendMessage(record2) {
+  if (record2.type !== "assistant") return void 0;
+  const content = record2.message?.content;
   if (!Array.isArray(content)) return void 0;
   for (const block of content) {
     if (block === null || typeof block !== "object") continue;
@@ -16485,9 +17039,9 @@ function findSendMessage(record) {
   }
   return void 0;
 }
-function findTextAck(record) {
-  if (record.type !== "assistant") return void 0;
-  const content = record.message?.content;
+function findTextAck(record2) {
+  if (record2.type !== "assistant") return void 0;
+  const content = record2.message?.content;
   if (!Array.isArray(content)) return void 0;
   for (const block of content) {
     if (block === null || typeof block !== "object") continue;
@@ -16499,24 +17053,24 @@ function findTextAck(record) {
   }
   return void 0;
 }
-function findTranscriptAck(record, options) {
-  const sent = findSendMessage(record);
+function findTranscriptAck(record2, options) {
+  const sent = findSendMessage(record2);
   if (sent && (!sidecarIsAuthoritative(options) || sent.decision !== null)) return sent;
-  return options.fresh ? findTextAck(record) : void 0;
+  return options.fresh ? findTextAck(record2) : void 0;
 }
 function sidecarIsAuthoritative(options) {
   return options.file !== void 0;
 }
 function findSidecarAck(file, ackAfter) {
-  const record = readAck(file);
-  if (record === null) return void 0;
-  if (ackAfter !== void 0 && !(Date.parse(record.at) >= ackAfter)) return void 0;
+  const record2 = readAck(file);
+  if (record2 === null) return void 0;
+  if (ackAfter !== void 0 && !(Date.parse(record2.at) >= ackAfter)) return void 0;
   return {
     to: null,
-    message: record.reason,
+    message: record2.reason,
     via: "cli",
-    decision: record.decision,
-    reason: record.reason.length > 0 ? record.reason : null
+    decision: record2.decision,
+    reason: record2.reason.length > 0 ? record2.reason : null
   };
 }
 function mentionsFile(input, file) {
@@ -16530,9 +17084,9 @@ function mentionsFile(input, file) {
   const name = basename(file);
   return serialized.includes(file) || name.length > 0 && serialized.includes(name);
 }
-function isEngagement(record, file) {
-  if (record.type !== "assistant") return false;
-  const content = record.message?.content;
+function isEngagement(record2, file) {
+  if (record2.type !== "assistant") return false;
+  const content = record2.message?.content;
   if (!Array.isArray(content)) return false;
   for (const block of content) {
     if (block === null || typeof block !== "object") continue;
@@ -16547,12 +17101,12 @@ function scanFromAnchor(records, anchor, options) {
   const scan = { boundaries: 0, engaged: false };
   if (anchor < 0) return scan;
   for (let i = anchor; i < records.length; i += 1) {
-    const record = records[i];
-    if (isSidechain(record)) continue;
-    if (!scan.engaged) scan.engaged = isEngagement(record, options.file);
+    const record2 = records[i];
+    if (isSidechain(record2)) continue;
+    if (!scan.engaged) scan.engaged = isEngagement(record2, options.file);
     if (scan.ack !== void 0) continue;
-    scan.ack = findTranscriptAck(record, options);
-    if (scan.ack === void 0 && isTurnBoundary(record)) scan.boundaries += 1;
+    scan.ack = findTranscriptAck(record2, options);
+    if (scan.ack === void 0 && isTurnBoundary(record2)) scan.boundaries += 1;
   }
   return scan;
 }
@@ -16564,7 +17118,7 @@ function withSidecar(result, options) {
 function resolveAnchor(records, options) {
   if (options.fresh) return records.length > 0 ? 0 : -1;
   const token = options.token;
-  return records.findIndex((record) => !isSidechain(record) && isDelivery(record, token));
+  return records.findIndex((record2) => !isSidechain(record2) && isDelivery(record2, token));
 }
 function requireOneMode(options) {
   const hasToken = typeof options.token === "string" && options.token.length > 0;
@@ -16752,7 +17306,7 @@ function register8(program3) {
     "Acknowledge a handoff: write accept or decline, with a reason, to the sidecar beside the handoff file. Run this before any other work."
   ).argument("<decision>", "accept or decline").argument("[reason...]", "why \u2013 free text, joined into one line").requiredOption("--file <path>", "path to the handoff file being acknowledged").action((decision, reason, opts) => {
     try {
-      const record = writeAck({
+      const record2 = writeAck({
         // The receiver types this in the directory it is working in, so a
         // relative path is the natural thing to write. Resolving it here is
         // what puts the sidecar beside the real handoff file.
@@ -16760,7 +17314,7 @@ function register8(program3) {
         decision,
         reason: reason.join(" ")
       });
-      console.log(JSON.stringify(record, null, 2));
+      console.log(JSON.stringify(record2, null, 2));
     } catch (err) {
       fail(err.message);
     }
@@ -18744,7 +19298,7 @@ var require_scan = __commonJS({
 var require_parse2 = __commonJS({
   "node_modules/picomatch/lib/parse.js"(exports, module) {
     "use strict";
-    var constants = require_constants2();
+    var constants2 = require_constants2();
     var utils = require_utils2();
     var {
       MAX_LENGTH,
@@ -18752,7 +19306,7 @@ var require_parse2 = __commonJS({
       REGEX_NON_SPECIAL_CHARS,
       REGEX_SPECIAL_CHARS_BACKREF,
       REPLACEMENTS
-    } = constants;
+    } = constants2;
     var expandRange = (args, options) => {
       if (typeof options.expandRange === "function") {
         return options.expandRange(...args, options);
@@ -18784,8 +19338,8 @@ var require_parse2 = __commonJS({
       const tokens = [bos];
       const capture = opts.capture ? "" : "?:";
       const win32 = utils.isWindows(options);
-      const PLATFORM_CHARS = constants.globChars(win32);
-      const EXTGLOB_CHARS = constants.extglobChars(PLATFORM_CHARS);
+      const PLATFORM_CHARS = constants2.globChars(win32);
+      const EXTGLOB_CHARS = constants2.extglobChars(PLATFORM_CHARS);
       const {
         DOT_LITERAL,
         PLUS_LITERAL,
@@ -19462,7 +20016,7 @@ var require_parse2 = __commonJS({
         NO_DOTS_SLASH,
         STAR,
         START_ANCHOR
-      } = constants.globChars(win32);
+      } = constants2.globChars(win32);
       const nodot = opts.dot ? NO_DOTS : NO_DOT;
       const slashDot = opts.dot ? NO_DOTS_SLASH : NO_DOT;
       const capture = opts.capture ? "" : "?:";
@@ -19521,7 +20075,7 @@ var require_picomatch = __commonJS({
     var scan = require_scan();
     var parse = require_parse2();
     var utils = require_utils2();
-    var constants = require_constants2();
+    var constants2 = require_constants2();
     var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
     var picomatch = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
@@ -19649,7 +20203,7 @@ var require_picomatch = __commonJS({
         return /$^/;
       }
     };
-    picomatch.constants = constants;
+    picomatch.constants = constants2;
     module.exports = picomatch;
   }
 });
@@ -22947,7 +23501,7 @@ __export(lint_prose_exports, {
   summarize: () => summarize
 });
 import { existsSync as existsSync10, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
-import { join as join11, relative, resolve as resolve5 } from "node:path";
+import { join as join13, relative, resolve as resolve5 } from "node:path";
 function loadVocabulary() {
   const pluginRoot = findPluginRoot();
   if (!pluginRoot) {
@@ -22956,7 +23510,7 @@ function loadVocabulary() {
       VOCABULARY_HINT
     );
   }
-  const path = join11(pluginRoot, VOCABULARY_PATH);
+  const path = join13(pluginRoot, VOCABULARY_PATH);
   let markdown = null;
   try {
     markdown = readMarkdown(path);
@@ -23133,9 +23687,9 @@ var {
 
 // src/index.ts
 import { readFileSync as readFileSync9 } from "node:fs";
-import { join as join12 } from "node:path";
+import { join as join14 } from "node:path";
 var pkg = JSON.parse(
-  readFileSync9(join12(import.meta.dirname, "..", "package.json"), "utf-8")
+  readFileSync9(join14(import.meta.dirname, "..", "package.json"), "utf-8")
 );
 var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(pkg.version);
 var commands = await Promise.all([
