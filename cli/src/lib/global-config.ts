@@ -16,28 +16,28 @@ interface HostAxisBase {
    * before switching to the tool it describes is reasonable – so callers warn
    * rather than refuse.
    */
-  meaningfulWhen?: { key: string; value: string };
+  meaningfulWhen?: { key: string; value: boolean | string };
 }
 
 /**
  * One dev-setup axis under the `host.*` section of the global config.
  *
- * Enum values are matched case-sensitively, so `host.orchestrator` accepts
- * `orca` but not `Orca`. Boolean values are not: `yes`, `Yes` and `YES` are
- * all true. Enums name real tools whose spelling is fixed; booleans are just
- * a yes/no the user types by hand.
+ * Enum values are matched case-sensitively, so `host.element_picker` accepts
+ * `stagewise` but not `Stagewise`. Boolean values are not: `yes`, `Yes` and
+ * `YES` are all true. Enums name real tools whose spelling is fixed; booleans
+ * are just a yes/no the user types by hand.
  */
 export type HostAxis =
   | (HostAxisBase & { kind: 'enum'; values: readonly string[] })
   | (HostAxisBase & { kind: 'boolean' });
 
 export const HOST_AXES: readonly HostAxis[] = [
-  {
-    key: 'host.orchestrator',
-    kind: 'enum',
-    required: true,
-    values: ['herdr', 'orca', 'none'],
-  },
+  // One boolean per orchestrator rather than one enum naming the orchestrator.
+  // A machine can have both installed, or neither, so each is its own yes/no
+  // and answering one says nothing about the other. Both are required: a host
+  // is only fully described once every orchestrator has been answered for.
+  { key: 'host.orchestrators.herdr', kind: 'boolean', required: true },
+  { key: 'host.orchestrators.orca', kind: 'boolean', required: true },
   { key: 'host.browser.remote', kind: 'boolean', required: true },
   { key: 'host.browser.headless', kind: 'boolean', required: true },
   { key: 'host.browser.local', kind: 'boolean', required: true },
@@ -51,12 +51,12 @@ export const HOST_AXES: readonly HostAxis[] = [
   {
     // How Orca runs: `local` is a desktop app on the developer's own machine,
     // `remote` a headless `orca serve` elsewhere, viewed through a paired
-    // client. Says nothing about anything unless Orca is the orchestrator.
+    // client. Says nothing about anything unless Orca runs on this host.
     key: 'host.orca.topology',
     kind: 'enum',
     required: false,
     values: ['local', 'remote'],
-    meaningfulWhen: { key: 'host.orchestrator', value: 'orca' },
+    meaningfulWhen: { key: 'host.orchestrators.orca', value: true },
   },
 ];
 
@@ -91,7 +91,7 @@ function unknownHostKey(key: string): ConfigValidationError {
 
 function hostIsASection(): ConfigValidationError {
   return new ConfigValidationError(
-    '`host` is a section; set an axis such as host.orchestrator'
+    '`host` is a section; set an axis such as host.orchestrators.herdr'
   );
 }
 
@@ -245,7 +245,7 @@ export function getKey(config: GlobalConfig, key: string): GetResult {
 export function inertDependency(
   config: GlobalConfig,
   key: string
-): { key: string; value: string } | undefined {
+): { key: string; value: boolean | string } | undefined {
   const dependency = hostAxis(key)?.meaningfulWhen;
   if (!dependency) return undefined;
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requiredHostAxisKeys, fallbackBrowserMode } from './host-status.js';
+import { requiredHostAxisKeys, fallbackBrowserMode, projectHostContext } from './host-status.js';
 
 /**
  * Pure decision logic behind `spechub config show`/`spechub config check`.
@@ -10,9 +10,11 @@ import { requiredHostAxisKeys, fallbackBrowserMode } from './host-status.js';
  *
  * - `requiredHostAxisKeys({ hasFrontend })` returns the dotted keys of every
  *   host axis that is required given whether the current project has a
- *   frontend configured. `host.orchestrator` is always required. The three
- *   `host.browser.*` axes are required only when `hasFrontend` is true. No
- *   other axis is ever required.
+ *   frontend configured. Both orchestrator booleans,
+ *   `host.orchestrators.herdr` and `host.orchestrators.orca`, are always
+ *   required: each is a separate yes/no about this machine, and answering one
+ *   says nothing about the other. The three `host.browser.*` axes are
+ *   required only when `hasFrontend` is true. No other axis is ever required.
  *
  * - `fallbackBrowserMode(declared)` picks the browser mode to use when the
  *   project's preferred mode is not declared available, in priority order
@@ -22,10 +24,12 @@ import { requiredHostAxisKeys, fallbackBrowserMode } from './host-status.js';
  */
 
 describe('requiredHostAxisKeys', () => {
-  it('requires only host.orchestrator when the project has no frontend configured', () => {
+  it('requires only the two orchestrator booleans when the project has no frontend configured', () => {
     const keys = requiredHostAxisKeys({ hasFrontend: false });
 
-    expect(keys).toContain('host.orchestrator');
+    expect(keys).toEqual(
+      expect.arrayContaining(['host.orchestrators.herdr', 'host.orchestrators.orca'])
+    );
     expect(keys).not.toContain('host.browser.remote');
     expect(keys).not.toContain('host.browser.headless');
     expect(keys).not.toContain('host.browser.local');
@@ -36,12 +40,19 @@ describe('requiredHostAxisKeys', () => {
 
     expect(keys).toEqual(
       expect.arrayContaining([
-        'host.orchestrator',
+        'host.orchestrators.herdr',
+        'host.orchestrators.orca',
         'host.browser.remote',
         'host.browser.headless',
         'host.browser.local',
       ])
     );
+  });
+
+  it('never asks for the retired single host.orchestrator axis', () => {
+    for (const hasFrontend of [false, true]) {
+      expect(requiredHostAxisKeys({ hasFrontend })).not.toContain('host.orchestrator');
+    }
   });
 
   it('never marks the optional axes as required, with or without a frontend', () => {
@@ -74,5 +85,45 @@ describe('fallbackBrowserMode', () => {
   it('treats an axis missing from the input as unavailable, not as true', () => {
     expect(fallbackBrowserMode({})).toBeUndefined();
     expect(fallbackBrowserMode({ headless: true })).toBe('headless');
+  });
+});
+
+/**
+ * `projectHostContext` reads `frontend.browser.fallback` verbatim off the
+ * already-parsed project.yaml and surfaces it as a `fallback` field on the
+ * returned context, alongside `hasProject`/`hasFrontend`/`preferredMode`/
+ * `cdpPort`. It states the literal string found (e.g. "none", "headless") -
+ * it does not interpret or validate it in any way here - and is `undefined`
+ * whenever the project states no fallback, has no frontend at all, or does
+ * not exist.
+ */
+describe('projectHostContext fallback', () => {
+  it('surfaces frontend.browser.fallback verbatim when the project states one', () => {
+    const ctx = projectHostContext({
+      frontend: { browser: { mode: 'remote', fallback: 'none' } },
+    });
+    expect(ctx.fallback).toBe('none');
+  });
+
+  it('surfaces a fallback value that names one of the browser modes, unmodified', () => {
+    const ctx = projectHostContext({
+      frontend: { browser: { mode: 'remote', fallback: 'local' } },
+    });
+    expect(ctx.fallback).toBe('local');
+  });
+
+  it('leaves fallback undefined when the project has a frontend but states no fallback', () => {
+    const ctx = projectHostContext({ frontend: { browser: { mode: 'remote' } } });
+    expect(ctx.fallback).toBeUndefined();
+  });
+
+  it('leaves fallback undefined when the project has no frontend at all', () => {
+    const ctx = projectHostContext({ profile: 'node-typescript' });
+    expect(ctx.fallback).toBeUndefined();
+  });
+
+  it('leaves fallback undefined when there is no project at all', () => {
+    const ctx = projectHostContext(undefined, false);
+    expect(ctx.fallback).toBeUndefined();
   });
 });

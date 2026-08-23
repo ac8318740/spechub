@@ -16247,7 +16247,7 @@ function unknownHostKey(key) {
 }
 function hostIsASection() {
   return new ConfigValidationError(
-    "`host` is a section; set an axis such as host.orchestrator"
+    "`host` is a section; set an axis such as host.orchestrators.herdr"
   );
 }
 function assertReadableKey(key) {
@@ -16353,12 +16353,12 @@ var init_global_config = __esm({
   "src/lib/global-config.ts"() {
     "use strict";
     HOST_AXES = [
-      {
-        key: "host.orchestrator",
-        kind: "enum",
-        required: true,
-        values: ["herdr", "orca", "none"]
-      },
+      // One boolean per orchestrator rather than one enum naming the orchestrator.
+      // A machine can have both installed, or neither, so each is its own yes/no
+      // and answering one says nothing about the other. Both are required: a host
+      // is only fully described once every orchestrator has been answered for.
+      { key: "host.orchestrators.herdr", kind: "boolean", required: true },
+      { key: "host.orchestrators.orca", kind: "boolean", required: true },
       { key: "host.browser.remote", kind: "boolean", required: true },
       { key: "host.browser.headless", kind: "boolean", required: true },
       { key: "host.browser.local", kind: "boolean", required: true },
@@ -16372,12 +16372,12 @@ var init_global_config = __esm({
       {
         // How Orca runs: `local` is a desktop app on the developer's own machine,
         // `remote` a headless `orca serve` elsewhere, viewed through a paired
-        // client. Says nothing about anything unless Orca is the orchestrator.
+        // client. Says nothing about anything unless Orca runs on this host.
         key: "host.orca.topology",
         kind: "enum",
         required: false,
         values: ["local", "remote"],
-        meaningfulWhen: { key: "host.orchestrator", value: "orca" }
+        meaningfulWhen: { key: "host.orchestrators.orca", value: true }
       }
     ];
     ConfigValidationError = class extends Error {
@@ -16421,6 +16421,16 @@ function record(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return void 0;
   return value;
 }
+function orcaRuntimeIsReady(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return false;
+  }
+  const runtime = record(record(record(parsed)?.result)?.runtime);
+  return runtime?.reachable === true && runtime?.state === "ready";
+}
 function projectHostContext(projectYaml, hasProject = true) {
   const project = record(projectYaml);
   const frontend = project ? project.frontend : void 0;
@@ -16430,9 +16440,59 @@ function projectHostContext(projectYaml, hasProject = true) {
   const preferredMode = BROWSER_MODE_PRIORITY.find((mode) => mode === rawMode);
   const rawPort = record(browser)?.cdp_port;
   const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : preferredMode === "remote" ? DEFAULT_REMOTE_CDP_PORT : DEFAULT_CDP_PORT;
-  return { hasProject, hasFrontend, preferredMode, cdpPort };
+  const rawFallback = record(browser)?.fallback;
+  const fallback = typeof rawFallback === "string" ? rawFallback : void 0;
+  return { hasProject, hasFrontend, preferredMode, cdpPort, fallback };
 }
-var BROWSER_MODE_PRIORITY, BROWSER_AXIS_KEYS, BROWSER_AXIS_KEY_SET, ORCHESTRATOR_PROBES, CHROMIUM_BINARIES, DEFAULT_REMOTE_CDP_PORT, DEFAULT_CDP_PORT;
+function projectAllowsFallback(project) {
+  return project.fallback !== FALLBACK_FORBIDDEN;
+}
+function resolveBrowserMode(declared, project) {
+  if (!project.hasProject) return { status: "unresolved", problem: { kind: "no-project" } };
+  if (!project.hasFrontend) return { status: "unresolved", problem: { kind: "no-frontend" } };
+  const available = fallbackBrowserMode(declared);
+  if (!available) {
+    const anyDeclared = BROWSER_MODE_PRIORITY.some((mode) => declared[mode] !== void 0);
+    return {
+      status: "unresolved",
+      problem: { kind: anyDeclared ? "host-declares-none" : "host-undescribed" }
+    };
+  }
+  const preferred = project.preferredMode;
+  if (!preferred) {
+    return { status: "resolved", mode: available, fallback: false };
+  }
+  if (declared[preferred] === true) {
+    return { status: "resolved", mode: preferred, preferred, fallback: false };
+  }
+  if (!projectAllowsFallback(project)) {
+    return { status: "unresolved", problem: { kind: "fallback-forbidden", preferred, available } };
+  }
+  return { status: "resolved", mode: available, preferred, fallback: true };
+}
+function statedString(value) {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+function projectSettings(projectYaml, hasProject = true) {
+  if (!hasProject) return null;
+  const project = record(projectYaml);
+  const frontend = project?.frontend;
+  const hasFrontend = frontend !== void 0 && frontend !== null;
+  const browser = record(record(frontend)?.browser);
+  const commands2 = {};
+  for (const [name, value] of Object.entries(record(project?.commands) ?? {})) {
+    const command = statedString(value);
+    if (command !== null) commands2[name] = command;
+  }
+  const rawPort = browser?.cdp_port;
+  const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : null;
+  return {
+    profile: statedString(project?.profile),
+    commands: commands2,
+    browser: hasFrontend ? { mode: statedString(browser?.mode), cdpPort, fallback: statedString(browser?.fallback) } : null
+  };
+}
+var BROWSER_MODE_PRIORITY, BROWSER_AXIS_KEYS, BROWSER_AXIS_KEY_SET, ORCHESTRATORS, ORCHESTRATOR_AXIS_KEYS, ORCHESTRATOR_PROBES, CHROMIUM_BINARIES, DEFAULT_REMOTE_CDP_PORT, DEFAULT_CDP_PORT, FALLBACK_FORBIDDEN;
 var init_host_status = __esm({
   "src/lib/host-status.ts"() {
     "use strict";
@@ -16444,9 +16504,21 @@ var init_host_status = __esm({
       local: "host.browser.local"
     };
     BROWSER_AXIS_KEY_SET = new Set(Object.values(BROWSER_AXIS_KEYS));
+    ORCHESTRATORS = ["herdr", "orca"];
+    ORCHESTRATOR_AXIS_KEYS = {
+      herdr: "host.orchestrators.herdr",
+      orca: "host.orchestrators.orca"
+    };
     ORCHESTRATOR_PROBES = {
-      herdr: { binary: "herdr", args: ["api"] },
-      orca: { binary: "orca-ide", args: ["status", "--json"] }
+      // `herdr api` fails outright when no server is behind it, so its exit status
+      // is the whole answer and there is nothing to read in what it printed.
+      herdr: { binaries: ["herdr"], args: ["api"], answered: () => true },
+      orca: {
+        binaries: ["orca-ide", "orca"],
+        args: ["status", "--json"],
+        answered: orcaRuntimeIsReady,
+        docs: "https://docs.orca.dev/headless-linux"
+      }
     };
     CHROMIUM_BINARIES = [
       "chromium",
@@ -16456,6 +16528,7 @@ var init_host_status = __esm({
     ];
     DEFAULT_REMOTE_CDP_PORT = 19988;
     DEFAULT_CDP_PORT = 9555;
+    FALLBACK_FORBIDDEN = "none";
   }
 });
 
@@ -16478,13 +16551,15 @@ function binaryOnPath(binary) {
 function firstBinaryOnPath(binaries) {
   return binaries.find(binaryOnPath);
 }
-function commandSucceeds(binary, args) {
+function runCommand(binary, args) {
   const result = spawnSync(binary, [...args], {
-    stdio: "ignore",
+    // In order: no standard input, capture standard output, discard standard error.
+    stdio: ["ignore", "pipe", "ignore"],
+    encoding: "utf-8",
     timeout: PROBE_TIMEOUT_MS,
     shell: false
   });
-  return result.status === 0;
+  return { exitedZero: result.status === 0, stdout: result.stdout ?? "" };
 }
 function cdpPortAnswers(port, host = "127.0.0.1") {
   return new Promise((resolve6) => {
@@ -16549,18 +16624,18 @@ function qualifier(key, required) {
   if (key !== "host" && !hostAxis(key)) return "";
   return ` (${required ? "required" : "optional"})`;
 }
-function loadProjectContext() {
+function loadProject() {
   const root = findProjectRoot();
-  if (!root) return projectHostContext(void 0, false);
-  return projectHostContext(readYaml(join11(root, SPECHUB_DIR, PROJECT_FILE)), true);
+  if (!root) return { context: projectHostContext(void 0, false), settings: null };
+  const yaml = readYaml(join11(root, SPECHUB_DIR, PROJECT_FILE));
+  return { context: projectHostContext(yaml, true), settings: projectSettings(yaml, true) };
 }
 async function detectHostAxes(wanted, project) {
   const detected = /* @__PURE__ */ new Map();
-  if (wanted.has("host.orchestrator")) {
-    const running = Object.keys(ORCHESTRATOR_PROBES).find(
-      (name) => firstBinaryOnPath([ORCHESTRATOR_PROBES[name].binary]) !== void 0
-    );
-    if (running) detected.set("host.orchestrator", running);
+  for (const name of ORCHESTRATORS) {
+    const key = ORCHESTRATOR_AXIS_KEYS[name];
+    if (!wanted.has(key)) continue;
+    if (firstBinaryOnPath(ORCHESTRATOR_PROBES[name].binaries)) detected.set(key, true);
   }
   const chromiumKeys = [BROWSER_AXIS_KEYS.headless, BROWSER_AXIS_KEYS.local].filter(
     (key) => wanted.has(key)
@@ -16597,7 +16672,7 @@ function formatValue(status) {
   if (status.status === "unset") return source_default.dim("-");
   return typeof status.value === "string" ? status.value : JSON.stringify(status.value);
 }
-function printHostAxes(project, axes) {
+function printHostAxes(axes) {
   console.log(source_default.bold("Host"));
   for (const axis of axes) {
     const status = axis.status === "declared" ? source_default.green("declared") : source_default.dim(axis.status);
@@ -16605,9 +16680,28 @@ function printHostAxes(project, axes) {
       `  ${axis.key.padEnd(AXIS_KEY_WIDTH)}  ${formatValue(axis).padEnd(10)}  ${status.padEnd(8)}  ${source_default.dim(axis.required ? "required" : "optional")}`
     );
   }
-  const where = !project.hasProject ? "no SpecHub project here" : project.hasFrontend ? `project frontend: browser mode ${project.preferredMode ?? "unspecified"}, CDP port ${project.cdpPort}` : "project has no frontend configured";
-  console.log(source_default.dim(`
-${where}`));
+}
+function projectLine(label, value) {
+  return `  ${label.padEnd(PROJECT_LABEL_WIDTH)}  ${value}`;
+}
+function printProject(settings) {
+  if (!settings) {
+    console.log(source_default.dim("No SpecHub project here."));
+    return;
+  }
+  console.log(source_default.bold("Project"));
+  console.log(projectLine("profile", settings.profile ?? source_default.dim("-")));
+  for (const [name, command] of Object.entries(settings.commands)) {
+    console.log(projectLine(`commands.${name}`, command));
+  }
+  const browser = settings.browser;
+  if (!browser) {
+    console.log(source_default.dim("  this project has no frontend configured"));
+    return;
+  }
+  if (browser.mode !== null) console.log(projectLine("browser mode", browser.mode));
+  if (browser.cdpPort !== null) console.log(projectLine("browser CDP port", String(browser.cdpPort)));
+  if (browser.fallback !== null) console.log(projectLine("browser fallback", browser.fallback));
 }
 function checkRequiredAxes(report, config, project) {
   report.heading("Required host axes are set");
@@ -16621,34 +16715,51 @@ function checkRequiredAxes(report, config, project) {
       report.missing(`${key} is unset${note} - set it with \`spechub config set ${key} <value>\``);
     }
   }
+  const declaredFalse = (key) => {
+    const result = getKey(config, key);
+    return result.status === "set" && result.value === false;
+  };
+  if (ORCHESTRATORS.every((name) => declaredFalse(ORCHESTRATOR_AXIS_KEYS[name]))) {
+    report.line("info", "neither orchestrator is on this host - plain git worktrees will be used");
+  }
 }
-function checkOrchestrator(report, config) {
-  report.heading("Declared orchestrator responds");
-  const result = getKey(config, "host.orchestrator");
-  if (result.status !== "set") {
-    report.line("info", "host.orchestrator is unset - nothing to probe");
-    return;
+function checkOrchestrators(report, config) {
+  report.heading("Declared orchestrators respond");
+  let probed = false;
+  let anyUndeclared = false;
+  for (const name of ORCHESTRATORS) {
+    const axisKey = ORCHESTRATOR_AXIS_KEYS[name];
+    const result = getKey(config, axisKey);
+    if (result.status !== "set") {
+      anyUndeclared = true;
+      continue;
+    }
+    if (result.value !== true) continue;
+    probed = true;
+    const probe = ORCHESTRATOR_PROBES[name];
+    const hint = probe.docs ? ` - see ${probe.docs}` : "";
+    const binary = firstBinaryOnPath(probe.binaries);
+    if (!binary) {
+      report.line(
+        "fail",
+        `${probe.binaries.join(" or ")} is not on PATH (${axisKey} is true)${hint}`
+      );
+      continue;
+    }
+    const command = [binary, ...probe.args].join(" ");
+    const outcome = runCommand(binary, probe.args);
+    if (!outcome.exitedZero || !probe.answered(outcome.stdout)) {
+      report.line("fail", `\`${command}\` did not answer (${axisKey} is true)${hint}`);
+      continue;
+    }
+    report.line("pass", `\`${command}\` answered`);
   }
-  const orchestrator = result.value;
-  if (orchestrator === "none") {
-    report.line("pass", "host.orchestrator is none - nothing to probe");
-    return;
+  if (!probed) {
+    report.line(
+      anyUndeclared ? "info" : "pass",
+      "no orchestrator is declared true - nothing to probe"
+    );
   }
-  const probe = ORCHESTRATOR_PROBES[orchestrator];
-  if (!probe) {
-    report.line("info", `host.orchestrator is ${String(orchestrator)} - no probe known`);
-    return;
-  }
-  const command = [probe.binary, ...probe.args].join(" ");
-  if (!firstBinaryOnPath([probe.binary])) {
-    report.line("fail", `${probe.binary} is not on PATH (host.orchestrator is ${orchestrator})`);
-    return;
-  }
-  if (!commandSucceeds(probe.binary, probe.args)) {
-    report.line("fail", `\`${command}\` did not answer (host.orchestrator is ${orchestrator})`);
-    return;
-  }
-  report.line("pass", `\`${command}\` answered`);
 }
 async function browserModeWorks(mode, project) {
   if (mode === "remote") {
@@ -16684,23 +16795,48 @@ function checkPreferredBrowserMode(report, config, project) {
     return;
   }
   const preferred = project.preferredMode;
-  const declared = declaredBrowserModes(config);
-  if (declared[preferred] === true) {
-    report.line("pass", `project prefers ${preferred} and this host declares it available`);
-    return;
-  }
-  const fallback = fallbackBrowserMode(declared);
-  if (fallback) {
+  const resolution = resolveBrowserMode(declaredBrowserModes(config), project);
+  if (resolution.status === "resolved") {
     report.line(
       "pass",
-      `project prefers ${preferred}, which this host does not declare; falling back to ${fallback}`
+      resolution.fallback ? `project prefers ${preferred}, which this host does not declare; falling back to ${resolution.mode}` : `project prefers ${preferred} and this host declares it available`
+    );
+    return;
+  }
+  if (resolution.problem.kind === "fallback-forbidden") {
+    report.line(
+      "fail",
+      `project prefers ${preferred}, which this host does not declare, and this project sets frontend.browser.fallback to "${FALLBACK_FORBIDDEN}" - so no other mode may stand in (set ${BROWSER_AXIS_KEYS[preferred]} to true, or change the project's fallback)`
     );
     return;
   }
   report.line(
     "fail",
-    `project prefers ${preferred}, but this host declares no browser mode available (set one of ${BROWSER_MODE_PRIORITY.map((m) => BROWSER_AXIS_KEYS[m]).join(", ")} to true)`
+    `project prefers ${preferred}, but this host declares no browser mode available (set one of ${BROWSER_AXIS_LIST} to true)`
   );
+}
+function browserModeProblemMessage(problem) {
+  switch (problem.kind) {
+    case "no-project":
+      return "No SpecHub project here, so there is no frontend to drive a browser for - run `/spechub:init` in the project you want to set up.";
+    case "no-frontend":
+      return "This project configures no frontend, so it drives no browser - run `/spechub:init` if it should have one.";
+    case "host-undescribed":
+      return `This host has not been described yet: none of ${BROWSER_AXIS_LIST} is set - run \`/spechub:host\` to describe this machine.`;
+    case "host-declares-none":
+      return `This host declares no browser mode available: every one of ${BROWSER_AXIS_LIST} it sets is false - run \`/spechub:host\` to declare one this machine can actually provide.`;
+    case "fallback-forbidden":
+      return `This project prefers the ${problem.preferred} browser mode, which this host does not declare available, and it sets frontend.browser.fallback to "${FALLBACK_FORBIDDEN}" - so ${problem.available} may not stand in. Set ${BROWSER_AXIS_KEYS[problem.preferred]} to true with \`/spechub:host\`, or change this project's frontend.browser.fallback.`;
+  }
+}
+function browserModeReason(resolved) {
+  if (!resolved.preferred) {
+    return `the project states no browser mode preference, so ${resolved.mode} wins as the first mode this host declares available`;
+  }
+  if (resolved.fallback) {
+    return `the project prefers ${resolved.preferred}, which this host does not declare available, so ${resolved.mode} stands in`;
+  }
+  return `the project prefers ${resolved.preferred} and this host declares it available`;
 }
 function checkOptionalAxes(report, config) {
   report.heading("Optional axes (informational only)");
@@ -16711,7 +16847,7 @@ function checkOptionalAxes(report, config) {
       continue;
     }
     const dependency = inertDependency(config, axis.key);
-    const note = dependency ? ` - inert unless ${dependency.key} is ${dependency.value}` : "";
+    const note = dependency ? ` - inert unless ${dependency.key} is ${String(dependency.value)}` : "";
     report.line("info", `${axis.key} = ${JSON.stringify(result.value)}${note}`);
   }
 }
@@ -16739,32 +16875,67 @@ function register6(program3) {
   configCmd.command("show").description("Show the host setup: every axis, declared or merely detected").option("--json", "output as JSON").action(async (opts) => {
     await reportingUserErrorsAsync(async () => {
       const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-      const project = loadProjectContext();
+      const { context: project, settings } = loadProject();
       const axes = await hostAxisStatuses(config, project);
       if (opts.json) {
         console.log(
           JSON.stringify(
-            { hasProject: project.hasProject, hasFrontend: project.hasFrontend, axes },
+            {
+              hasProject: project.hasProject,
+              hasFrontend: project.hasFrontend,
+              axes,
+              project: settings
+            },
             null,
             2
           )
         );
         return;
       }
-      printHostAxes(project, axes);
+      printProject(settings);
+      console.log("");
+      printHostAxes(axes);
     });
   });
   configCmd.command("check").description("Check the host setup against what this machine can actually do").action(async () => {
     await reportingUserErrorsAsync(async () => {
       const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-      const project = loadProjectContext();
+      const project = loadProject().context;
       const report = new CheckReport();
       checkRequiredAxes(report, config, project);
-      checkOrchestrator(report, config);
+      checkOrchestrators(report, config);
       await checkDeclaredBrowserModes(report, config, project);
       checkPreferredBrowserMode(report, config, project);
       checkOptionalAxes(report, config);
       report.finish();
+    });
+  });
+  configCmd.command("browser-mode").description("Report which browser mode the frontend verifier should use here, and why").option("--json", "output as JSON").action((opts) => {
+    reportingUserErrors(() => {
+      const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+      const project = loadProject().context;
+      const resolution = resolveBrowserMode(declaredBrowserModes(config), project);
+      if (resolution.status === "unresolved") {
+        console.error(source_default.red(browserModeProblemMessage(resolution.problem)));
+        process.exit(1);
+      }
+      const reason = browserModeReason(resolution);
+      if (opts.json) {
+        console.log(
+          JSON.stringify(
+            {
+              mode: resolution.mode,
+              preferred: resolution.preferred ?? null,
+              reason,
+              fallback: resolution.fallback
+            },
+            null,
+            2
+          )
+        );
+        return;
+      }
+      console.log(`${source_default.bold(resolution.mode)} - ${source_default.dim(reason)}`);
     });
   });
   configCmd.command("get").description("Get a config value").argument("<key>", "config key").action((key) => {
@@ -16789,7 +16960,7 @@ function register6(program3) {
       if (dependency) {
         console.error(
           source_default.yellow(
-            `Warning: ${key} has no effect unless ${dependency.key} is ${dependency.value}`
+            `Warning: ${key} has no effect unless ${dependency.key} is ${String(dependency.value)}`
           )
         );
       }
@@ -16807,7 +16978,7 @@ function register6(program3) {
     });
   });
 }
-var AXIS_KEY_WIDTH, CheckReport;
+var AXIS_KEY_WIDTH, PROJECT_LABEL_WIDTH, CheckReport, BROWSER_AXIS_LIST;
 var init_config = __esm({
   "src/commands/config.ts"() {
     "use strict";
@@ -16819,6 +16990,7 @@ var init_config = __esm({
     init_project();
     init_utils();
     AXIS_KEY_WIDTH = Math.max(...HOST_AXES.map((axis) => axis.key.length));
+    PROJECT_LABEL_WIDTH = 20;
     CheckReport = class {
       number = 0;
       failed = false;
@@ -16848,6 +17020,7 @@ ${this.counts.pass} passed, ${this.counts.fail} failed, ${this.counts.info} info
         process.exitCode = this.missingRequired ? 2 : this.failed ? 1 : 0;
       }
     };
+    BROWSER_AXIS_LIST = BROWSER_MODE_PRIORITY.map((mode) => BROWSER_AXIS_KEYS[mode]).join(", ");
   }
 });
 

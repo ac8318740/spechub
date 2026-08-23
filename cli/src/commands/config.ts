@@ -21,16 +21,22 @@ import {
   BROWSER_MODE_PRIORITY,
   CHROMIUM_BINARIES,
   declaredBrowserModes,
-  fallbackBrowserMode,
+  FALLBACK_FORBIDDEN,
   isBrowserAxis,
+  ORCHESTRATOR_AXIS_KEYS,
   ORCHESTRATOR_PROBES,
+  ORCHESTRATORS,
   projectHostContext,
+  projectSettings,
   requiredHostAxisKeys,
+  resolveBrowserMode,
   type BrowserMode,
-  type Orchestrator,
+  type BrowserModeProblem,
   type ProjectHostContext,
+  type ProjectSettings,
+  type ResolvedBrowserMode,
 } from '../lib/host-status.js';
-import { cdpPortAnswers, commandSucceeds, firstBinaryOnPath } from '../lib/host-probe.js';
+import { cdpPortAnswers, firstBinaryOnPath, runCommand } from '../lib/host-probe.js';
 import { findProjectRoot } from '../lib/project.js';
 import { readYaml } from '../lib/utils.js';
 
@@ -72,11 +78,25 @@ function qualifier(key: string, required: boolean): string {
   return ` (${required ? 'required' : 'optional'})`;
 }
 
-/** What the project under the current directory says, or "no project here". */
-function loadProjectContext(): ProjectHostContext {
+/**
+ * Everything the project under the current directory says, read once.
+ *
+ * `context` is what the host checks need to know; `settings` is what `show`
+ * reports, and is null when there is no project here. Both come from the same
+ * single read of project.yaml, so the facts printed and the facts checked can
+ * never disagree about the same file.
+ */
+interface LoadedProject {
+  context: ProjectHostContext;
+  settings: ProjectSettings | null;
+}
+
+function loadProject(): LoadedProject {
   const root = findProjectRoot();
-  if (!root) return projectHostContext(undefined, false);
-  return projectHostContext(readYaml(join(root, SPECHUB_DIR, PROJECT_FILE)), true);
+  if (!root) return { context: projectHostContext(undefined, false), settings: null };
+
+  const yaml = readYaml(join(root, SPECHUB_DIR, PROJECT_FILE));
+  return { context: projectHostContext(yaml, true), settings: projectSettings(yaml, true) };
 }
 
 /**
@@ -109,11 +129,18 @@ async function detectHostAxes(
 ): Promise<Map<string, unknown>> {
   const detected = new Map<string, unknown>();
 
-  if (wanted.has('host.orchestrator')) {
-    const running = (Object.keys(ORCHESTRATOR_PROBES) as Exclude<Orchestrator, 'none'>[]).find(
-      name => firstBinaryOnPath([ORCHESTRATOR_PROBES[name].binary]) !== undefined
-    );
-    if (running) detected.set('host.orchestrator', running);
+  // Each orchestrator is looked for on its own. Finding one says nothing about
+  // the other, and finding neither is not evidence of absence either: an axis
+  // with nothing found is left unset rather than detected false, because the
+  // binary could simply be somewhere this PATH does not reach.
+  for (const name of ORCHESTRATORS) {
+    const key = ORCHESTRATOR_AXIS_KEYS[name];
+    if (!wanted.has(key)) continue;
+    // Any of the orchestrator's binary names counts: Orca is installed as
+    // `orca-ide` or as plain `orca` depending on how it was packaged, and
+    // either one is the same tool. Detection only looks for the binary and
+    // never runs it - `show` describes the machine, it does not test it.
+    if (firstBinaryOnPath(ORCHESTRATOR_PROBES[name].binaries)) detected.set(key, true);
   }
 
   const chromiumKeys = [BROWSER_AXIS_KEYS.headless, BROWSER_AXIS_KEYS.local].filter(key =>
@@ -167,7 +194,7 @@ function formatValue(status: HostAxisStatus): string {
 
 const AXIS_KEY_WIDTH = Math.max(...HOST_AXES.map(axis => axis.key.length));
 
-function printHostAxes(project: ProjectHostContext, axes: HostAxisStatus[]): void {
+function printHostAxes(axes: HostAxisStatus[]): void {
   console.log(chalk.bold('Host'));
   for (const axis of axes) {
     const status = axis.status === 'declared' ? chalk.green('declared') : chalk.dim(axis.status);
@@ -176,14 +203,49 @@ function printHostAxes(project: ProjectHostContext, axes: HostAxisStatus[]): voi
         `${status.padEnd(8)}  ${chalk.dim(axis.required ? 'required' : 'optional')}`
     );
   }
+}
 
-  const where = !project.hasProject
-    ? 'no SpecHub project here'
-    : project.hasFrontend
-      ? `project frontend: browser mode ${project.preferredMode ?? 'unspecified'}, ` +
-        `CDP port ${project.cdpPort}`
-      : 'project has no frontend configured';
-  console.log(chalk.dim(`\n${where}`));
+/** How wide the label column of the Project section is. Chosen to fit the longest label. */
+const PROJECT_LABEL_WIDTH = 20;
+
+function projectLine(label: string, value: string): string {
+  return `  ${label.padEnd(PROJECT_LABEL_WIDTH)}  ${value}`;
+}
+
+/**
+ * Print what the project says, above the host table.
+ *
+ * The project comes first because it is what makes the host table mean
+ * anything: whether a browser axis is required at all depends on whether this
+ * project has a frontend, so the reader wants that answer before the table
+ * rather than after it.
+ */
+function printProject(settings: ProjectSettings | null): void {
+  if (!settings) {
+    // No heading here: with nothing to report under it, a `Project` heading
+    // would only put a word between the reader and the answer.
+    console.log(chalk.dim('No SpecHub project here.'));
+    return;
+  }
+
+  console.log(chalk.bold('Project'));
+  console.log(projectLine('profile', settings.profile ?? chalk.dim('-')));
+  for (const [name, command] of Object.entries(settings.commands)) {
+    console.log(projectLine(`commands.${name}`, command));
+  }
+
+  const browser = settings.browser;
+  if (!browser) {
+    console.log(chalk.dim('  this project has no frontend configured'));
+    return;
+  }
+
+  // Only what the project actually states is listed. A browser setting left
+  // out is a setting with no answer, and inventing one here would report a
+  // decision the project never made.
+  if (browser.mode !== null) console.log(projectLine('browser mode', browser.mode));
+  if (browser.cdpPort !== null) console.log(projectLine('browser CDP port', String(browser.cdpPort)));
+  if (browser.fallback !== null) console.log(projectLine('browser fallback', browser.fallback));
 }
 
 /** One numbered check's outcome. Only `fail` ever changes the exit code. */
@@ -256,39 +318,78 @@ function checkRequiredAxes(
       report.missing(`${key} is unset${note} - set it with \`spechub config set ${key} <value>\``);
     }
   }
+
+  // Answering "no" to every orchestrator is a valid setup, not a mistake, so
+  // say what that means rather than leaving the user wondering whether they
+  // have broken something.
+  const declaredFalse = (key: string): boolean => {
+    const result = getKey(config, key);
+    return result.status === 'set' && result.value === false;
+  };
+  if (ORCHESTRATORS.every(name => declaredFalse(ORCHESTRATOR_AXIS_KEYS[name]))) {
+    report.line('info', 'neither orchestrator is on this host - plain git worktrees will be used');
+  }
 }
 
-function checkOrchestrator(report: CheckReport, config: GlobalConfig): void {
-  report.heading('Declared orchestrator responds');
+/**
+ * Probe every orchestrator the user declared true, each on its own line.
+ *
+ * One declared true and broken is a real problem whatever the other one says,
+ * so the orchestrators are never collapsed into a single outcome. One declared
+ * false is left alone entirely: the user said they do not use it, and hunting
+ * for it anyway would only nag about a tool they do not want.
+ */
+function checkOrchestrators(report: CheckReport, config: GlobalConfig): void {
+  report.heading('Declared orchestrators respond');
 
-  const result = getKey(config, 'host.orchestrator');
-  if (result.status !== 'set') {
-    report.line('info', 'host.orchestrator is unset - nothing to probe');
-    return;
+  let probed = false;
+  let anyUndeclared = false;
+
+  for (const name of ORCHESTRATORS) {
+    const axisKey = ORCHESTRATOR_AXIS_KEYS[name];
+    const result = getKey(config, axisKey);
+    if (result.status !== 'set') {
+      anyUndeclared = true;
+      continue;
+    }
+    if (result.value !== true) continue;
+
+    probed = true;
+    const probe = ORCHESTRATOR_PROBES[name];
+    // Where a failed probe sends the user, when this orchestrator has a page
+    // worth reading. Attached to every failure, because a probe that did not
+    // answer is exactly the moment the page is wanted.
+    const hint = probe.docs ? ` - see ${probe.docs}` : '';
+
+    const binary = firstBinaryOnPath(probe.binaries);
+    if (!binary) {
+      report.line(
+        'fail',
+        `${probe.binaries.join(' or ')} is not on PATH (${axisKey} is true)${hint}`
+      );
+      continue;
+    }
+
+    // The command is built from the binary actually found, not from the
+    // preferred name, so the line the user reads is the line they can re-run.
+    const command = [binary, ...probe.args].join(' ');
+    const outcome = runCommand(binary, probe.args);
+    if (!outcome.exitedZero || !probe.answered(outcome.stdout)) {
+      report.line('fail', `\`${command}\` did not answer (${axisKey} is true)${hint}`);
+      continue;
+    }
+    report.line('pass', `\`${command}\` answered`);
   }
 
-  const orchestrator = result.value as Orchestrator;
-  if (orchestrator === 'none') {
-    report.line('pass', 'host.orchestrator is none - nothing to probe');
-    return;
+  // Nothing to probe passes only once every orchestrator has actually been
+  // answered for. An unanswered one is a gap check 1 is already reporting, so
+  // this stays informational rather than claiming a clean result.
+  if (!probed) {
+    report.line(
+      anyUndeclared ? 'info' : 'pass',
+      'no orchestrator is declared true - nothing to probe'
+    );
   }
-
-  const probe = ORCHESTRATOR_PROBES[orchestrator];
-  if (!probe) {
-    report.line('info', `host.orchestrator is ${String(orchestrator)} - no probe known`);
-    return;
-  }
-
-  const command = [probe.binary, ...probe.args].join(' ');
-  if (!firstBinaryOnPath([probe.binary])) {
-    report.line('fail', `${probe.binary} is not on PATH (host.orchestrator is ${orchestrator})`);
-    return;
-  }
-  if (!commandSucceeds(probe.binary, probe.args)) {
-    report.line('fail', `\`${command}\` did not answer (host.orchestrator is ${orchestrator})`);
-    return;
-  }
-  report.line('pass', `\`${command}\` answered`);
 }
 
 /** Whether the machine can currently provide `mode`, and why not when it cannot. */
@@ -339,6 +440,9 @@ async function checkDeclaredBrowserModes(
   if (!probed) report.line('info', 'no browser mode is declared true - nothing to probe');
 }
 
+/** The three `host.browser.*` axis keys, in priority order, as one readable list. */
+const BROWSER_AXIS_LIST = BROWSER_MODE_PRIORITY.map(mode => BROWSER_AXIS_KEYS[mode]).join(', ');
+
 function checkPreferredBrowserMode(
   report: CheckReport,
   config: GlobalConfig,
@@ -346,24 +450,39 @@ function checkPreferredBrowserMode(
 ): void {
   report.heading("Project's preferred browser mode is available");
 
+  // A project that named no mode has nothing to check here, whatever the host
+  // can do - this check is about a preference being honoured, and there is no
+  // preference. `browser-mode` treats the same situation as an answerable
+  // question, which is why the two part company before the shared resolver.
   if (!project.hasFrontend || !project.preferredMode) {
     report.line('info', 'this project states no browser mode preference');
     return;
   }
 
   const preferred = project.preferredMode;
-  const declared = declaredBrowserModes(config);
-  if (declared[preferred] === true) {
-    report.line('pass', `project prefers ${preferred} and this host declares it available`);
+  const resolution = resolveBrowserMode(declaredBrowserModes(config), project);
+
+  if (resolution.status === 'resolved') {
+    report.line(
+      'pass',
+      resolution.fallback
+        ? `project prefers ${preferred}, which this host does not declare; ` +
+            `falling back to ${resolution.mode}`
+        : `project prefers ${preferred} and this host declares it available`
+    );
     return;
   }
 
-  const fallback = fallbackBrowserMode(declared);
-  if (fallback) {
+  // A project that forbids falling back has said the mode it named is the
+  // only one it will run against, so another mode being available is not a
+  // rescue - naming it here would only suggest a way out the project refuses.
+  if (resolution.problem.kind === 'fallback-forbidden') {
     report.line(
-      'pass',
-      `project prefers ${preferred}, which this host does not declare; ` +
-        `falling back to ${fallback}`
+      'fail',
+      `project prefers ${preferred}, which this host does not declare, and this project ` +
+        `sets frontend.browser.fallback to "${FALLBACK_FORBIDDEN}" - so no other mode may ` +
+        `stand in (set ${BROWSER_AXIS_KEYS[preferred]} to true, or change the project's ` +
+        `fallback)`
     );
     return;
   }
@@ -371,8 +490,67 @@ function checkPreferredBrowserMode(
   report.line(
     'fail',
     `project prefers ${preferred}, but this host declares no browser mode available ` +
-      `(set one of ${BROWSER_MODE_PRIORITY.map(m => BROWSER_AXIS_KEYS[m]).join(', ')} to true)`
+      `(set one of ${BROWSER_AXIS_LIST} to true)`
   );
+}
+
+/**
+ * Why this project has no browser mode to be driven with, said to the user.
+ *
+ * Each shade names the one thing that would fix it, because the fix differs:
+ * a checkout with no frontend needs setting up, a machine nobody has
+ * described needs describing, and a machine that describes itself as having
+ * no browser needs a browser.
+ */
+function browserModeProblemMessage(problem: BrowserModeProblem): string {
+  switch (problem.kind) {
+    case 'no-project':
+      return (
+        'No SpecHub project here, so there is no frontend to drive a browser for - ' +
+        'run `/spechub:init` in the project you want to set up.'
+      );
+    case 'no-frontend':
+      return (
+        'This project configures no frontend, so it drives no browser - ' +
+        'run `/spechub:init` if it should have one.'
+      );
+    case 'host-undescribed':
+      return (
+        `This host has not been described yet: none of ${BROWSER_AXIS_LIST} is set - ` +
+        'run `/spechub:host` to describe this machine.'
+      );
+    case 'host-declares-none':
+      return (
+        'This host declares no browser mode available: every one of ' +
+        `${BROWSER_AXIS_LIST} it sets is false - run \`/spechub:host\` to declare one ` +
+        'this machine can actually provide.'
+      );
+    case 'fallback-forbidden':
+      return (
+        `This project prefers the ${problem.preferred} browser mode, which this host does ` +
+        `not declare available, and it sets frontend.browser.fallback to ` +
+        `"${FALLBACK_FORBIDDEN}" - so ${problem.available} may not stand in. Set ` +
+        `${BROWSER_AXIS_KEYS[problem.preferred]} to true with \`/spechub:host\`, or change ` +
+        `this project's frontend.browser.fallback.`
+      );
+  }
+}
+
+/** Why the resolved mode is the one to use, as a sentence the user reads. */
+function browserModeReason(resolved: ResolvedBrowserMode): string {
+  if (!resolved.preferred) {
+    return (
+      'the project states no browser mode preference, so ' +
+      `${resolved.mode} wins as the first mode this host declares available`
+    );
+  }
+  if (resolved.fallback) {
+    return (
+      `the project prefers ${resolved.preferred}, which this host does not declare ` +
+      `available, so ${resolved.mode} stands in`
+    );
+  }
+  return `the project prefers ${resolved.preferred} and this host declares it available`;
 }
 
 function checkOptionalAxes(report: CheckReport, config: GlobalConfig): void {
@@ -386,7 +564,9 @@ function checkOptionalAxes(report: CheckReport, config: GlobalConfig): void {
     }
 
     const dependency = inertDependency(config, axis.key);
-    const note = dependency ? ` - inert unless ${dependency.key} is ${dependency.value}` : '';
+    const note = dependency
+      ? ` - inert unless ${dependency.key} is ${String(dependency.value)}`
+      : '';
     report.line('info', `${axis.key} = ${JSON.stringify(result.value)}${note}`);
   }
 }
@@ -431,20 +611,27 @@ export function register(program: Command): void {
     .action(async (opts: { json?: boolean }) => {
       await reportingUserErrorsAsync(async () => {
         const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-        const project = loadProjectContext();
+        const { context: project, settings } = loadProject();
         const axes = await hostAxisStatuses(config, project);
 
         if (opts.json) {
           console.log(
             JSON.stringify(
-              { hasProject: project.hasProject, hasFrontend: project.hasFrontend, axes },
+              {
+                hasProject: project.hasProject,
+                hasFrontend: project.hasFrontend,
+                axes,
+                project: settings,
+              },
               null,
               2
             )
           );
           return;
         }
-        printHostAxes(project, axes);
+        printProject(settings);
+        console.log('');
+        printHostAxes(axes);
       });
     });
 
@@ -454,16 +641,54 @@ export function register(program: Command): void {
     .action(async () => {
       await reportingUserErrorsAsync(async () => {
         const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-        const project = loadProjectContext();
+        const project = loadProject().context;
         const report = new CheckReport();
 
         checkRequiredAxes(report, config, project);
-        checkOrchestrator(report, config);
+        checkOrchestrators(report, config);
         await checkDeclaredBrowserModes(report, config, project);
         checkPreferredBrowserMode(report, config, project);
         checkOptionalAxes(report, config);
 
         report.finish();
+      });
+    });
+
+  configCmd
+    .command('browser-mode')
+    .description('Report which browser mode the frontend verifier should use here, and why')
+    .option('--json', 'output as JSON')
+    .action((opts: { json?: boolean }) => {
+      reportingUserErrors(() => {
+        const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+        const project = loadProject().context;
+        const resolution = resolveBrowserMode(declaredBrowserModes(config), project);
+
+        // Nothing to report is still an answer, so it goes to stderr and exits
+        // 1 whatever the output format: a caller parsing `--json` gets empty
+        // stdout rather than an object it would have to check a field on.
+        if (resolution.status === 'unresolved') {
+          console.error(chalk.red(browserModeProblemMessage(resolution.problem)));
+          process.exit(1);
+        }
+
+        const reason = browserModeReason(resolution);
+        if (opts.json) {
+          console.log(
+            JSON.stringify(
+              {
+                mode: resolution.mode,
+                preferred: resolution.preferred ?? null,
+                reason,
+                fallback: resolution.fallback,
+              },
+              null,
+              2
+            )
+          );
+          return;
+        }
+        console.log(`${chalk.bold(resolution.mode)} - ${chalk.dim(reason)}`);
       });
     });
 
@@ -502,7 +727,7 @@ export function register(program: Command): void {
         if (dependency) {
           console.error(
             chalk.yellow(
-              `Warning: ${key} has no effect unless ${dependency.key} is ${dependency.value}`
+              `Warning: ${key} has no effect unless ${dependency.key} is ${String(dependency.value)}`
             )
           );
         }

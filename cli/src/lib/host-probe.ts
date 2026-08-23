@@ -38,20 +38,37 @@ export function firstBinaryOnPath(binaries: readonly string[]): string | undefin
   return binaries.find(binaryOnPath);
 }
 
+/** What running a probe command told us: how it exited, and what it printed. */
+export interface CommandOutcome {
+  /** Whether the command exited 0. A probe that cannot even do that has failed. */
+  exitedZero: boolean;
+  /** Everything the command wrote to its standard output. */
+  stdout: string;
+}
+
 /**
- * Run `binary args...` and report whether it succeeded.
+ * Run `binary args...` and report how it exited and what it printed.
  *
  * Spawned without a shell, so PATH lookup is the kernel's `execvp` and no
- * `/bin/sh` needs to exist. Output is discarded: a probe's answer is its exit
- * status, and letting a child scribble on our stderr would corrupt the report.
+ * `/bin/sh` needs to exist.
+ *
+ * Standard output is captured because a probe's answer is not always its exit
+ * status: Orca's status command exits 0 whether or not its runtime is up, and
+ * only the JSON it prints says which. Standard error is thrown away instead of
+ * captured, for two reasons. It is never part of an answer, and letting a
+ * child scribble on our own stderr would corrupt the report we are writing.
+ * The real Orca build is an Electron application that prints warnings there on
+ * every single run, so treating stderr as evidence would fail every probe.
  */
-export function commandSucceeds(binary: string, args: readonly string[]): boolean {
+export function runCommand(binary: string, args: readonly string[]): CommandOutcome {
   const result = spawnSync(binary, [...args], {
-    stdio: 'ignore',
+    // In order: no standard input, capture standard output, discard standard error.
+    stdio: ['ignore', 'pipe', 'ignore'],
+    encoding: 'utf-8',
     timeout: PROBE_TIMEOUT_MS,
     shell: false,
   });
-  return result.status === 0;
+  return { exitedZero: result.status === 0, stdout: result.stdout ?? '' };
 }
 
 /**

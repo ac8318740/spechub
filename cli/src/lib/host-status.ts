@@ -37,9 +37,11 @@ export function isBrowserAxis(key: string): boolean {
 /**
  * The dotted keys of every host axis that must be set for this project.
  *
- * The browser axes are marked required in `HOST_AXES` because that is what
- * they are for a project with a UI, but a project with no frontend never
- * drives a browser, so demanding them there would be nagging about nothing.
+ * Both orchestrator booleans are always required: each is a separate yes/no
+ * about this machine, and answering one says nothing about the other. The
+ * browser axes are marked required in `HOST_AXES` because that is what they
+ * are for a project with a UI, but a project with no frontend never drives a
+ * browser, so demanding them there would be nagging about nothing.
  */
 export function requiredHostAxisKeys({ hasFrontend }: { hasFrontend: boolean }): string[] {
   return HOST_AXES.filter(axis => axis.required)
@@ -72,20 +74,98 @@ export function declaredBrowserModes(config: GlobalConfig): DeclaredBrowserModes
   return declared;
 }
 
-/** The orchestrator values `host.orchestrator` accepts. */
-export type Orchestrator = 'herdr' | 'orca' | 'none';
+/** The orchestrators a host can run. Each has its own `host.orchestrators.*` boolean. */
+export type Orchestrator = 'herdr' | 'orca';
 
 /**
- * How to ask each orchestrator whether it is actually running. Presence of the
- * binary is not enough – an installed `herdr` with no server behind it cannot
- * be driven – so each probe is a command that only succeeds when the thing
- * answers. `none` has nothing to probe and so appears in neither map.
+ * Every orchestrator, in the order callers report them, so a listing and a set
+ * of probes always come out the same way round.
  */
-export const ORCHESTRATOR_PROBES: Readonly<
-  Record<Exclude<Orchestrator, 'none'>, { binary: string; args: readonly string[] }>
-> = {
-  herdr: { binary: 'herdr', args: ['api'] },
-  orca: { binary: 'orca-ide', args: ['status', '--json'] },
+export const ORCHESTRATORS: readonly Orchestrator[] = ['herdr', 'orca'];
+
+/** The `host.orchestrators.*` axis that declares whether each one runs here. */
+export const ORCHESTRATOR_AXIS_KEYS: Readonly<Record<Orchestrator, string>> = {
+  herdr: 'host.orchestrators.herdr',
+  orca: 'host.orchestrators.orca',
+};
+
+/**
+ * Narrow an unknown value to a plain object, or undefined when it is anything
+ * else. The gateway for reading untyped input – parsed JSON, a parsed YAML
+ * file – one level at a time without ever asserting a shape nobody checked.
+ */
+function record(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+/**
+ * Whether Orca's `status --json` output says its runtime is up and usable.
+ *
+ * Orca's status command exits 0 whenever it can answer at all, including when
+ * the runtime behind it is stopped or still starting, so the exit status alone
+ * says nothing. The JSON body is where the real answer is: `reachable` says a
+ * runtime responded, and `state` says what it responded with. Only a runtime
+ * that is both reachable and in state `ready` can actually be driven.
+ *
+ * The output is whatever a binary on the user's PATH happened to print, so
+ * every step is checked rather than assumed: text that is not JSON, JSON that
+ * is not an object, and JSON missing `result.runtime` all mean not ready
+ * rather than a crash.
+ */
+export function orcaRuntimeIsReady(stdout: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout) as unknown;
+  } catch {
+    return false;
+  }
+  const runtime = record(record(record(parsed)?.result)?.runtime);
+  return runtime?.reachable === true && runtime?.state === 'ready';
+}
+
+/**
+ * How to ask one orchestrator whether it is actually running.
+ *
+ * Presence of the binary is not enough – an installed `herdr` with no server
+ * behind it cannot be driven – so a probe is a command that only counts as an
+ * answer when the thing behind it responds. What responding means differs from
+ * one orchestrator to the next, so each one carries its own rule rather than
+ * the code that runs the probes growing a branch per orchestrator.
+ */
+export interface OrchestratorProbe {
+  /**
+   * Binary names to look for, most preferred first. Orca ships as `orca-ide`
+   * but is also installed as plain `orca`, and the two are the same tool.
+   */
+  binaries: readonly string[];
+  /** The arguments that ask it whether it is running. */
+  args: readonly string[];
+  /**
+   * Whether what the command printed counts as an answer, given that it has
+   * already exited 0. Exiting 0 is necessary for every orchestrator; this is
+   * the extra condition on top of that, and is simply always true for an
+   * orchestrator whose exit status is the whole answer.
+   */
+  answered: (stdout: string) => boolean;
+  /** Where to send a user whose probe failed, when there is a page for it. */
+  docs?: string;
+}
+
+/**
+ * How to ask each orchestrator whether it is actually running. A host running
+ * neither simply has nothing to probe.
+ */
+export const ORCHESTRATOR_PROBES: Readonly<Record<Orchestrator, OrchestratorProbe>> = {
+  // `herdr api` fails outright when no server is behind it, so its exit status
+  // is the whole answer and there is nothing to read in what it printed.
+  herdr: { binaries: ['herdr'], args: ['api'], answered: () => true },
+  orca: {
+    binaries: ['orca-ide', 'orca'],
+    args: ['status', '--json'],
+    answered: orcaRuntimeIsReady,
+    docs: 'https://docs.orca.dev/headless-linux',
+  },
 };
 
 /**
@@ -117,11 +197,12 @@ export interface ProjectHostContext {
   preferredMode?: BrowserMode;
   /** The port a remote browser is expected on, defaulted when unstated. */
   cdpPort: number;
-}
-
-function record(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
-  return value as Record<string, unknown>;
+  /**
+   * The project's `frontend.browser.fallback`, exactly as written, or
+   * undefined when it states none. Held verbatim rather than interpreted here
+   * so that one place - `projectAllowsFallback` - decides what a value means.
+   */
+  fallback?: string;
 }
 
 /**
@@ -146,5 +227,186 @@ export function projectHostContext(projectYaml: unknown, hasProject = true): Pro
         ? DEFAULT_REMOTE_CDP_PORT
         : DEFAULT_CDP_PORT;
 
-  return { hasProject, hasFrontend, preferredMode, cdpPort };
+  const rawFallback = record(browser)?.fallback;
+  const fallback = typeof rawFallback === 'string' ? rawFallback : undefined;
+
+  return { hasProject, hasFrontend, preferredMode, cdpPort, fallback };
+}
+
+/**
+ * The one `frontend.browser.fallback` value that means anything: the project
+ * refuses to run against any browser other than the mode it named.
+ */
+export const FALLBACK_FORBIDDEN = 'none';
+
+/**
+ * Whether this project accepts a browser mode other than the one it prefers.
+ *
+ * Only the literal `none` forbids it. Every other value, including one naming
+ * a mode, leaves the host's own order (remote, then headless, then local)
+ * alone: a project that wanted a particular mode would have named it as its
+ * mode, so a second mode name here is not an instruction anyone should act on.
+ */
+export function projectAllowsFallback(project: ProjectHostContext): boolean {
+  return project.fallback !== FALLBACK_FORBIDDEN;
+}
+
+/**
+ * Why no browser mode could be resolved. Each shade is a different situation
+ * with a different way out, so they are kept apart as data and the caller
+ * turns the one it got into a sentence. The resolver never prints and never
+ * throws: a host with no browser is an ordinary answer, not a crash.
+ */
+export type BrowserModeProblem =
+  /** There is no SpecHub project here at all. */
+  | { kind: 'no-project' }
+  /** There is a project, but it configures no frontend, so it drives no browser. */
+  | { kind: 'no-frontend' }
+  /** Not one of the three `host.browser.*` axes has been declared either way. */
+  | { kind: 'host-undescribed' }
+  /** The axes that are declared are all false: this host offers no browser. */
+  | { kind: 'host-declares-none' }
+  /**
+   * The project prefers a mode this host does not declare, and forbids
+   * standing in another one. `available` is the mode that would have stood in,
+   * carried so the caller can say what is being refused.
+   */
+  | { kind: 'fallback-forbidden'; preferred: BrowserMode; available: BrowserMode };
+
+/** A browser mode this project can actually be driven with here. */
+export interface ResolvedBrowserMode {
+  status: 'resolved';
+  /** The mode to use. */
+  mode: BrowserMode;
+  /** The project's stated preference, or undefined when it states none. */
+  preferred?: BrowserMode;
+  /** True only when `mode` differs from a preference the project stated. */
+  fallback: boolean;
+}
+
+/** Which browser mode to use here, or why there is none. */
+export type BrowserModeResolution =
+  | ResolvedBrowserMode
+  | { status: 'unresolved'; problem: BrowserModeProblem };
+
+/**
+ * Which browser mode this machine should drive for this project, decided from
+ * what is declared and nothing else.
+ *
+ * Both `spechub config browser-mode` and check 4 of `spechub config check`
+ * ask this same question, so they ask it here rather than each carrying its
+ * own copy of the priority-and-fallback rules and drifting apart.
+ *
+ * The order matters. A project with no frontend is settled first, because a
+ * project that drives no browser has no question to answer however well the
+ * host is described. A host offering nothing comes next, because it is a gap
+ * in the description of the machine, and mentioning a fallback the machine
+ * does not have would only send the user chasing one. Only then does the
+ * project's own preference decide anything.
+ */
+export function resolveBrowserMode(
+  declared: DeclaredBrowserModes,
+  project: ProjectHostContext
+): BrowserModeResolution {
+  if (!project.hasProject) return { status: 'unresolved', problem: { kind: 'no-project' } };
+  if (!project.hasFrontend) return { status: 'unresolved', problem: { kind: 'no-frontend' } };
+
+  const available = fallbackBrowserMode(declared);
+  if (!available) {
+    // A host nobody has described yet is a different situation from one that
+    // describes itself as having no browser: the first needs answering, the
+    // second needs a browser. Anything partly answered counts as the second,
+    // because the axes that were answered all said no.
+    const anyDeclared = BROWSER_MODE_PRIORITY.some(mode => declared[mode] !== undefined);
+    return {
+      status: 'unresolved',
+      problem: { kind: anyDeclared ? 'host-declares-none' : 'host-undescribed' },
+    };
+  }
+
+  const preferred = project.preferredMode;
+  if (!preferred) {
+    // No preference stated, so the first mode the host declares wins outright.
+    // This is not a fallback: there was nothing to fall back from, which is
+    // also why `frontend.browser.fallback` has no say here, `none` included.
+    return { status: 'resolved', mode: available, fallback: false };
+  }
+
+  if (declared[preferred] === true) {
+    return { status: 'resolved', mode: preferred, preferred, fallback: false };
+  }
+
+  if (!projectAllowsFallback(project)) {
+    return { status: 'unresolved', problem: { kind: 'fallback-forbidden', preferred, available } };
+  }
+
+  return { status: 'resolved', mode: available, preferred, fallback: true };
+}
+
+/** What a project states about the browser, as stated - no defaults filled in. */
+export interface ProjectBrowserSettings {
+  /** `frontend.browser.mode`, or null when unstated. */
+  mode: string | null;
+  /**
+   * `frontend.browser.cdp_port`, or null when unstated. Deliberately not the
+   * port a probe would end up using: `ProjectHostContext.cdpPort` answers
+   * "which port do we knock on", and this answers "what did the project say",
+   * which are different questions with different right answers.
+   */
+  cdpPort: number | null;
+  /** `frontend.browser.fallback`, or null when unstated. */
+  fallback: string | null;
+}
+
+/**
+ * The project settings `spechub config show` reports, read once and shared by
+ * the text listing and the JSON output so the two can never drift apart.
+ */
+export interface ProjectSettings {
+  /** The top-level `profile`, or null when the project sets none. */
+  profile: string | null;
+  /** Only the `commands.*` entries that are actually set, by name. */
+  commands: Record<string, string>;
+  /** What the project says about its browser, or null when it has no frontend. */
+  browser: ProjectBrowserSettings | null;
+}
+
+/** A non-empty string, or null for every other value including an empty one. */
+function statedString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+/**
+ * Read the settings `show` reports off an already-parsed project.yaml, or
+ * null when there is no project here at all.
+ *
+ * The file is whatever the user wrote, so nothing is assumed: a `commands`
+ * entry only counts when its value is a non-empty string, because a null, a
+ * number or a nested table is not a command anyone could run.
+ */
+export function projectSettings(projectYaml: unknown, hasProject = true): ProjectSettings | null {
+  if (!hasProject) return null;
+
+  const project = record(projectYaml);
+  const frontend = project?.frontend;
+  const hasFrontend = frontend !== undefined && frontend !== null;
+  const browser = record(record(frontend)?.browser);
+
+  const commands: Record<string, string> = {};
+  for (const [name, value] of Object.entries(record(project?.commands) ?? {})) {
+    const command = statedString(value);
+    if (command !== null) commands[name] = command;
+  }
+
+  const rawPort = browser?.cdp_port;
+  const cdpPort =
+    typeof rawPort === 'number' && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : null;
+
+  return {
+    profile: statedString(project?.profile),
+    commands,
+    browser: hasFrontend
+      ? { mode: statedString(browser?.mode), cdpPort, fallback: statedString(browser?.fallback) }
+      : null,
+  };
 }
