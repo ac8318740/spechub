@@ -54,9 +54,10 @@ tuicr:
   # Per-file +added -removed counts in the tree.
   show_file_line_stats: true
   #
-  # TEMPORARY. Two upstream pull requests are still open:
+  # TEMPORARY. Two upstream pull requests are still open, plus one local fix with none yet:
   #   agavra/tuicr#607  configurable file line stats  (antonio2368)
   #   agavra/tuicr#633  <leader>L / <leader>H resize  (ours)
+  #   (no PR yet)       fixes blank +/- counts in PR review mode  (ours)
   # Until both merge, the two settings above only exist in a fork build.
   # `setup.sh status` checks both and tells you when to switch this off.
   # With it false, the stock release installs and those keys are ignored.
@@ -105,7 +106,7 @@ gh_dash:
   # ctrl+d by default, which is fine in vim and awkward everywhere else.
   page_keys: true
   keybindings:
-    # Pipe the selected pull request into diffnav.
-    tree_diff: "D"
+    # Open the selected pull request in tuicr, which reviews it in place.
+    review: "D"
     # Hand the selected pull request to an agent. Empty disables it.
     agent_review: "S"
