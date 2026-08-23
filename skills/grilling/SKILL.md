@@ -55,7 +55,7 @@ reintroduces the ordering the frontier exists to prevent. In tool mode, put
 the recommended option first with "(Recommended)".
 
 **Inline format**: numbered questions, options in a table, the recommended
-option **bolded** with its one-line reason. No emoji.
+option **bolded** with its one-line reason. Prose follows the `writing` skill.
 
 Whichever mode runs, an open answer survives: if the user types something no
 option covers, that text is the answer.
@@ -75,9 +75,7 @@ the tracker's `update` and `create` operations:
 
 1. Append the answer to the node body under `## Answer` and mark the node
    resolved (on the files backend, one `spechub node update` call does both).
-   Write the answer so it stands on its own – plain language, any term of art
-   defined at first use. Someone who was not in this conversation may read it
-   weeks from now.
+   Write the answer per the `writing` skill.
 2. Create a node for each new question the answer surfaced, with `answers`
    naming the node that surfaced it. Questions that can be stated precisely
    are `open`; the rest are `fog`.
@@ -85,3 +83,17 @@ the tracker's `update` and `create` operations:
    the decision earns an ADR, a glossary term, both, or neither.
 4. Recompute the frontier with the tracker's query and present the next
    round.
+
+**Example** – the `## Answer` body of a node asking whether map nodes
+belong in git:
+
+```markdown
+## Answer
+
+Map nodes stay out of git. `spechub/maps/` goes in `.gitignore`, because a
+node is working state that the map throws away once it clears.
+
+The durable output is the living specs, the architecture decision records and
+the glossary. The `record-context` skill extracts each one as a node
+resolves, so nothing of lasting value leaves with the nodes.
+```

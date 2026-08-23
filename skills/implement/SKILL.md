@@ -116,9 +116,7 @@ When the checker passes, resolve the node in one call:
 <what was built, which files, what the tests pin down>"
 ```
 
-Write the `## Answer` text for a reader with little context – plain language,
-any term of art defined at first use. It may be read weeks later by someone
-who was not in this conversation.
+Write the `## Answer` text per the `writing` skill.
 
 With no map, skip the tracker write – still invoke `record-context` when a
 decision landed. With a map, then:

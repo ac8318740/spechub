@@ -98,9 +98,7 @@ operation. First the root:
   earned by a node containing no decision: research, or work whose questions
   are all settled. Getting this wrong means an agent quietly deciding
   something that was the human's.
-- Write every title and body for a claimer with no context – plain language,
-  any term of art defined at first use. A node may sit on the frontier for
-  weeks and be picked up by someone who was not in this conversation.
+- Write every title and body per the `writing` skill.
 - Nodes describe behaviour, not file paths. A node can sit on the frontier for
   weeks while the codebase moves – paths are resolved at claim time.
 - On the files backend, suggest adding `spechub/maps/` to `.gitignore`. Nodes

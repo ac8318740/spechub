@@ -50,8 +50,7 @@ in context. If you are about to grep source, stop – the conversation holds it.
 
 Omit any that do not apply. Do not pad.
 
-The handoff is read by a session with none of this conversation – plain language,
-no unexplained shorthand.
+Prose follows the `writing` skill.
 
 ## Redaction
 
@@ -90,36 +89,41 @@ SessionStart hook re-injects automatically.
 
 Write `spechub/HANDOFF.md`. The frontmatter is **mandatory and machine-read** – the
 hook ignores any file without the marker, so a user's own `HANDOFF.md` is never
-touched:
+touched. Example:
 
 ```markdown
 ---
 spechub_handoff: 1
-map: <map name, or "ad-hoc" when none is active>
-created: <ISO 8601 UTC>
+map: prose-standard
+created: 2026-08-22T14:05:00Z
 ---
-# SpecHub handoff – <map name or "ad-hoc">
+# SpecHub handoff – prose-standard
 
 ## Next action
-<the single concrete next step>
+Trim the restated prose rules out of `skills/map/SKILL.md`, node 12.
 
 ## Decisions made
-- <decision, so it is not reopened>
+- The `writing` skill owns words, sentences and voice. Every other skill
+  points at it in one line.
+- `visual-docs` keeps document shape and gives up its prose bullets.
 
 ## Open questions / blockers
-- <...>
+- Node 15 waits on the user. It asks whether `lint-prose` blocks a commit.
 
 ## Agent-team plan
-- Scope A – <teammate> – files: <non-overlapping set>
-- After team (shared files, sequential): <list>
+- Skills – trims-opus – files: `skills/*/SKILL.md`, not `skills/writing/`
+- After team (shared files, sequential): `CLAUDE.md`, `CONTRIBUTING.md`
 
 ## Suggested skills
-- <skill name> – <why>
+- record-context – node 12 settles the pointer form, so it may earn an ADR
 
 ## References
 - Map state: `spechub node walk` and `spechub node frontier`
 - Files in flight: `git status --short`
 ```
+
+`map` names the active map, or `ad-hoc` when none is active. `created` is an
+ISO 8601 timestamp in UTC. The title heading repeats the map name.
 
 Then hand the user a `/compact` line steered at this work, naming the next action
 and anything they flagged. A skill cannot run `/compact` itself.
