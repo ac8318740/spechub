@@ -1,99 +1,51 @@
 # SpecHub terminal workspace.
 # Copy to ~/.config/spechub/terminal-workspace.yaml, edit, then run setup.sh apply.
 #
-# This is machine-level, not per-project: it installs binaries and writes
+# This is machine-level, not per-project. It installs binaries and writes
 # keybindings for your user, so it does not belong in spechub/project.yaml.
+#
+# What each component is, every key, and the traps worth knowing:
+# docs/terminal-workspace.md in the SpecHub plugin.
+#
+# A key here never carries a hyphen, so gh-dash is gh_dash. The last two
+# blocks name a feature rather than a binary: markdown is spechub-md, and
+# remote is spechub-clip plus spechub-open.
 
+# Master switch. With this false, apply exits without installing anything.
+# It removes nothing either. Use setup.sh uninstall for that.
 enabled: true
-
-remote:
-  enabled: true
-  # Copy and open, on a machine you reach over SSH.
-  #
-  # A dev VM has no display and no clipboard, so anything that shells out to
-  # xclip fails and xdg-open exits 1. Two helpers close the gap: spechub-clip
-  # sends text to your own terminal's clipboard with OSC 52, and spechub-open
-  # finds whatever browser is actually reachable.
-  #
-  # Install an xclip stand-in backed by spechub-clip. Programs that only know
-  # how to shell out - gh-dash's y and Y among them - then copy correctly.
-  # Skipped when the machine has a real xclip or a display of its own.
-  clipboard_shim: true
 
 herdr:
   enabled: true
-  # Direct chords that need no prefix. Keep "alt": it is the only family
-  # measured to work on both attach paths. ctrl+alt does reach herdr when you
-  # SSH in and run it on the remote host, but a Windows client attaching with
-  # `herdr --remote` never delivers it, so those chords go silently dead.
+  # A terminal multiplexer. One program holds many terminal sessions and keeps
+  # them running after you disconnect.
+  #
+  # A chord is one key combination, such as alt+d. herdr normally wants a
+  # prefix key first. You press the prefix, release it, then press the second
+  # key. A chord modifier replaces those two steps with one combination.
+  #
+  # Keep "alt". It is the only family measured to work on both attach paths.
+  # ctrl+alt does reach herdr when you SSH in and run it on the remote host.
+  # But a Windows client attaching with `herdr --remote` never delivers it, so
+  # those chords go silently dead.
   # Set "none" to keep herdr's default prefix-only keymap.
   chord_modifier: alt
   worktrees_directory: "~/.herdr/worktrees"
   # Agent state hook, so herdr reads state from the agent instead of the
   # screen. One of: claude, codex, opencode, copilot, none.
   integration: claude
-
-delta:
-  enabled: true
-  # Sets core.pager and interactive.diffFilter. Agents are unaffected:
-  # git only pages to a terminal.
-  set_git_pager: true
-
-diffnav:
-  enabled: true
-  # Popup that shows the most relevant diff: unstaged, else staged, else HEAD.
-  popup_key: "alt+d"
-  tab_key: "alt+shift+d"   # same tool, new tab instead of a popup
-
-tuicr:
-  enabled: true
-  # Code review TUI. gh-dash hands pull requests to it; it is not the file
-  # browser, which is yazi below.
-  # Starting width of the file list, as a percentage of the content area.
-  file_list_width: 30
-  # Per-file +added -removed counts in the tree.
-  show_file_line_stats: true
-  #
-  # TEMPORARY. Two upstream pull requests are still open, plus one local fix with none yet:
-  #   agavra/tuicr#607  configurable file line stats  (antonio2368)
-  #   agavra/tuicr#633  <leader>L / <leader>H resize  (ours)
-  #   (no PR yet)       fixes blank +/- counts in PR review mode  (ours)
-  # Until both merge, the two settings above only exist in a fork build.
-  # `setup.sh status` checks both and tells you when to switch this off.
-  # With it false, the stock release installs and those keys are ignored.
-  build_from_fork: false
-  fork: "https://github.com/ac8318740/tuicr"
-  fork_branch: "local/daily"
-
-yazi:
-  enabled: true
-  # File manager. Markdown renders live in the preview pane through
-  # spechub-md, so a document draws as the cursor moves over it, and Enter
-  # opens the same renderer full width where more of a diagram fits.
-  popup_key: "alt+y"          # floating, does not change the tab layout
-  tab_key: "alt+shift+y"      # opens a real tab instead
-  browser_key: "b"            # hovered file -> the browser you are sitting at
-  line_numbers_key: "#"       # preview markdown as source, line numbers down the left
-  show_hidden: true
-
-markdown:
-  enabled: true
-  # spechub-md reads a markdown file with its mermaid diagrams drawn as text,
-  # and can serve the same file to a real browser for the ones worth studying.
-  #
-  # Text rather than inline images is deliberate. herdr emits the kitty
-  # graphics protocol, and no terminal reachable over SSH from Windows or
-  # Android renders it, so an image never arrives. e-ink panels also render
-  # text far better than bitmaps: the fast refresh modes an interactive
-  # terminal needs are the ones that drop the greyscale depth an image needs.
-  preview_port: 6419
+  # Link a small herdr plugin that keeps the sidebar numbers matching the keys
+  # you press for them. Opening or closing a workspace or a worktree moves the
+  # rows, so without this the number beside a row stops being the number that
+  # jumps to it.
+  renumber_plugin: true
 
 gh_dash:
   enabled: true
+  # A pull request dashboard. It lists pull requests in the sections you
+  # define below, and hands the selected one to tuicr or to an agent.
   popup_key: "alt+i"
   tab_key: "alt+shift+i"
-  # Add a section for whichever repo you are standing in, at launch.
-  dynamic_repo_section: true
   sections:
     - title: Mine
       filters: "is:open author:@me"
@@ -111,3 +63,89 @@ gh_dash:
     review: "D"
     # Hand the selected pull request to an agent. Empty disables it.
     agent_review: "S"
+
+diffnav:
+  enabled: true
+  # A diff viewer with a file tree. The popup shows the most relevant diff:
+  # unstaged, else staged, else HEAD.
+  popup_key: "alt+d"
+  # Same tool, a new tab instead of a popup.
+  tab_key: "alt+shift+d"
+
+delta:
+  enabled: true
+  # The diff renderer git pages through. Sets core.pager and
+  # interactive.diffFilter. This does not change what agents see, because git
+  # only pages to a terminal.
+  set_git_pager: true
+
+tuicr:
+  enabled: true
+  # Reviews a pull request inside the terminal. gh-dash hands pull requests to
+  # it. It is not the file manager, which is yazi below.
+  # Starting width of the file list, as a percentage of the content area.
+  file_list_width: 30
+  # Per-file +added -removed counts in the tree.
+  show_file_line_stats: true
+  #
+  # TEMPORARY. Two upstream pull requests are still open, plus one local fix
+  # with none yet:
+  #   agavra/tuicr#607  configurable file line stats  (antonio2368)
+  #   agavra/tuicr#633  <leader>L / <leader>H resize  (ours)
+  #   (none yet)        blank +/- counts in pull request review mode  (ours)
+  # Until both merge, the two settings above only exist in a fork build.
+  # `setup.sh status` checks both and tells you when to switch this off.
+  # With it false, the stock release installs and ignores those two settings.
+  build_from_fork: false
+  fork: "https://github.com/ac8318740/tuicr"
+  fork_branch: "local/daily"
+
+yazi:
+  enabled: true
+  # A file manager. Markdown renders live in the preview pane through
+  # spechub-md, so a document draws as the cursor moves over it. Enter opens
+  # the same renderer full width, where more of a diagram fits.
+  # A popup, leaving the tab layout alone.
+  popup_key: "alt+y"
+  # Opens a real tab instead.
+  tab_key: "alt+shift+y"
+  # Sends the hovered file to your own browser.
+  browser_key: "b"
+  # Previews markdown as source, with line numbers down the left.
+  line_numbers_key: "#"
+  show_hidden: true
+
+markdown:
+  enabled: true
+  # This component installs three tools: spechub-md, mermaid-ascii and glow.
+  # spechub-md draws a markdown file in the terminal, calling glow for the
+  # prose and mermaid-ascii for the diagrams. A mermaid diagram is a diagram
+  # written as text in the file itself. spechub-md can also serve the same
+  # file to a real browser, for the diagrams worth studying.
+  #
+  # Text rather than inline images is deliberate. herdr emits the kitty
+  # graphics protocol, and no terminal reachable over SSH from Windows or
+  # Android renders it, so an image never arrives. e-ink panels also render
+  # text far better than bitmaps. The fast refresh modes an interactive
+  # terminal needs are the ones that drop the greyscale depth an image needs.
+  #
+  # spechub-md --serve takes its port from $SPECHUB_MD_PORT and falls back to
+  # 6419. Forward whichever port you serve on, or the link --serve prints is
+  # unreachable from your laptop.
+
+remote:
+  enabled: true
+  # Copy and open, on a machine you reach over SSH.
+  #
+  # The dev machine – the remote machine your agents run on, a virtual machine
+  # in this setup – has no display and no clipboard. Anything that shells out
+  # to xclip fails, and xdg-open exits 1. Two programs close the gap.
+  # spechub-clip sends text to your own terminal's clipboard over OSC 52, an
+  # escape sequence a terminal reads as "put this text on the clipboard of the
+  # machine I am running on". spechub-open finds whatever browser is actually
+  # reachable.
+  #
+  # Install an xclip stand-in backed by spechub-clip. Programs that only know
+  # how to shell out – gh-dash's y and Y among them – then copy correctly.
+  # Skipped when the machine has a real xclip or a display of its own.
+  clipboard_shim: true

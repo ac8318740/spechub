@@ -5,7 +5,7 @@
 # task registered by register-tasks.ps1. Logs to
 # %LOCALAPPDATA%\playwriter-bridge\opener-supervisor.log.
 #
-# The opener is what shows a page from a dev VM in this machine's default
+# The opener is what shows a page from a VM in this machine's default
 # browser. It is not the bridge - see docs/adr/0006-document-opener-service.md
 # for why those are two services and not one.
 #

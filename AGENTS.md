@@ -10,7 +10,7 @@ CLI build discipline, the release process, and the writing standards.
 
 | Path | What it is |
 |---|---|
-| `orchestrator/AGENTS.md` | The instructions SpecHub gives an agent **using** the plugin. Runtime payload, not guidance for you. |
+| `orchestrator/AGENTS.md` | What SpecHub tells an agent **using** the plugin – shipped to users, not guidance for you |
 | `skills/`, `agents/` | Skills and subagent definitions the plugin ships |
 | `cli/` | The `spechub` CLI. `dist/` is committed – see CONTRIBUTING |
 | `hooks/` | SessionStart wiring: CLI symlinks and orchestrator injection |
@@ -19,5 +19,5 @@ CLI build discipline, the release process, and the writing standards.
 `orchestrator/AGENTS.md` deliberately does not live at the repo root. It tells
 an agent it is a coordinator that must never read a codebase directly. That is
 the opposite of what you need while working on this repo. Claude Code and Codex
-both auto-load a root-level `AGENTS.md`. Keeping the payload out of that slot
-stops Claude Code and Codex from applying it to the wrong job.
+both auto-load a root-level `AGENTS.md`. Keeping that file out of the root
+stops both of them from applying it to the wrong job.

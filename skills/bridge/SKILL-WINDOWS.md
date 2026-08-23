@@ -1,7 +1,7 @@
 # Playwriter bridge – Windows runbook
 
 > Stop reading if you are not on Windows. This file is PowerShell-only.
-> On Linux, macOS or a dev VM, read [`SKILL-VM.md`](SKILL-VM.md) instead.
+> On Linux, macOS or a VM, read [`SKILL-VM.md`](SKILL-VM.md) instead.
 
 ## What the Windows side owns
 
@@ -40,7 +40,7 @@ The only laptop-to-VM connection is outbound SSH.
 ## Prerequisites
 
 - Windows 10 / 11 laptop
-- A Linux (or similar) dev VM reachable by SSH from the laptop
+- A Linux (or similar) VM reachable by SSH from the laptop
 - Chrome installed on the laptop
 - An SSH keypair you use to reach the VM
 
@@ -182,8 +182,8 @@ To validate a change from a checkout, deploy it first:
 ```
 
 `register-tasks.ps1` reads `opener.ps1` and `opener.js` from the deploy
-directory, never from the checkout. Run it before `sync.ps1` and it
-validates the files you just replaced.
+directory, never from the checkout. Run it before `sync.ps1` and it validates
+the files still deployed rather than your change.
 
 All tasks run at user logon from now on. Logs land in
 `%LOCALAPPDATA%\playwriter-bridge\`.
@@ -210,7 +210,7 @@ All tasks run at user logon from now on. Logs land in
 lingering bridge processes. It then checks that port 19988 and port 19989 are
 both free, and prints a verdict line.
 
-### Restart a tunnel
+### Restart the tunnels
 
 ```powershell
 .\stop.ps1
@@ -226,13 +226,15 @@ Do not restart one tunnel with a bare `Stop-ScheduledTask` and
 under it. The old supervisor and its `ssh.exe` stay alive, still holding the
 reverse forward, so the instance you just started never binds the port.
 Meanwhile `/health` answers 200 off the orphan, so the bridge looks healthy
-and drives nothing. Measured on `Playwriter-Tunnel-VM1`: supervisor 38296
-survived the stop. Its `ssh.exe` 5108 kept `-R 19989` open, so the new
-instance 36408 never got the port.
+and drives nothing.
 
-`stop.ps1` is the only stop that reaps the tree, so it is the one to reach
-for even when a single tunnel is what needs restarting. It stops every
-`Playwriter-*` task, which is why the recipe starts them all again.
+Measured on `Playwriter-Tunnel-VM1` during the opener work (August 2026).
+Supervisor 38296 survived the stop. Its `ssh.exe` 5108 kept `-R 19989` open,
+so the new instance 36408 never got the port.
+
+`stop.ps1` is the only stop that reaps the tree. Reach for it even when only
+one tunnel needs restarting. It stops every `Playwriter-*` task, which is why
+the recipe starts them all again.
 
 ### Updates (automatic)
 
@@ -259,7 +261,7 @@ It cannot attach to `chrome://` and `about:` pages.
 
 ## The document opener
 
-The opener shows a page from a dev VM in this laptop's default browser. It is
+The opener shows a page from a VM in this laptop's default browser. It is
 a second service, not part of the bridge. The bridge carries CDP to a Chrome
 the extension drives. The opener takes a document and opens a tab. See
 `docs/adr/0006-document-opener-service.md` for why these stay apart.
@@ -277,13 +279,15 @@ Two tasks run it:
 
 ### The opener token
 
-Every request from a VM carries a shared secret. `register-tasks.ps1`
-generates it, stores it at `%LOCALAPPDATA%\playwriter-bridge\opener.token`,
-and pushes it over `ssh` to `~/.config/spechub/opener.token` on each VM.
+Every request from a VM carries a shared secret called the opener token.
+`register-tasks.ps1` generates it and stores it at
+`%LOCALAPPDATA%\playwriter-bridge\opener.token`. It then pushes the token over
+`ssh` to `~/.config/spechub/opener.token` on each VM.
 
 The token is not optional. The reverse tunnel makes 19989 reachable by
 anything running on the VM, and this service puts pages on your screen.
-Loopback binding alone does not scope that.
+Binding to loopback, meaning an address only this laptop can reach, does not
+scope that.
 
 `register-tasks.ps1` warns and continues when a push fails. Copy the file to
 that VM by hand in this case.
@@ -359,7 +363,7 @@ Windows attaches no console. The launcher also waits for the child. It
 propagates the child's exit code. When it shuts down on its own it kills the
 descendant process tree through WMI.
 
-That last part does not fire under `Stop-ScheduledTask`. Measured twice:
+That last part does not fire under `Stop-ScheduledTask`, measured twice.
 Task Scheduler force-terminates `launcher.exe`, so the `ProcessExit` handler
 never runs, the WMI kill never happens, and the children outlive the task.
 `stop.ps1`, `sync.ps1` and `register-tasks.ps1` each reap the tree themselves

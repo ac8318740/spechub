@@ -158,7 +158,7 @@ cat ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/hooks/hooks.json
 
 **Cause**: The hook uses `python3` to emit `orchestrator/AGENTS.md` as JSON for `additionalContext` injection. Without it the orchestrator instructions do not load at all – nothing else reads that file. Claude Code does not auto-load instructions from a plugin's own directory, so injection is the only path. This does not affect the CLI symlinks, so the `spechub` command keeps working.
 
-**Fix**: Install Python 3 if you want the explicit injection (rare – most systems have it):
+**Fix**: Install Python 3. Most systems already have it.
 
 ```bash
 # Debian/Ubuntu
@@ -166,8 +166,6 @@ sudo apt install python3
 # macOS
 brew install python3
 ```
-
-Otherwise, ignore the warning.
 
 ---
 

@@ -56,6 +56,12 @@ This detects your project type and generates `spechub/project.yaml` with workflo
 
 Each machine also declares its own dev setup once, with `/spechub:host`. For every axis, what reads it, and how to describe a fresh machine, read [docs/dev-setups.md](docs/dev-setups.md).
 
+## Terminal workspace for driving several agents
+
+Run `/spechub:terminal-workspace` to set up a keyboard-only terminal for driving several agents on a dev machine, the remote machine your agents run on. The skill installs every tool and writes every config. SpecHub needs none of it, so the whole setup is optional. [docs/terminal-workspace.md](docs/terminal-workspace.md) documents it.
+
+The setup builds on herdr, a terminal multiplexer that keeps each agent's terminal running after you disconnect. You attach to it from your own machine with `herdr --remote`, so your own clipboard and browser reach the session. Each agent can get its own git worktree, meaning its own checkout on its own branch. Then gh-dash triages pull requests and diffnav reads diffs, both without leaving the terminal. The document gives the exact config, every key, and the traps worth knowing.
+
 ## CLI
 
 SpecHub ships a Node.js CLI (`spechub init`, `spechub list`, `spechub node ...`, `spechub archive`).
@@ -75,10 +81,6 @@ If `spechub` doesn't run after install, see [TROUBLESHOOTING.md](TROUBLESHOOTING
 ## Upgrading
 
 Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.8.md) for how to remove the stale `@import` line from your project CLAUDE.md.
-
-## Running agents in parallel
-
-Driving several agents on a machine you reach over the network? [docs/terminal-workspace.md](docs/terminal-workspace.md) documents one complete setup. It covers herdr for panes that survive disconnect and worktree-backed workspaces, attached from your own machine with `herdr --remote`. It also covers gh-dash for pull request triage, and diffnav for reading diffs. Exact config, keys, and the traps worth knowing.
 
 ## Skills
 
@@ -125,7 +127,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 | `/spechub:visual-docs` | Write docs that lead with a diagram and derive structure from it (Minto pyramid) |
 | `/spechub:new-worktree` | Create a git worktree off the remote base branch and continue the task inside it |
 | `/spechub:teardown-worktree` | Retire finished worktrees and delete their merged local and remote branches |
-| `/spechub:terminal-workspace` | Install and configure the optional terminal workspace: herdr, yazi, gh-dash, diffnav, delta, tuicr, and markdown with mermaid |
+| `/spechub:terminal-workspace` | Set up a keyboard-only terminal for driving agents on a dev machine |
 
 ## Agents
 
@@ -140,7 +142,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 
 The plugin ships one output style, shown to Claude Code as `spechub:ac-writing-style`. It applies the `writing` skill's plain-language rules and the `visual-docs` skill's Minto pyramid to every chat reply. A reply leads with the answer, keeps one idea per sentence, names the actor, and uses no em dash or emoji.
 
-`/spechub:init` offers the style as a late optional step, and `/spechub:config check` offers it on a project you already set up. Both write `outputStyle` for you: `~/.claude/settings.json` for every project, or `.claude/settings.local.json` for this one. A project value overrides the global one. The style applies after `/clear`, or in a new session. The plugin never forces it on.
+`/spechub:init` offers the style as a late optional step, and `/spechub:config check` offers it on a project you already set up. Both write `outputStyle` for you. Use `~/.claude/settings.json` for every project, or `.claude/settings.local.json` for this one. A project value overrides the global one. The style applies after `/clear`, or in a new session. The plugin never forces it on.
 
 ## Language profiles
 
@@ -166,4 +168,12 @@ The plugin ships one output style, shown to Claude Code as `spechub:ac-writing-s
 - **[Taskmaster AI](https://github.com/eyaltoledano/claude-task-master)** – Taskmaster's task management model inspired the orchestrator pattern and the agent coordination approach.
 - **[Skills for Real Engineers](https://github.com/mattpocock/skills)** by Matt Pocock – the Wayfinder map, the grilling technique, and the durability rule for agent briefs. SpecHub's node graph is a direct adaptation of Wayfinder. MIT licensed; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
 - Additional inspiration from [Superpowers](https://github.com/obra/superpowers), [GSD](https://github.com/gsd-build/get-shit-done), and [Spec Kit](https://github.com/github/spec-kit).
-- The optional terminal workspace installs, but does not bundle, [herdr](https://herdr.dev), [tuicr](https://github.com/agavra/tuicr) by agavra, [gh-dash](https://github.com/dlvhdr/gh-dash) and [diffnav](https://github.com/dlvhdr/diffnav) by dlvhdr, and [delta](https://github.com/dandavison/delta) by dandavison. Each keeps its own licence. Its optional tuicr fork build also compiles [agavra/tuicr#607](https://github.com/agavra/tuicr/pull/607) by [antonio2368](https://github.com/antonio2368), which is off by default and temporary; see [docs/terminal-workspace.md](docs/terminal-workspace.md).
+- The optional terminal workspace installs, but does not bundle, the three tools you drive and the five behind them. Each keeps its own licence.
+  - [herdr](https://herdr.dev)
+  - [tuicr](https://github.com/agavra/tuicr) by agavra, which reviews a pull request inside the terminal
+  - [gh-dash](https://github.com/dlvhdr/gh-dash) and [diffnav](https://github.com/dlvhdr/diffnav) by dlvhdr
+  - [delta](https://github.com/dandavison/delta) by dandavison
+  - [yazi](https://github.com/sxyazi/yazi) by sxyazi, the file manager that previews whatever the cursor sits on
+  - [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by AlexanderGrooff
+  - [glow](https://github.com/charmbracelet/glow) by charmbracelet
+- The optional fork build of tuicr compiles [agavra/tuicr#607](https://github.com/agavra/tuicr/pull/607) by [antonio2368](https://github.com/antonio2368). It also compiles [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633) and one counts fix not yet submitted upstream, both written for this fork. That build is off by default and temporary. See [docs/terminal-workspace.md](docs/terminal-workspace.md).

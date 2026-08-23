@@ -9,7 +9,7 @@ hooks/                       – SessionStart hook (CLI symlink + orchestrator i
 skills/                      – slash-command skills
 output-styles/               – output styles (ac-writing-style)
 cli/                         – Node.js CLI (TypeScript source + built dist/)
-assets/                      – files skills ship to the user's machine, not read by the model
+assets/                      – files a skill installs on a user's machine, and the model never reads them
 docs/                        – long-form docs a skill links to instead of inlining
 TROUBLESHOOTING.md           – downstream install diagnostics for Claude Code
 ```
@@ -31,53 +31,62 @@ Two rules for it:
   only those regions, so hand-written config around them survives. Never write
   outside the markers, and never assume the file is absent.
 
-  TOML forces the exceptions. The block **claims** every key it sets. Before the
-  merge it removes a same-name assignment in the user's own `[keys]`, and any
-  `[[keys.command]]` bound to a key the block binds. It removes them because TOML
-  forbids a duplicate key, and herdr would reject the whole file. The same
-  applies to `[worktrees]`, which the block re-declares in full.
+### Merging into a user's TOML config
 
-  Merging into an existing `[keys]` also produces **two** managed regions rather
-  than one: bare keys must sit inside `[keys]`, while `[[keys.command]]` and
-  `[worktrees]` are top-level tables and cannot. What must hold is that
-  re-applying never accumulates them.
+One duplicate key costs the user their whole file. TOML forbids a duplicate,
+herdr rejects a config that has one, and yazi throws its config away and falls
+back to presets. So the managed block **claims** each key it writes, meaning it
+deletes the user's own copy of that key first. Where it cannot prove a key is
+free it **concedes** the key, meaning it writes nothing there and says so.
 
-  `yazi.toml` is the same case, and stricter. One TOML error makes yazi reject
-  the whole config and fall back to presets. A single duplicate therefore costs
-  the user every setting they have. The managed block writes into four namespaces
-  – `mgr`, `opener.markdown`, `plugin.prepend_previewers` and
-  `open.prepend_rules` – and every one of them is a claimed-key case.
+The herdr keymap is the first case. The block claims every key it sets. Before
+the merge it removes a same-name assignment in the user's own `[keys]`, and any
+`[[keys.command]]` bound to a key the block binds. The same applies to
+`[worktrees]`, which the block re-declares in full.
 
-  An array-of-tables entry adds to the config only where the name is free, or
-  where it already holds an array of tables. Under a `[plugin]` that leaves
-  `prepend_previewers` unset, `[[plugin.prepend_previewers]]` is fine. It is a
-  duplicate under a `[plugin]` that holds it as an inline array, which is the
-  form yazi's own documentation teaches.
+Merging into an existing `[keys]` produces **two** managed regions rather than
+one. Bare keys must sit inside `[keys]`. `[[keys.command]]` and `[worktrees]`
+are top-level tables, so they cannot. What must hold is that re-applying never
+accumulates regions.
 
-  `setup.sh` asks `tomllib` which namespaces the user has claimed. It puts the
-  question in the exact form the block would write it. It appends that header to
-  the config outside the markers, then sees whether the whole thing still parses.
-  Whatever the parser refuses is theirs.
+`yazi.toml` is the same case, and stricter. A yazi config that falls back to
+presets loses every setting the user has. The managed block writes into four
+namespaces – `mgr`, `opener.markdown`, `plugin.prepend_previewers` and
+`open.prepend_rules` – and every one of them is a claimed-key case.
 
-  A dict lookup would not do. TOML also refuses to reopen an inline table or to
-  overwrite a scalar. Neither `opener = { text = [...] }` nor `opener = "nope"`
-  has an `opener.markdown` key to find, so a lookup calls both free and the write
-  kills the file. A config that does not parse to begin with concedes all four.
-  The script can learn nothing about such a file, and repairing it is not ours
-  to do.
+An array-of-tables entry adds to the config only where the name is free, or
+where it already holds an array of tables. Under a `[plugin]` that leaves
+`prepend_previewers` unset, `[[plugin.prepend_previewers]]` is fine. It is a
+duplicate under a `[plugin]` that holds it as an inline array, which is the
+form yazi's own documentation teaches.
 
-  `tomllib` needs Python 3.11. Without it, the fallback names the top-level
-  table anywhere the text could open one. That means bare, `"quoted"` or
-  `'literal'`, as a header or as a key of its own.
+`setup.sh` asks `tomllib` which namespaces the user has claimed. It puts the
+question in the exact form the block would write it. It appends that header to
+the config outside the markers, then sees whether the whole thing still parses.
+Whatever the parser rejects is a namespace the user already claimed, so
+`setup.sh` leaves it alone.
 
-  That mostly concedes namespaces which would have been safe to write. Each of
-  those concessions costs one setting, where guessing the other way costs the
-  file. The fallback errs the other way in one place. Text cannot see that a
-  config never parsed, so the fallback writes all four into a file the parsed
-  path would have conceded whole.
+A dict lookup would not do. TOML also refuses to reopen an inline table or to
+overwrite a scalar. Neither `opener = { text = [...] }` nor `opener = "nope"`
+has an `opener.markdown` key to find. A lookup therefore calls both free, and
+the write then kills the file. A config that already fails to parse concedes
+all four namespaces. Such a file teaches `setup.sh` nothing, and repairing a
+user's config is not its job.
 
-  `setup.sh` leaves whatever it concedes to the user and names it in a `say`
-  line. A config that parses with a setting missing beats one yazi throws out.
+`tomllib` needs Python 3.11. Without it, the fallback names the top-level table
+anywhere the text could open one. That means bare, `"quoted"` or `'literal'`,
+as a header or as a key of its own.
+
+That mostly concedes namespaces which would have been safe to write. Each of
+those concessions costs one setting, where guessing the other way costs the
+file. The fallback errs the other way in one place. Text cannot see that a
+config never parsed, so the fallback writes all four into a file the parsed
+path would have conceded whole.
+
+`setup.sh` leaves whatever it concedes to the user and names it in a `say`
+line. A config that parses with a setting missing beats one yazi throws out.
+
+### Testing a setup.sh change
 
 After changing `setup.sh`, test it against a fake home rather than your own:
 
@@ -197,10 +206,9 @@ and `developer_instructions`. It deliberately omits others:
   child agent may never escalate past its parent. Emitting them would imply a
   guarantee that does not hold.
 
-This matters more than it looks. Codex parses agent files with
-`deny_unknown_fields`: one unrecognised key and it discards the whole file,
-logging somewhere nobody reads. CI parses every generated file and fails on any
-key outside the allowed three.
+One unrecognised key discards the whole file. Codex parses agent files with
+`deny_unknown_fields`, and it logs the rejection somewhere nobody reads. CI
+parses every generated file and fails on any key outside the allowed three.
 
 Keep the markdown harness-neutral. Naming Claude Code's tools directly ("use
 Grep/Glob") produces instructions that are wrong under Codex, so prefer "search
@@ -291,9 +299,10 @@ Publishing to npm as well would buy a second door to the same code and cost:
   npm global bin, notably under nvm.
 
 Using SpecHub from another agent harness does not need npm either. On any
-machine with the plugin, `~/.local/bin/spechub` is already on PATH and has no
-Claude Code dependency. What another harness lacks is the orchestrator
-instructions, not the binary.
+machine with the plugin, the hook creates `~/.local/bin/spechub`, which has no
+Claude Code dependency. It works as a typed command whenever `~/.local/bin` is
+on PATH, and the hook warns when it is not. What another harness lacks is the
+orchestrator instructions, not the binary.
 
 Revisit this only if a machine needs the CLI with **no plugin installed at all**.
 That means CI, or a device that runs an agent but not Claude Code. We keep the

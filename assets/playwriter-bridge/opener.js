@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// opener.js - show a page from a dev VM in the browser on this laptop.
+// opener.js - show a page from a VM in the browser on this laptop.
 //
 // The VM has no browser. This service is how a page it rendered reaches the
-// one in front of the user. It listens on loopback; the VM reaches it through
-// the same reverse SSH tunnel that already carries the Playwriter relay, on
-// the next port up.
+// one in front of the user. It listens on loopback, and the VM reaches it
+// through its own reverse SSH tunnel on port 19989. That tunnel is a separate
+// scheduled task from the one carrying the Playwriter relay, because
+// ExitOnForwardFailure=yes fails the whole ssh over a single wedged port. One
+// shared connection would let a stuck 19989 take the bridge down with it.
 //
 // It is deliberately NOT the bridge. The bridge drives a browser for an agent
 // over the Chrome DevTools Protocol, attaches per tab, needs a manual arming

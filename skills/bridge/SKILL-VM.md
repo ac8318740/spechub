@@ -1,4 +1,4 @@
-# Playwriter bridge – Linux / dev-VM runbook
+# Playwriter bridge – Linux / VM runbook
 
 > Stop reading if you are on Windows. This file is bash-only and assumes a
 > Linux or macOS shell. Windows agents: read
@@ -179,8 +179,8 @@ unreachable.
 
 The Windows agent sees this first. `doctor.ps1` turns its `Tunnel logs` row
 amber as soon as `tunnel-*.log` carries a `stuck-retry` line under 5 minutes
-old. The row names the host and the port. It goes red later, once the marker
-lands. Either colour gives you the same instruction below.
+old. The row names the host and the port. It goes red later, once the `.stuck`
+marker file lands. Either colour gives you the same instruction below.
 
 Run:
 
@@ -205,17 +205,16 @@ with a clear reason. Common outcomes:
   exits non-zero without killing anything. Before it looks at the holder
   at all it asks the port for an HTTP response, bounded at 3 seconds. Any
   answer counts as alive. It asks the port rather than the process because
-  a non-root `ss` cannot name who owns someone else's socket. A 401 or a 404 comes from a CDP
-  endpoint that is serving; only silence means a half-open forward.
+  a non-root `ss` cannot name who owns someone else's socket. A 401 or a 404
+  still means something is serving. Only silence means a half-open forward.
 
 That last refusal matters because the amber `Tunnel logs` row trails five
 minutes behind the log line that raised it. A tunnel often wedges and then
-heals itself while the row stays amber. So the ordinary way to reach this
-script is to read advice about a forward that has already come back. Running
-it then costs nothing.
+heals itself while the row stays amber. So you usually reach this script
+after the forward has already healed. Running it then costs nothing.
 
 No flag overrides the refusal. To free a port that a live forward holds,
-close the session holding it: on the laptop, run `stop.ps1`.
+close the session holding it. On the laptop, run `stop.ps1`.
 
 After clearing, confirm:
 
@@ -228,11 +227,10 @@ Should be empty.
 ## What you CANNOT do from the VM
 
 - **Rearm the extension on a tab.** That is a click in the user's Chrome,
-  inside a third-party extension. Nothing on either machine can press it,
-  and no amount of plumbing will change that.
-- Restart the tunnel task, and restart the relay – *unless the opener is
-  up*, in which case see the next section. Both are Windows-side scheduled
-  tasks, so without the opener this machine cannot reach them.
+  inside a third-party extension. Nothing on either machine can press it.
+- **Restart the relay or a tunnel task.** Both are Windows-side scheduled
+  tasks. The VM reaches them only when the opener is up, which the next
+  section covers.
 
 For anything left, produce a `VM-SIDE HANDOFF` block per
 [`HANDOFF.md`](HANDOFF.md). Hand it to the Windows agent, or tell the
@@ -240,10 +238,10 @@ user to paste it into PowerShell themselves.
 
 ## Restarting the laptop's tasks from here
 
-When the **opener** is up, the two restarts above are no longer a handoff. The
-opener is a small service on the laptop. It takes a page from this machine and
-puts it in the default browser there. Because it runs on the laptop, it can also
-restart the scheduled tasks this machine cannot reach. See section 8.6 of
+When the **opener** is up, the restart above is no longer a handoff. The opener
+is a small service on the laptop. It takes a page from the VM and puts it in the
+default browser there. Because it runs on the laptop, it can also restart the
+scheduled tasks the VM cannot reach. See section 9.5, "The opener", of
 `docs/terminal-workspace.md`.
 
 ```bash
@@ -251,10 +249,11 @@ spechub-bridge status            # both machines' view, including the tasks
 spechub-bridge fix [relay|tunnel|both]
 ```
 
-`fix` reports success only once the relay answers here again. A restart the
-opener accepted is not a bridge that came back. When the opener is not reachable
-either, `spechub-bridge` prints the `VM-SIDE HANDOFF` block for you rather than
-leaving you to write one.
+`fix` reports success only once the relay answers on the VM again. The opener
+can accept a restart request while the bridge is still down. That is why `fix`
+waits for the relay itself, rather than trusting the opener's reply. When the
+opener is unreachable too, `spechub-bridge` prints the `VM-SIDE HANDOFF` block
+for you rather than leaving you to write one.
 
 The opener still does not cover arming. Nothing changes that.
 

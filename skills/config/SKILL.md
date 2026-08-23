@@ -234,24 +234,7 @@ If none found: "No Chromium/Chrome binary found. The frontend-verifier needs one
 
 Read `outputStyle` from `~/.claude/settings.json`, `.claude/settings.local.json` and `.claude/settings.json`. Report which of the three sets it, and to what. `.claude/settings.local.json` wins over `.claude/settings.json`, which wins over `~/.claude/settings.json`.
 
-If none of them selects `spechub:ac-writing-style`, offer it:
-
-```json
-{
-  "question": "Apply the spechub:ac-writing-style output style?",
-  "options": [
-    {"label": "Global (recommended)", "description": "Write outputStyle into ~/.claude/settings.json, so it applies in every project"},
-    {"label": "This project only", "description": "Write outputStyle into .claude/settings.local.json, which overrides the global value here"},
-    {"label": "Skip", "description": "Leave the output style as it is"}
-  ]
-}
-```
-
-Write the key as Step 7 of the `init` skill shows. Load the file as JSON, set the one key, dump it back, with `python3` or `jq`. Never edit the file with a regular expression.
-
-If the user chose global and a project file also sets `outputStyle`, say so. Offer to remove that key, because it overrides the global value.
-
-Tell the user the style applies after `/clear`, or in a new session. `/config` -> Output style writes project scope only, which is why this check offers the global path. Source: https://code.claude.com/docs/en/output-styles.md. Claude Code has no command-line flag for this: `claude config` does not exist, and Claude Code dropped `/output-style`.
+If none of them selects `spechub:ac-writing-style`, offer it. Run Step 7 of the `init` skill from there. That step holds the question to ask, the write recipe, and what to tell the user afterwards. Never restate it here.
 
 #### 9. Summary
 
