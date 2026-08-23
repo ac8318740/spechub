@@ -42,6 +42,8 @@ jraw()      { printf '%s' "$OUT" | "$JQ" -c "$1" 2>/dev/null; }
 valid_json(){ printf '%s' "$OUT" | "$JQ" -e . >/dev/null 2>&1; }
 field_is()  { [ "$(jval "$1")" = "$2" ]; }
 array_is()  { [ "$(jraw "$1")" = "$2" ]; }
+# True when the object at path $1 carries key $2 at all, whatever its value.
+has_key()   { [ "$(jval "$1 | has(\"$2\")")" = "true" ]; }
 
 # --- a curated "safe" PATH dir: generic coreutils the script may legitimately
 # need internally, symlinked from the real filesystem. Deliberately excludes
@@ -174,7 +176,7 @@ check "bare host prints valid JSON"                     'valid_json'
 check "herdr_binary is null"                             'field_is ".orchestrator.herdr_binary" "null"'
 check "orca_binary is null"                               'field_is ".orchestrator.orca_binary" "null"'
 check "hosting_this_session is none"                      'field_is ".orchestrator.hosting_this_session" "none"'
-check "orchestrator.recommended is none"                  'field_is ".orchestrator.recommended" "none"'
+check "orchestrator has no recommended key at all"        '! has_key ".orchestrator" "recommended"'
 check "agent_browser_binary is null"                       'field_is ".browser.agent_browser_binary" "null"'
 check "bridge_port_answers is false"                        'field_is ".browser.bridge_port_answers" "false"'
 check "chromium_binaries is empty array"                    'array_is ".browser.chromium_binaries" "[]"'
@@ -218,7 +220,7 @@ check "fully equipped prints valid JSON"                     'valid_json'
 check "herdr_binary resolves to the fake"                    'field_is ".orchestrator.herdr_binary" "'"$BIN"'/herdr"'
 check "orca_binary resolves to orca-ide"                     'field_is ".orchestrator.orca_binary" "'"$BIN"'/orca-ide"'
 check "hosting_this_session is none (no env vars set)"       'field_is ".orchestrator.hosting_this_session" "none"'
-check "orchestrator.recommended falls back to herdr"         'field_is ".orchestrator.recommended" "herdr"'
+check "orchestrator still has no recommended key"            '! has_key ".orchestrator" "recommended"'
 check "agent_browser_binary resolves"                        'field_is ".browser.agent_browser_binary" "'"$BIN"'/agent-browser"'
 check "bridge_port_answers is true"                           'field_is ".browser.bridge_port_answers" "true"'
 check "chromium_binaries lists both in contract order"        'array_is ".browser.chromium_binaries" "[\"'"$BIN"'/chromium\",\"'"$BIN"'/google-chrome-stable\"]"'
@@ -244,11 +246,9 @@ check "project.has_frontend is false"                                     'field
 echo "Case 4: hosting_this_session precedence"
 new_case; ENV_EXTRA=(ORCA_PANE_KEY="pane-1"); run_detect
 check "ORCA_PANE_KEY alone -> orca"            'field_is ".orchestrator.hosting_this_session" "orca"'
-check "recommended mirrors hosting_this_session (orca)" 'field_is ".orchestrator.recommended" "orca"'
 
 new_case; ENV_EXTRA=(HERDR_ENV="prod"); run_detect
 check "HERDR_ENV alone -> herdr"               'field_is ".orchestrator.hosting_this_session" "herdr"'
-check "recommended mirrors hosting_this_session (herdr)" 'field_is ".orchestrator.recommended" "herdr"'
 
 new_case; ENV_EXTRA=(ORCA_PANE_KEY="pane-1" HERDR_ENV="prod"); run_detect
 check "both set -> ORCA_PANE_KEY wins"         'field_is ".orchestrator.hosting_this_session" "orca"'
@@ -263,25 +263,9 @@ new_case; ENV_EXTRA=(HERDR_ENV=""); run_detect
 check "empty HERDR_ENV does not count as set"     'field_is ".orchestrator.hosting_this_session" "none"'
 
 # ============================================================================
-# 5. orchestrator.recommended fallback (no env vars set)
+# 5. orca-ide vs orca binary selection
 # ============================================================================
-echo "Case 5: orchestrator.recommended fallback"
-new_case; fake_simple "$BIN" orca-ide; run_detect
-check "only orca binary -> recommended orca"   'field_is ".orchestrator.recommended" "orca"'
-
-new_case; fake_simple "$BIN" herdr; run_detect
-check "only herdr binary -> recommended herdr" 'field_is ".orchestrator.recommended" "herdr"'
-
-new_case; fake_simple "$BIN" herdr; fake_simple "$BIN" orca-ide; run_detect
-check "both binaries -> herdr preferred"       'field_is ".orchestrator.recommended" "herdr"'
-
-new_case; run_detect
-check "neither binary -> recommended none"     'field_is ".orchestrator.recommended" "none"'
-
-# ============================================================================
-# 6. orca-ide vs orca binary selection
-# ============================================================================
-echo "Case 6: orca-ide vs orca fallback"
+echo "Case 5: orca-ide vs orca fallback"
 new_case; fake_simple "$BIN" orca; run_detect
 check "orca-ide absent, orca present -> uses orca" 'field_is ".orchestrator.orca_binary" "'"$BIN"'/orca"'
 
@@ -289,11 +273,11 @@ new_case; run_detect
 check "both absent -> orca_binary null"            'field_is ".orchestrator.orca_binary" "null"'
 
 # ============================================================================
-# 7. browser.recommended combinations
+# 6. browser.recommended combinations
 # ============================================================================
-echo "Case 7: browser.recommended combinations"
+echo "Case 6: browser.recommended combinations"
 
-# 7a: no browsers, no display, bridge answers -> remote only
+# 6a: no browsers, no display, bridge answers -> remote only
 new_case
 fake_curl "$BIN" ok
 run_detect
@@ -301,7 +285,7 @@ check "no browsers/no display/curl ok: remote true"    'field_is ".browser.recom
 check "no browsers/no display/curl ok: headless false"  'field_is ".browser.recommended.headless" "false"'
 check "no browsers/no display/curl ok: local false"      'field_is ".browser.recommended.local" "false"'
 
-# 7b: browsers present, no display, bridge fails -> headless only
+# 6b: browsers present, no display, bridge fails -> headless only
 new_case
 fake_simple "$BIN" chromium
 fake_curl "$BIN" fail
@@ -310,7 +294,7 @@ check "browsers/no display/curl fail: remote false"    'field_is ".browser.recom
 check "browsers/no display/curl fail: headless true"    'field_is ".browser.recommended.headless" "true"'
 check "browsers/no display/curl fail: local false"       'field_is ".browser.recommended.local" "false"'
 
-# 7c: browsers present, display present, curl absent -> local (and headless), not remote
+# 6c: browsers present, display present, curl absent -> local (and headless), not remote
 new_case
 fake_simple "$BIN" chromium
 ENV_EXTRA=(DISPLAY=":0")
@@ -320,7 +304,7 @@ check "browsers/display/curl absent: headless true"     'field_is ".browser.reco
 check "browsers/display/curl absent: local true"          'field_is ".browser.recommended.local" "true"'
 check "browsers/display/curl absent: bridge_port_answers false" 'field_is ".browser.bridge_port_answers" "false"'
 
-# 7d: curl tri-state, isolated (no browsers, no display)
+# 6d: curl tri-state, isolated (no browsers, no display)
 new_case; fake_curl "$BIN" ok; run_detect
 check "curl succeeds -> bridge_port_answers true"       'field_is ".browser.bridge_port_answers" "true"'
 
@@ -330,18 +314,18 @@ check "curl fails -> bridge_port_answers false"          'field_is ".browser.bri
 new_case; run_detect
 check "curl absent -> bridge_port_answers false"          'field_is ".browser.bridge_port_answers" "false"'
 
-# 7e: display can come from WAYLAND_DISPLAY alone
+# 6e: display can come from WAYLAND_DISPLAY alone
 new_case; ENV_EXTRA=(WAYLAND_DISPLAY="wayland-0"); run_detect
 check "WAYLAND_DISPLAY alone sets display true"           'field_is ".browser.display" "true"'
 
-# 7f: an empty DISPLAY does not count as set
+# 6f: an empty DISPLAY does not count as set
 new_case; ENV_EXTRA=(DISPLAY=""); run_detect
 check "empty DISPLAY does not set display true"           'field_is ".browser.display" "false"'
 
 # ============================================================================
-# 8. tailscale_logged_in / preview.recommended when not logged in
+# 7. tailscale_logged_in / preview.recommended when not logged in
 # ============================================================================
-echo "Case 8: tailscale present but not logged in"
+echo "Case 7: tailscale present but not logged in"
 new_case
 fake_tailscale "$BIN" "NeedsLogin"
 run_detect
@@ -350,9 +334,9 @@ check "NeedsLogin -> tailscale_logged_in false"       'field_is ".preview.tailsc
 check "NeedsLogin -> preview.recommended false"        'field_is ".preview.recommended" "false"'
 
 # ============================================================================
-# 9. element_picker.recommended outcomes
+# 8. element_picker.recommended outcomes
 # ============================================================================
-echo "Case 9: element_picker.recommended outcomes"
+echo "Case 8: element_picker.recommended outcomes"
 
 # stagewise present takes precedence, even with orca present and topology local
 new_case
@@ -381,9 +365,9 @@ new_case; run_detect
 check "no stagewise, no orca -> none"                    'field_is ".element_picker.recommended" "none"'
 
 # ============================================================================
-# 10. orca_topology.recommended
+# 9. orca_topology.recommended
 # ============================================================================
-echo "Case 10: orca_topology.recommended"
+echo "Case 9: orca_topology.recommended"
 
 new_case; run_detect
 check "no orca binary -> topology recommended null"     'field_is ".orca_topology.recommended" "null"'
@@ -413,9 +397,9 @@ run_detect
 check "systemctl absent -> local"                             'field_is ".orca_topology.recommended" "local"'
 
 # ============================================================================
-# 11. claude_settings
+# 10. claude_settings
 # ============================================================================
-echo "Case 11: claude_settings"
+echo "Case 10: claude_settings"
 
 new_case
 mkdir -p "$HOME_DIR/.claude"
@@ -437,9 +421,9 @@ check "no ~/.claude/settings.json at all -> hooks false"               'field_is
 check "no ~/.claude/settings.json.bak at all -> backup_exists false"    'field_is ".claude_settings.backup_exists" "false"'
 
 # ============================================================================
-# 12. project.root / project.has_frontend
+# 11. project.root / project.has_frontend
 # ============================================================================
-echo "Case 12: project.root and project.has_frontend"
+echo "Case 11: project.root and project.has_frontend"
 
 new_case
 git init -q "$CWD_DIR"
@@ -482,9 +466,9 @@ check "root resolves to top-level from a nested cwd"       'field_is ".project.r
 check "has_frontend still true from a nested cwd"            'field_is ".project.has_frontend" "true"'
 
 # ============================================================================
-# 13. read-only: nothing on disk changes
+# 12. read-only: nothing on disk changes
 # ============================================================================
-echo "Case 13: script writes nothing"
+echo "Case 12: script writes nothing"
 new_case
 fake_simple "$BIN" herdr
 fake_simple "$BIN" orca-ide

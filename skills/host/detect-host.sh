@@ -114,18 +114,6 @@ else
   hosting="none"
 fi
 
-# Whatever is already hosting us is the right answer - switching orchestrators
-# mid-session helps nobody. Otherwise recommend what is installed, herdr first.
-if [ "$hosting" != "none" ]; then
-  orchestrator_rec="$hosting"
-elif [ -n "$herdr_bin" ]; then
-  orchestrator_rec="herdr"
-elif [ -n "$orca_bin" ]; then
-  orchestrator_rec="orca"
-else
-  orchestrator_rec="none"
-fi
-
 # --- browser ---------------------------------------------------------------
 
 agent_browser_bin="$(which_path agent-browser)"
@@ -271,8 +259,7 @@ cat <<JSON
   "orchestrator": {
     "herdr_binary": $(json_str "$herdr_bin"),
     "orca_binary": $(json_str "$orca_bin"),
-    "hosting_this_session": $(json_str "$hosting"),
-    "recommended": $(json_str "$orchestrator_rec")
+    "hosting_this_session": $(json_str "$hosting")
   },
   "browser": {
     "agent_browser_binary": $(json_str "$agent_browser_bin"),
