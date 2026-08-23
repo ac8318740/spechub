@@ -24,8 +24,35 @@ trap 'rm -rf "$WORK"' EXIT
 
 pass=0
 fail=0
+skipped=0
 ok() { printf '  \033[32mPASS\033[0m %s\n' "$1"; pass=$((pass + 1)); }
 no() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fail=$((fail + 1)); }
+skip() { printf '  \033[33mSKIP\033[0m %s\n' "$1"; skipped=$((skipped + 1)); }
+
+# spechub-md builds its HTML with the python markdown package and exits 1 when
+# it cannot import one, which is deliberate: there is nothing to render. Every
+# check that builds a document then fails for a reason that has nothing to do
+# with the code under test - --html, each --browser route, the pager's browser
+# status, and the document the opener is handed. That is fourteen red lines
+# saying nothing, and it is what a missing optional dependency looked like in
+# CI until this guard existed. Name it once and skip those checks instead.
+#
+# Only the checks that actually render. The refusal paths - --html alongside
+# --serve, "leaves no server behind", a missing opener token - reach no
+# renderer, so they keep running and keep their coverage.
+RENDERS_HTML=1
+python3 -c 'import markdown' 2>/dev/null || RENDERS_HTML=0
+# A skipped check is named by what it checks, never by its failure text: the
+# condition was never evaluated, so "b no longer reaches the browser" would be
+# a claim nothing here established. nor takes the neutral name as a second
+# argument wherever the two differ, and drops any (rc=...) detail otherwise.
+okr() { if [ "$RENDERS_HTML" = "1" ]; then ok "$1"; else skip "$1"; fi; }
+nor() { if [ "$RENDERS_HTML" = "1" ]; then no "$1"; else skip "${2:-${1%% (rc=*}}"; fi; }
+[ "$RENDERS_HTML" = "1" ] || {
+  printf '  note: the python markdown package is not installed, so nothing can\n'
+  printf '        render HTML. The --html and --browser checks are skipped:\n'
+  printf '        apt install python3-markdown, or pip install --user markdown\n'
+}
 
 # Helper names setup.sh actually writes, and the retired ones it cleans up.
 installed=$(grep -oE 'cat > "\$BIN/[a-z-]+"' "$SETUP" | sed 's|.*/||; s|"||')
@@ -1356,17 +1383,20 @@ if [ "$html_rc" -eq 0 ] \
    && grep -qi '</html>' "$html_out" \
    && ! grep -q 'usage: spechub-md' "$html_out" "$html_err"
 then
-  ok "--html writes a whole document to stdout and exits 0"
+  okr "--html writes a whole document to stdout and exits 0"
 else
-  no "--html writes a whole document to stdout and exits 0 (rc=$html_rc)"
+  nor "--html writes a whole document to stdout and exits 0 (rc=$html_rc)"
+  # Captured and then thrown away is how this cost an afternoon: the helper
+  # said exactly what it wanted and no one could see it.
+  [ -s "$html_err" ] && printf '        stderr: %s\n' "$(head -3 "$html_err")"
 fi
 
 # Rendered, not passed through. Markdown source reaching the browser raw is
 # the failure this catches.
 if grep -q '<h1' "$html_out" && grep -q 'Prose before the diagram' "$html_out"; then
-  ok "--html renders the markdown body"
+  okr "--html renders the markdown body"
 else
-  no "--html renders the markdown body"
+  nor "--html renders the markdown body"
 fi
 
 # mermaid.js reads <pre class="mermaid"> holding raw diagram source. An
@@ -1376,9 +1406,9 @@ if grep -q '<pre class="mermaid">' "$html_out" \
    && grep -q 'A\[start\] --> B\[end\]' "$html_out" \
    && ! grep -q 'language-mermaid' "$html_out"
 then
-  ok "--html hands mermaid fences over unescaped"
+  okr "--html hands mermaid fences over unescaped"
 else
-  no "--html hands mermaid fences over unescaped"
+  nor "--html hands mermaid fences over unescaped"
 fi
 
 # The one thing --html cannot inherit from --serve. --serve answers for
@@ -1388,9 +1418,9 @@ fi
 if grep -q '<script src="https://' "$html_out" \
    && ! grep -q 'src="/mermaid.js"' "$html_out"
 then
-  ok "--html names a mermaid source reachable with no server behind the page"
+  okr "--html names a mermaid source reachable with no server behind the page"
 else
-  no "--html names a mermaid source reachable with no server behind the page"
+  nor "--html names a mermaid source reachable with no server behind the page"
 fi
 
 # A document is not a server. Hold the serve port and the document must still
@@ -1414,9 +1444,9 @@ if [ -n "$held" ] \
    && SPECHUB_MD_PORT="$held" timeout 20 "$MD" --html "$WORK/html.md" \
         </dev/null 2>/dev/null | grep -qi '</html>'
 then
-  ok "--html renders with the serve port already taken, and returns"
+  okr "--html renders with the serve port already taken, and returns"
 else
-  no "--html renders with the serve port already taken, and returns"
+  nor "--html renders with the serve port already taken, and returns"
 fi
 kill "$HOLD_PID" 2>/dev/null; wait "$HOLD_PID" 2>/dev/null
 rm -f "$WORK/held.port"
@@ -1494,9 +1524,9 @@ PATH="$BRBIN:$PATH" SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$br_log" \
 br_rc=$?
 
 if [ "$br_rc" -eq 0 ] && grep -q 'agent-browser.*eval' "$br_log" 2>/dev/null; then
-  ok "--browser hands the page to agent-browser on the bridge route"
+  okr "--browser hands the page to agent-browser on the bridge route"
 else
-  no "--browser hands the page to agent-browser on the bridge route (rc=$br_rc)"
+  nor "--browser hands the page to agent-browser on the bridge route (rc=$br_rc)"
 fi
 
 # The payload has to be the rendered document, not the markdown and not a
@@ -1513,9 +1543,9 @@ for want in ("<!doctype html", "<pre class=\"mermaid\">", "</html>"):
         sys.exit(f"payload missing {want!r}")
 DECODE
 then
-  ok "--browser pushes the whole rendered document, diagrams included"
+  okr "--browser pushes the whole rendered document, diagrams included"
 else
-  no "--browser pushes the whole rendered document, diagrams included"
+  nor "--browser pushes the whole rendered document, diagrams included"
 fi
 
 # A document delivered over CDP needs no port here, and must not leave a
@@ -1548,9 +1578,9 @@ pkill -f "spechub-md-serve.*$WORK/html.md" 2>/dev/null
 if printf '%s' "$br_body" | grep -qi '</html>' \
    && ! grep -q 'agent-browser' "$br_log" 2>/dev/null
 then
-  ok "--browser serves the page when the browser can reach this machine"
+  okr "--browser serves the page when the browser can reach this machine"
 else
-  no "--browser serves the page when the browser can reach this machine"
+  nor "--browser serves the page when the browser can reach this machine"
 fi
 
 # The page goes into a tab of its own, and never over a page that is already
@@ -1564,9 +1594,10 @@ PATH="$BRBIN:$PATH" SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$br_log" \
   SPECHUB_TEST_PUSH="$br_push" timeout 30 "$MD" --browser "$WORK/html.md" \
   </dev/null >/dev/null 2>&1
 if grep -q 'tab new' "$br_log" 2>/dev/null; then
-  ok "--browser writes into a tab of its own, leaving the armed tab armed"
+  okr "--browser writes into a tab of its own, leaving the armed tab armed"
 else
-  no "--browser rewrites a live page, which detaches the extension"
+  nor "--browser rewrites a live page, which detaches the extension" \
+      "--browser writes into a tab of its own, leaving the armed tab armed"
 fi
 
 # A tab created over CDP is created in the background, so writing into it is
@@ -1574,11 +1605,12 @@ fi
 # correct, and never seen. agent-browser carries Page.bringToFront on its tab
 # switch, so the tab just written into is switched to explicitly.
 if grep -qE 'agent-browser .*tab 1$' "$br_log" 2>/dev/null; then
-  ok "--browser brings the tab it wrote into to the front"
+  okr "--browser brings the tab it wrote into to the front"
 elif grep -qE 'agent-browser .*tab [0-9]+$' "$br_log" 2>/dev/null; then
-  no "--browser raises the wrong tab: $(grep -oE 'tab [0-9]+$' "$br_log" | tail -1)"
+  nor "--browser raises the wrong tab: $(grep -oE 'tab [0-9]+$' "$br_log" | tail -1)"
 else
-  no "--browser leaves the tab in the background, where nobody sees it"
+  nor "--browser leaves the tab in the background, where nobody sees it" \
+      "--browser brings the tab it wrote into to the front"
 fi
 
 # "It said it opened but it did not" has to be impossible to say twice. An exit
@@ -1662,9 +1694,9 @@ fi
 # 65 is "A", the first character of the extra string in the binding above.
 run_pager 65
 if grep -q 'agent-browser' "$key_log" 2>/dev/null; then
-  ok "the pager's browser status opens the browser"
+  okr "the pager's browser status opens the browser"
 else
-  no "the pager's browser status opens the browser"
+  nor "the pager's browser status opens the browser"
 fi
 
 # Somebody else's pager gets none of this: the binding is a less feature, and
@@ -1841,9 +1873,10 @@ fi
 # file, and the numbered view is still a document somebody may want to open.
 rt_run 65 --numbered
 if grep -q 'agent-browser' "$RTDIR/log" 2>/dev/null; then
-  ok "b still reaches the browser from the numbered view"
+  okr "b still reaches the browser from the numbered view"
 else
-  no "b no longer reaches the browser from the numbered view"
+  nor "b no longer reaches the browser from the numbered view" \
+      "b still reaches the browser from the numbered view"
 fi
 
 echo "yazi keymap merge safety"
@@ -2182,17 +2215,17 @@ if [ -s "$pushed" ] \
    && grep -q '<title>doc.md</title>' "$pushed" \
    && grep -q 'class="mermaid"' "$pushed" \
    && grep -q 'graph LR' "$pushed"; then
-  ok "--browser pushes the whole rendered document to the opener, diagrams included"
+  okr "--browser pushes the whole rendered document to the opener, diagrams included"
 else
-  no "--browser pushes the whole rendered document to the opener, diagrams included"
+  nor "--browser pushes the whole rendered document to the opener, diagrams included"
 fi
 
 # The opener serves the page, so a relative src resolves against it - and
 # unlike --serve that holds whether or not this machine vendored anything.
 if grep -q '<script src="/mermaid.js"></script>' "$pushed"; then
-  ok "a document bound for the opener asks it for mermaid rather than a CDN"
+  okr "a document bound for the opener asks it for mermaid rather than a CDN"
 else
-  no "a document bound for the opener asks it for mermaid rather than a CDN"
+  nor "a document bound for the opener asks it for mermaid rather than a CDN"
 fi
 
 # The key is what lets the opener recognise the same file again, so it has to
@@ -2370,5 +2403,9 @@ if [ -f "$FREEPORT" ]; then
 fi
 
 
-printf '\nResult: %d passed, %d failed\n' "$pass" "$fail"
+if [ "$skipped" -gt 0 ]; then
+  printf '\nResult: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
+else
+  printf '\nResult: %d passed, %d failed\n' "$pass" "$fail"
+fi
 [ "$fail" -eq 0 ]
