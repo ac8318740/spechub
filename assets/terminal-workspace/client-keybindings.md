@@ -1,9 +1,9 @@
 # Free the workspace keys in your terminal emulator
 
 Hand this to a coding agent running **on the machine you type on**: the
-Windows, macOS, or Linux desktop you SSH *from*. It cannot be done from the
-remote host: the keys are intercepted locally, before they ever reach the
-other end.
+Windows, macOS, or Linux desktop you SSH *from*. You cannot do this from the
+remote host: the local terminal emulator intercepts the keys before they ever
+reach the other end.
 
 ## The problem
 
@@ -56,8 +56,8 @@ family and collide with the pane and split chords above:
 - **Back up the config before editing**, and show the change before saving.
 - Unbind only. Do not remap these chords to something else, and do not touch
   bindings unrelated to the table above.
-- If a chord in the table is not bound locally, leave it alone. Absence of a
-  binding is the desired state.
+- If the terminal emulator does not bind a chord in the table locally, leave
+  it alone. Absence of a binding is the desired state.
 
 ## Verify
 
@@ -65,4 +65,5 @@ Reload or restart the terminal, then SSH in and press `alt+shift+d`. Exactly
 one thing should happen: a tab opens on the remote host. A local split, or both
 at once, means the unbind did not take.
 
-Report which chords were bound, what changed, and how to undo it.
+Report which chords the terminal emulator had bound, what changed, and how to
+undo it.

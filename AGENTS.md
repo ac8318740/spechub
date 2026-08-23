@@ -17,7 +17,7 @@ CLI build discipline, the release process, and the writing standards.
 | `docs/`, `assets/` | Documentation and installable helper scripts |
 
 `orchestrator/AGENTS.md` deliberately does not live at the repo root. It tells
-an agent it is a coordinator that must never read a codebase directly, which is
+an agent it is a coordinator that must never read a codebase directly. That is
 the opposite of what you need while working on this repo. Claude Code and Codex
-both auto-load a root-level `AGENTS.md`, so keeping the payload out of that slot
-is what stops it from being applied to the wrong job.
+both auto-load a root-level `AGENTS.md`. Keeping the payload out of that slot
+stops Claude Code and Codex from applying it to the wrong job.

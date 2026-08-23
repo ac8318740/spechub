@@ -15,7 +15,7 @@ $ARGUMENTS
 
 Sets up an optional terminal workspace for running several coding agents at once. It is **machine-level, not per-project**: it installs binaries and writes keybindings for the user account, so it does not belong in `spechub/project.yaml`.
 
-Nothing here is required to use SpecHub. Offer it, do not assume it.
+SpecHub does not need any of this. Offer it, do not assume it.
 
 | Component | Gives the user | Toggle |
 |---|---|---|
@@ -49,7 +49,7 @@ SETUP="$(dirname "$(find ~/.claude/plugins -path '*spechub*/assets/terminal-work
 bash "$SETUP" status
 ```
 
-Reports which binaries are installed, which components are enabled, and whether the managed block is present in the herdr config. Run this first, always.
+Reports which binaries this machine has, which components the config enables, and whether the managed block is present in the herdr config. Run this first, always.
 
 ### `apply`
 
@@ -57,7 +57,7 @@ Reports which binaries are installed, which components are enabled, and whether 
 bash "$SETUP" apply
 ```
 
-Installs any missing binary for an enabled component, writes the helper scripts, applies the herdr keymap, sets delta as the git pager, and writes the gh-dash sections and keybindings. Idempotent: run it again after editing the config and it updates in place.
+Installs any missing binary for an enabled component. Writes the helper scripts, applies the herdr keymap, and sets delta as the git pager. Writes the gh-dash sections and keybindings. Idempotent: run it again after editing the config and it updates in place.
 
 Before running it the first time:
 
@@ -71,7 +71,7 @@ Before running it the first time:
 bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash
 ```
 
-Removes what that component wrote. Then set `<component>.enabled: false` in the config so the next `apply` does not restore it. Binaries are left in place.
+Removes what that component wrote. Then set `<component>.enabled: false` in the config so the next `apply` does not restore it. `disable` leaves the binaries in place.
 
 ### `uninstall`
 
@@ -79,8 +79,8 @@ Removes every managed block and the helper scripts, and leaves the binaries.
 
 ## Choices worth walking the user through
 
-- **`herdr.chord_modifier`**: `alt` (default), `ctrl+alt`, or `none`. Recommend `alt` and say why: it is the only family measured to work on both attach paths. herdr's own docs recommend `ctrl+alt`, and it does reach herdr over plain SSH, but a Windows client attaching with `herdr --remote` never delivers it, so every such chord goes silently dead. Only suggest `ctrl+alt` to a user who attaches exactly one way and has tested it. `none` keeps herdr's prefix-only keymap
-- **`herdr.worktrees_directory`**: keep it absolute. A relative value resolves against the herdr session's base directory rather than the repository being branched, so worktrees for a second repository land inside the first
+- **`herdr.chord_modifier`**: `alt` (default), `ctrl+alt`, or `none`. Recommend `alt` and say why: it is the only family measured to work on both attach paths. The herdr docs recommend `ctrl+alt`, and it does reach herdr over plain SSH. But a Windows client attaching with `herdr --remote` never delivers it, so every such chord goes silently dead. Only suggest `ctrl+alt` to a user who attaches exactly one way and has tested it. `none` keeps herdr's prefix-only keymap
+- **`herdr.worktrees_directory`**: keep it absolute. A relative value resolves against the herdr session's base directory, not against the repository you branch. Worktrees for a second repository then land inside the first
 - **`herdr.integration`**: which agent reports its state to herdr. Set it to the agent the user actually runs, or `none`. Without it, herdr infers state by reading the screen
 - **`gh_dash.repo_paths`**: map each repo to its local clone. Without it, checkout and any keybinding using `{{.RepoPath}}` fail
 - **`markdown.preview_port`**: must match a port the user forwards from their
@@ -89,13 +89,13 @@ Removes every managed block and the helper scripts, and leaves the binaries.
   upstream pull requests (#607 stats, #633 resize). `true` needs cargo and takes a
   few minutes to build. Tell them it is temporary and that `status` tracks both PRs
 - **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
-- **`remote.clipboard_shim`**: leave `true` on any machine reached over SSH. It puts an `xclip` on `$PATH` backed by `spechub-clip`, which is the only reason gh-dash's `y` and `Y` work there. It is skipped automatically when the machine has a real `xclip` or a display
+- **`remote.clipboard_shim`**: leave `true` on any machine reached over SSH. It puts an `xclip` on `$PATH` backed by `spechub-clip`, which is the only reason gh-dash's `y` and `Y` work there. The script skips it automatically when the machine has a real `xclip` or a display
 
 ## Suggest a faster way to attach
 
 The keymap this skill writes lives on the machine it runs on. How the user
-reaches that machine is theirs to choose, and it changes what the setup can do,
-so raise it once during `apply` rather than leaving them to find out.
+reaches that machine is theirs to choose. That choice changes what the setup
+can do. Raise it once during `apply` rather than leaving them to find out.
 
 Recommend attaching from their own machine:
 
@@ -108,16 +108,16 @@ Say what it buys and what it costs, in one line each:
 - The client runs beside their clipboard and browser. Clipboard image paste into
   an agent pane works only on this path, and an SSH shell cannot do it at all
 - `--remote-keybindings server` is not optional. Without it chords resolve from
-  the client's config, so everything `apply` just wrote is ignored and every
+  the client's config, so herdr ignores everything `apply` just wrote and every
   chord looks broken. This is the first thing they will report as a bug
 - It needs herdr installed on their own machine too, and key authentication
-  through an agent, because herdr's connection reuse is Unix-only and a Windows
-  client authenticates more than once per attach
+  through an agent. That is because herdr's connection reuse is Unix-only, and
+  a Windows client authenticates more than once per attach
 
 Then offer the shortcut, because the command is long and they will run it many
-times a day. On Windows it has to be a function, not an alias or a symlink:
-both map one name to another, so the target would arrive as an argument to
-`herdr` itself and be rejected.
+times a day. On Windows it has to be a function, not an alias or a symlink.
+Both map one name to another, so the target would arrive as an argument to
+`herdr` itself, and `herdr` would reject it.
 
 ```powershell
 function herdr-dev {
@@ -136,10 +136,11 @@ same way `Free the client's keys` hands them a prompt.
 
 ## Copy and open, on a machine reached over SSH
 
-A dev VM has no display and no clipboard. Three gh-dash keys land on that:
-`o` fails with `exit status 1` because `xdg-open` has no display, and `y` and
-`Y` fail with `Failed copying to clipboard` because gh-dash shells out to
-`xclip`, `xsel` or `wl-copy` and none is installed.
+A dev VM has no display and no clipboard. Three gh-dash keys land on that.
+The `o` key fails with `exit status 1`, because `xdg-open` has no display.
+The `y` and `Y` keys fail with `Failed copying to clipboard`, because
+gh-dash shells out to `xclip`, `xsel` or `wl-copy`, and the VM has none of
+them.
 
 `apply` fixes both. Setting a second machine up needs nothing extra:
 
@@ -149,9 +150,10 @@ bash "$SETUP" status     # read the last lines
 ```
 
 `y` and `Y` keep gh-dash's own behaviour, backed by an `xclip` stand-in that
-copies over OSC 52. `o` becomes a keybinding running `spechub-open`, because
-gh-dash runs `$BROWSER` with its output discarded and the dashboard still
-drawn, which leaves a route that needs to hand you a link nowhere to draw it.
+copies over OSC 52. The `o` key becomes a keybinding running
+`spechub-open`, because gh-dash runs `$BROWSER` with its output discarded
+and the dashboard still drawn. A route that needs to hand you a link then
+has nowhere to draw it.
 
 The last lines of `status` say where a copy and an open will actually land on
 **this** machine:
@@ -174,8 +176,8 @@ Read them before debugging anything else. What each means:
 | `browser: none, and no terminal either` | `o` copies and reports failure | Below |
 
 `browser: none` is not a fault. Nothing on that machine can open a page, so
-`o` hands the terminal a link instead, which is the one route that works over
-any number of SSH hops. To make it a real one-key open, give it a command
+`o` hands the terminal a link instead. That link is the one route that works
+over any number of SSH hops. To make it a real one-key open, give it a command
 that can:
 
 ```bash
@@ -186,27 +188,27 @@ Do not suggest installing a browser or an X server on the VM to fix this. The
 browser belongs on the machine the user is sitting at.
 
 Under `herdr --remote`, panes run on the remote host, so `spechub-open` looks
-for a browser there and normally finds none. That is expected, not broken: it
+for a browser there and normally finds none. That is normal, not a fault. It
 falls to the link route, which the client draws. Do not add per-host browser
 configuration to "fix" it.
 
 Two things to be accurate about rather than assume:
 
-- Whether a pane's OSC 52 write crosses the remote link is inferred from
-  herdr's binary, not from its documentation, which never mentions OSC 52.
-  Have the user run `spechub-clip test-string` after attaching and paste on
-  the client. If it does not cross, say so plainly - the link is still on
-  screen and herdr's own drag-select copies it
+- We inferred from herdr's binary, not from its documentation, whether a
+  pane's OSC 52 write crosses the remote link. The herdr documentation never
+  mentions OSC 52. Have the user run `spechub-clip test-string` after
+  attaching and paste on the client. If it does not cross, say so plainly -
+  the link is still on screen and herdr's own drag-select copies it
 - With the default `--remote-keybindings local`, herdr resolves chords from
-  the client config, so the `[keys]` block `setup.sh` writes on the server is
-  ignored. That is a herdr attach flag, not something to fix in the config:
-  attach with `--remote-keybindings server`. gh-dash keybindings are
-  unaffected, because gh-dash reads its own config where it runs
+  the client config, so herdr ignores the `[keys]` block `setup.sh` writes on
+  the server. That is a herdr attach flag, not something to fix in the config.
+  Attach with `--remote-keybindings server`. The gh-dash keybindings still
+  work, because gh-dash reads its own config where it runs
 
 ### When o claims it opened something nobody saw
 
 `agent-browser` launches a headless Chrome on the local machine when it cannot
-attach to the CDP endpoint it was given. That Chrome navigates, reports
+attach to the CDP endpoint the caller named. That Chrome navigates, reports
 success, and shows nobody anything. A bridge relay answering on its HTTP port
 does not rule this out: ours answered `/json/version` while refusing every CDP
 connection with `Multiple extensions connected. Specify extensionId.`
@@ -228,8 +230,8 @@ Detail, and why OSC 52 rather than a clipboard daemon:
 
 ## Free the client's keys
 
-The keymap is bound on **this** machine, but the chords are intercepted by the
-terminal emulator on the machine the user types on. Windows Terminal binds
+`apply` binds the keymap on **this** machine. The terminal emulator on the
+machine the user types on intercepts the chords. Windows Terminal binds
 `alt+shift+d` to "duplicate pane" by default, so it splits the local tab *and*
 opens a tab here. Other emulators claim other chords.
 
@@ -238,8 +240,8 @@ After `apply`, work out which case you are in.
 **Running on the user's own desktop** (macOS, or Linux with a desktop session):
 the terminal emulator is right here. Read
 [assets/terminal-workspace/client-keybindings.md](../../assets/terminal-workspace/client-keybindings.md)
-and do it yourself: find the emulator's config, back it up, unbind only the
-chords that are actually bound, show the diff, and verify.
+and do it yourself. Find the emulator's config, and back it up. Unbind only
+the chords the emulator actually holds. Show the diff, and verify.
 
 **Running on a remote or headless host** (no `DISPLAY`, or an `SSH_CONNECTION`
 in the environment): you cannot reach the emulator from here. Ask first:
@@ -249,20 +251,20 @@ in the environment): you cannot reach the emulator from here. Ask first:
 > terminal is swallowing.
 
 Only if they say yes, print the contents of `client-keybindings.md` verbatim
-for them to paste. Do not summarise it and do not rewrite it for their
-emulator: it already covers the common ones, and the agent on that machine can
-see which is actually installed.
+for them to paste. Do not summarise it. Do not rewrite it for their emulator.
+It already covers the common ones. The agent on that machine can see which
+emulator the user actually runs.
 
 If they say no, or the terminal is on this machine, say nothing further about
 it. A user on a plain Linux console has nothing to fix.
 
-**Never** try to edit a client-side terminal config from a remote host, and
-never ask the user to paste their local config here so you can rewrite it.
+**Never** try to edit a client-side terminal config from a remote host. Never
+ask the user to paste their local config here so you can rewrite it.
 
 ## Safety
 
 - Every edit sits between `# >>> spechub terminal-workspace >>>` markers. Hand-written config around them survives, and re-applying replaces only the managed region
-- The gh-dash config is merged, not overwritten: existing sections, themes, and keybindings the user added are preserved
+- `apply` merges the gh-dash config rather than overwriting it. It keeps existing sections, themes, and keybindings the user added
 - Never edit the user's herdr or gh-dash config outside the managed markers
 - After applying, `herdr config check` must print `config: ok`. If it does not, report the error and stop rather than reloading
 

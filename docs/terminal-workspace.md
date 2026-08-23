@@ -4,7 +4,7 @@ Your code lives on a machine you reach over the network, and you drive coding ag
 
 Run a herdr server on the dev machine and attach to it from a thin client on your own machine with `herdr --remote`. The server keeps panes alive across disconnects. The local client is what lets your own clipboard and browser reach the session at all, which is the part an SSH shell cannot do.
 
-Run `/spechub:terminal-workspace` to install and configure all of it from a single toggleable config. The rest of this document explains what that sets up and why, and is worth reading if you would rather configure it by hand or change the defaults.
+Run `/spechub:terminal-workspace` to install and configure all of it from a single toggleable config. The rest of this document explains what that sets up and why. Read it if you would rather configure it by hand or change the defaults.
 
 ```mermaid
 flowchart TD
@@ -35,16 +35,16 @@ flowchart TD
 | Diffs and pull requests | 7. Diffs and pull requests |
 | Clipboard and browser | 8. What crosses back to your machine |
 
-Sections 1 and 3 cover what you get and how to install it, section 9 is the loop you run daily, and section 10 is the list of things that cost real time to find.
+Sections 1 and 3 cover what you get and how to install it. Section 9 is the loop you run daily. Section 10 lists the things that cost real time to find.
 
-## 1. What you get, and what it is made of
+## 1. What you get, and its parts
 
 *Three tools cover it: herdr owns the terminals, gh-dash triages pull requests, diffnav reads diffs. Use this when you work on a remote machine, drive more than one agent at a time, and want a keyboard-only workflow.*
 
 Skip it if you work locally in a graphical editor: a desktop tool will serve you better.
 
-- **Agents that survive disconnect.** herdr runs a background server, so closing the terminal, dropping the network, or attaching from another machine never stops an agent mid-task
-- **One screen that shows who needs you.** Every pane is marked working, blocked, idle, or done, so you stop hunting for the stuck one
+- **Agents that survive disconnect.** herdr runs a background server. Closing the terminal, dropping the network, or attaching from another machine never stops an agent mid-task
+- **One screen that shows who needs you.** herdr marks every pane working, blocked, idle, or done, so you stop hunting for the stuck one
 - **Review without a browser.** Pull request triage, diffs with a file tree, and comments, all from the terminal
 
 | Tool | Role | Why this one |
@@ -89,9 +89,9 @@ Host dev-box
 
 **Key authentication through an agent.** herdr's connection reuse is Unix-only, so a Windows client authenticates more than once while it sets the session up. With no key loaded that is a password prompt each time. Load it once per boot with `ssh-add`.
 
-**`--remote-keybindings server`.** By default chords resolve from the *client's* config, so the keymap on the dev machine is ignored and every chord looks broken. This flag keeps the server config as the single source of truth. Section 2.3 covers why that matters more than it sounds.
+**`--remote-keybindings server`.** By default chords resolve from the *client's* config, so herdr ignores the keymap on the dev machine and every chord looks broken. This flag keeps the server config as the single source of truth. Section 2.3 covers why that matters more than it sounds.
 
-**A shortcut, because you will type this many times a day.** On Windows use a PowerShell function rather than an alias or a symlink: both of those map one name to another, so the target would arrive as an argument to herdr itself and be rejected.
+**A shortcut, because you will type this many times a day.** On Windows use a PowerShell function rather than an alias or a symlink. Both of those map one name to another. The target then arrives as an argument to herdr itself, and herdr rejects it.
 
 ```powershell
 function herdr-dev {
@@ -100,7 +100,7 @@ function herdr-dev {
 }
 ```
 
-A hyphenated name tab-completes, where the second word of a two-word command never will. On macOS or Linux the same thing is a shell function in your profile. Add `--handoff` if you like: it asks a running server to pass its live panes to a replacement rather than restarting them, which matters the next time you upgrade herdr and your client meets an older server. It does nothing on an ordinary attach, so it is safe to leave in the shortcut.
+A hyphenated name tab-completes, where the second word of a two-word command never will. On macOS or Linux the same thing is a shell function in your profile. Add `--handoff` if you like. It asks a running server to pass its live panes to a replacement rather than restarting them. That matters the next time you upgrade herdr and your client meets an older server. It does nothing on an ordinary attach, so it is safe to leave in the shortcut.
 
 ### 2.2. By SSH first
 
@@ -111,7 +111,7 @@ ssh you@dev-box
 herdr
 ```
 
-Everything runs on the dev machine now, the client included. This is the tmux-shaped path: detach with `prefix+q`, disconnect, SSH back, run `herdr` again. Use it from a phone SSH app, where there is no local herdr to run, and keep it as the fallback for when a remote attach misbehaves. Both paths attach to the same server, so you can move between them freely.
+Everything runs on the dev machine now, the client included. This is the tmux-shaped path: detach with `prefix+q`, disconnect, SSH back, run `herdr` again. Use it from a phone SSH app, where there is no local herdr to run. Keep it as the fallback for when a remote attach misbehaves. Both paths attach to the same server, so you can move between them freely.
 
 ### 2.3. What differs, and why it decides your keymap
 
@@ -128,13 +128,13 @@ Everything runs on the dev machine now, the client included. This is the tmux-sh
 | Works from a phone SSH app | no | yes |
 | Windows as the dev machine | not supported | not applicable |
 
-The three key rows are measured on herdr 0.8.2 with a Windows client, not inferred, and they are the reason this document binds plain `alt` throughout.
+We measured the three key rows on herdr 0.8.2 with a Windows client rather than inferring them. They are the reason this document binds plain `alt` throughout.
 
-The two paths deliver keys by different routes. Over SSH the emulator encodes a chord as an escape sequence and herdr decodes it on the far side. Under `herdr --remote` the local client reads native key events instead, and the two routes do not carry the same set. `ctrl+alt` survives the escape-sequence route and dies on the native one. `ctrl+<digit>` does the opposite. herdr accepts either binding and then never sees the key, so a chord that does not cross is silently dead rather than reported as an error.
+The two paths deliver keys by different routes. Over SSH the emulator encodes a chord as an escape sequence, and herdr decodes it on the far side. Under `herdr --remote` the local client reads native key events instead, and the two routes do not carry the same set. The `ctrl+alt` family survives the escape-sequence route and dies on the native one, and `ctrl+<digit>` does the opposite. Either way herdr accepts the binding and then never sees the key. A chord that does not cross is therefore silently dead, and herdr reports no error.
 
 `alt+<key>` is the only family that crossed both. If you only ever attach one way, test the wider family and use it. If you use both, or expect to, bind `alt` and do not spend the time.
 
-Only herdr's own chords are affected. gh-dash and diffnav read their own configs on the dev machine, where they run, so their keys behave the same however you attached.
+This affects only herdr's own chords. Both gh-dash and diffnav read their own configs on the dev machine, where they run, so their keys behave the same however you attached.
 
 ## 3. Install
 
@@ -159,7 +159,7 @@ Then let herdr report agent state precisely rather than by reading the screen:
 herdr integration install claude    # also: codex, opencode, copilot, and others
 ```
 
-Check what is available with `herdr integration status`. The hook applies to sessions started after it is installed.
+Check what is available with `herdr integration status`. The hook applies to sessions that start after you install it.
 
 Then let herdr report agent state precisely rather than by reading the screen:
 
@@ -167,7 +167,7 @@ Then let herdr report agent state precisely rather than by reading the screen:
 herdr integration install claude    # also: codex, opencode, copilot, and others
 ```
 
-Check what is available with `herdr integration status`. The hook applies to sessions started after it is installed.
+Check what is available with `herdr integration status`. The hook applies to sessions that start after you install it.
 
 ## 4. The herdr server
 
@@ -240,9 +240,9 @@ Two choices worth explaining.
 
 **Plain `alt` chords, not `ctrl+alt`.** herdr's docs recommend `ctrl+alt` because it is free across most terminals. Do not follow that advice here unless you attach exactly one way and have tested it.
 
-Measured on herdr 0.8.2, the two attach paths disagree. `ctrl+alt` reaches herdr when you SSH in and run it on the remote host. A Windows client attaching with `herdr --remote` never delivers it, and herdr accepts the binding and then never sees the key, so the chord is silently dead rather than reported as an error. `alt+<key>` works on both. That makes `alt` the only safe family if you use both paths, which is the reverse of what herdr's own keyboard page suggests. Test your own path before committing to a family.
+Measured on herdr 0.8.2, the two attach paths disagree. The `ctrl+alt` family reaches herdr when you SSH in and run it on the remote host. A Windows client attaching with `herdr --remote` never delivers it. Instead herdr accepts the binding and then never sees the key, so the chord is silently dead and nothing reports an error. The `alt+<key>` family works on both, so `alt` is the only safe family if you use both paths. That is the reverse of what herdr's own keyboard page suggests, so test your own path before committing to a family.
 
-**Absolute `worktrees.directory`.** A relative value resolves against the herdr session's base directory, not the repository you point at, so worktrees for a second repository land inside the first. Use an absolute path unless you only ever work in one repository.
+**Absolute `worktrees.directory`.** A relative value resolves against the herdr session's base directory, not the repository you point at. Worktrees for a second repository then land inside the first. Use an absolute path unless you only ever work in one repository.
 
 ### 4.2. Keys
 
@@ -279,22 +279,23 @@ walks agents, `prefix+N` walks workspaces, `prefix+alt+N` walks the tabs of the
 workspace you are in. An agent row and a workspace row that share a number are
 a coincidence.
 
-`ctrl` and `shift` are not options for a fourth, and which one fails depends on
-how you attached. `shift+<digit>` arrives as punctuation on both paths.
-`ctrl+<digit>` reaches herdr under `herdr --remote` but not over SSH, so a
-binding made on one path is silently dead on the other. Section 2.3 has the
-table. These three are what both paths carry.
+The `ctrl` and `shift` modifiers are not options for a fourth list, and which
+one fails depends on how you attached. A `shift+<digit>` chord arrives as
+punctuation on both paths. A `ctrl+<digit>` chord reaches herdr under
+`herdr --remote` but not over SSH, so a binding you make on one path is silently
+dead on the other. Section 2.3 has the table. These three are what both paths
+carry.
 
 ### 4.3. When the sidebar numbers stop matching
 
 Collapse the sidebar with `alt+s` and each workspace shows a number. That number
-is its position in herdr's stored list. `prefix+N` uses something else: the row's
-position in the grouped sidebar, where worktrees sit indented under their parent
-repo.
+is its position in herdr's stored list. The `prefix+N` chord uses something else,
+the row's position in the grouped sidebar, where worktrees sit indented under
+their parent repo.
 
 They agree until you touch a worktree. A new one appends to the end of the
-stored list but appears mid-sidebar under its parent, so everything below it
-shifts and the number you read stops being the number you press.
+stored list but appears mid-sidebar under its parent. Everything below it
+shifts, so the number you read stops being the number you press.
 
 ```bash
 spechub-herdr-renumber
@@ -316,15 +317,15 @@ row, not a name, so it still moves when the rows move.
 
 ## 5. Freeing your emulator's keys
 
-*The keymap is bound on the dev machine, but the chords are intercepted by the emulator on the machine you type at. That has to be fixed where the emulator runs.*
+*You bind the keymap on the dev machine, but the emulator on the machine you type at intercepts the chords. Fix that where the emulator runs.*
 
-Windows Terminal binds `alt+shift+d` to "duplicate pane" by default, so pressing it splits your local tab *and* opens a tab on the dev machine. Other emulators claim other chords. This is true on both attach paths: a local herdr client does not rescue you from it, because the emulator sees the key first either way.
+Windows Terminal binds `alt+shift+d` to "duplicate pane" by default, so pressing it splits your local tab *and* opens a tab on the dev machine. Other emulators claim other chords. This is true on both attach paths. A local herdr client does not rescue you from it, because the emulator sees the key first either way.
 
 [assets/terminal-workspace/client-keybindings.md](../assets/terminal-workspace/client-keybindings.md)
 lists every chord this workspace uses and how to unbind them in the common
 emulators. Follow it yourself, or hand it to an agent running on that machine.
 
-Never try to edit a client-side emulator config from the dev machine, and never paste your local config onto the dev machine so something there can rewrite it.
+Never try to edit a client-side emulator config from the dev machine. Never paste your local config onto the dev machine so that something there can rewrite it.
 
 ## 6. Reading code, markdown and diagrams
 
@@ -340,31 +341,34 @@ Never try to edit a client-side emulator config from the dev machine, and never 
 Every popup works this way: `alt+d` / `alt+shift+d` for diffnav, `alt+i` /
 `alt+shift+i` for gh-dash. A popup is right for a glance; a tab is right for
 something you will come back to. Both come from the same command, and the tab
-variant goes through `spechub-herdr-tab`, which creates the tab in the workspace and
-directory the key was pressed in, then sends the command with `herdr pane run`.
+variant goes through `spechub-herdr-tab`. That helper creates the tab in the
+workspace and directory you pressed the key in. Then it sends the command with
+`herdr pane run`.
 Outside herdr it simply runs the command.
 
-`alt+t` is deliberately left alone: it is Claude Code's thinking toggle.
+This workspace leaves `alt+t` alone on purpose, because it is Claude Code's thinking toggle.
 
 One collision to know about. herdr hosts a `type = "shell"` command in a real
-pane for as long as the process runs, so `spechub-herdr-tab` creates the tab and then
-hands the wait to a detached child, returning in about 100ms rather than three
-and a half seconds; without that a stray pane sits in the current tab.
+pane for as long as the process runs. So `spechub-herdr-tab` creates the tab and
+then hands the wait to a detached child. It returns in about 100ms rather than
+three and a half seconds. Without that a stray pane sits in the current tab.
 
-The other collision is your terminal emulator claiming the same chords, and that
-is fixed where the emulator runs. See section 5.
+The other collision is your terminal emulator claiming the same chords, and you
+fix that where the emulator runs. See section 5.
 
-yazi previews each file type with its own command, and markdown is routed to
-`spechub-md`, so a document renders **as the cursor moves over it** rather than
-needing a keypress. `Enter` opens the same renderer full width, where more of a
-wide diagram fits than the preview pane allows. `~` or `F1` opens yazi's help.
+yazi previews each file type with its own command, and it routes markdown to
+`spechub-md`. A document therefore renders **as the cursor moves over it** rather
+than needing a keypress. The `Enter` key opens the same renderer full width,
+where more of a wide diagram fits than the preview pane allows. The `~` and `F1`
+keys both open yazi's help.
 
 Icons come from a Nerd Font. Without one they render as tofu; install any Nerd
 Font and select it in your terminal.
 
 tuicr was the file tree before yazi and is no longer wired to a key. It stays
-for what it is good at: reading diffs and reviewing pull requests, which
-gh-dash hands to it. `tuicr --file .` still browses a tree if you want it.
+for what it is good at, reading diffs and reviewing pull requests, which
+gh-dash hands to it. The command `tuicr --file .` still browses a tree if you
+want it.
 
 ### 6.2. The fork build is temporary
 
@@ -376,22 +380,23 @@ Two upstream pull requests are still open:
 - [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633) - move the file
   list boundary with `<leader>L` / `<leader>H`, and the `file_list_width` key
 
-`build_from_fork: false`, the default, installs the stock release and skips both
-config keys so tuicr does not warn about unknown keys. `build_from_fork: true`
-clones the fork, builds `local/daily` with cargo, and writes the two keys plus
-`no_update_check = true` so `tuicr update` cannot replace the build.
+The default, `build_from_fork: false`, installs the stock release and skips both
+config keys, so tuicr does not warn about unknown keys. Setting
+`build_from_fork: true` clones the fork, builds `local/daily` with cargo, and
+writes the two keys plus `no_update_check = true`, so `tuicr update` cannot
+replace the build.
 
-`setup.sh status` reports the state of both pull requests. When they are merged,
-set `build_from_fork: false` and re-run `apply`. Check the merged key names
-first - review can rename them.
+`setup.sh status` reports the state of both pull requests. After both pull
+requests merge, set `build_from_fork: false` and re-run `apply`. Check the merged
+key names first - review can rename them.
 
 ### 6.3. Reading markdown and mermaid
 
 These helpers are their own executables rather than subcommands of the
-`spechub` CLI, because `spechub-md --preview` runs on every cursor move in the
-file manager and Node's startup would roughly double it. The CLI dispatches to
-them anyway, the way git does: `spechub md` runs `spechub-md`, so either form
-works and configs can keep the fast one.
+`spechub` CLI. That matters because the `spechub-md --preview` command runs on
+every cursor move in the file manager, and Node's startup would roughly double
+it. The CLI dispatches to them anyway, the way git does: `spechub md` runs
+`spechub-md`, so either form works and configs can keep the fast one.
 
 ```bash
 spechub-md NOTES.md              # terminal, diagrams drawn as text
@@ -408,25 +413,27 @@ same key whether you attached over `herdr --remote`, over SSH, or locally.
 `b` is back-a-page in `less`. `Ctrl-B` and `PageUp` both still do that, so the
 binding costs nothing; `SPECHUB_MD_BROWSER_KEY` moves it if you would rather
 have `b` back. The mechanism is a `lesskey` binding whose `quit` action carries
-an exit status, which `spechub-md` reads and acts on - `less` has no action that
-runs a fixed command, and its one shell escape would hand over the rendered
-temporary copy rather than the file you asked for. It needs `less` 582 or newer;
-older versions ignore the binding and leave `b` alone.
+an exit status, which `spechub-md` reads and acts on. The `less` pager has no
+action that runs a fixed command. Its one shell escape would hand over the
+rendered temporary copy rather than the file you asked for. It needs `less` 582
+or newer; older versions ignore the binding and leave `b` alone.
 
-A diagram's width comes from its node labels, so a wide one cannot be shrunk
-into a narrow pane, and wrapping box-drawing art destroys it. Anything wider
-than the terminal is therefore replaced by a note giving its size and the two
-ways to see it, rather than drawn badly. `--diagram N` prints that one diagram
-unwrapped through `less -S`, where the arrow keys scroll sideways.
+A diagram's width comes from its node labels, so nothing can shrink a wide one
+into a narrow pane, and wrapping box-drawing art destroys it. So `spechub-md`
+replaces anything wider than the terminal with a note. The note gives
+its size and the two ways to see it, rather than a badly drawn diagram. The
+`--diagram N` flag prints that one diagram unwrapped through `less -S`, where the
+arrow keys scroll sideways.
 
 `SPECHUB_MD_PAD` tunes the spacing passed to `mermaid-ascii` (default
 `-x 2 -y 2`). Tighter padding buys roughly a third of the height back and very
 little width.
 
-Wide diagrams still appear in place. glow wraps whatever it renders, so the
-drawing is held back, glow runs on the prose, and the full-width art is spliced
-into its output afterwards. The pager is `less -S`: prose is already wrapped to
-the pane, so only the diagram lines chop, and the arrow keys pan across them.
+Wide diagrams still appear in place. glow wraps whatever it renders, so
+`spechub-md` holds the drawing back. It runs glow on the prose, then splices the
+full-width art into the output. The pager is `less -S`. Because glow already
+wrapped the prose to the pane, only the diagram lines chop, and the arrow keys
+pan across them.
 
 ### 6.4. Reading markdown from the file tree
 
@@ -437,28 +444,28 @@ placeholder there rather than a chopped drawing.
 
 `Enter` on the same file opens `spechub-md` full width, where the diagrams fit.
 An opener rule puts that ahead of the editor, so reading is the default and
-editing is the second entry in the same menu. Nothing shims `$EDITOR`, and your
-shell environment is untouched.
+editing is the second entry in the same menu. Nothing shims `$EDITOR`, and nothing changes
+your shell environment.
 
 `b` on a file hands it to the browser you are sitting at, by the routes in 6.5.
-`b` is free in yazi's file list - its only default binding is a word motion
+The key is free in yazi's file list. Its only default binding is a word motion
 while you are typing into a prompt, which this does not touch. Move it with
 `yazi.browser_key`.
 
-If you already write your own `yazi.toml`, setup reads it before it writes and
-leaves alone anything you have already set: your `mgr` settings, your markdown
-opener, your `plugin.prepend_previewers`, your `open.prepend_rules`. Whichever
+If you already write your own `yazi.toml`, setup reads it first and leaves alone
+anything you have set: your `mgr` settings, your markdown opener, your
+`plugin.prepend_previewers`, your `open.prepend_rules`. Whichever
 of the four it skipped, it says so. Declaring any of them a second time would
 make yazi reject the whole config and fall back to presets, so it concedes them
-instead. What it cannot read is a `yazi.toml` that does not parse, and yazi is
-already ignoring that one in favour of presets, so fix the error and re-run
-setup. Add `spechub-md` to your own opener to read markdown with it, and
+instead. What it cannot read is a `yazi.toml` that does not parse. In that
+case yazi is already ignoring the file in favour of presets, so fix the error and
+re-run setup. Add `spechub-md` to your own opener to read markdown with it, and
 `show_hidden = true` to your own `mgr` if you want hidden files shown.
 
-The `b` binding lives in `keymap.toml`, not `yazi.toml`, and is written as
+The `b` binding lives in `keymap.toml`, not `yazi.toml`, and setup writes it as
 `[[mgr.prepend_keymap]]`. That spelling is an array of tables, so it stacks with
 bindings you have already written the same way. The one spelling it cannot sit
-beside is `prepend_keymap = [...]` written inline under `[mgr]`: that is a
+beside is the inline `prepend_keymap = [...]` under `[mgr]`. That is a
 single key, and TOML forbids declaring it twice. Setup detects that form and
 gives the binding up rather than cost you the whole keymap, and says so.
 
@@ -479,9 +486,9 @@ Two things it normalises first, because `mermaid-ascii` handles neither:
 Serve mode renders the file with python-markdown and draws diagrams with a
 **locally vendored** mermaid.js, so the page fetches nothing from a CDN. It
 binds `127.0.0.1` only, re-reads the file on every request, and prints an
-OSC 8 hyperlink. herdr rebuilds OSC 8 into the frame it sends the client, so
-ctrl+click opens the page in the browser on your own machine - as long as
-`preview_port` is forwarded from there. The bare URL prints underneath for
+OSC 8 hyperlink. Then herdr rebuilds OSC 8 into the frame it sends the client.
+So ctrl+click opens the page in the browser on your own machine, as long as your
+SSH config forwards `preview_port` from there. The bare URL prints underneath for
 terminals without OSC 8.
 
 Only one server can hold `preview_port` at a time. A second `--serve` names the
@@ -498,7 +505,7 @@ shell whose own command line mentions the name, including the one you type it in
 
 ### 6.5. Getting the page to the browser you are sitting at
 
-`--browser` is the one to reach for: it works out where your browser actually
+`--browser` is the one to reach for. It works out where your browser actually
 is and picks a delivery that reaches it, so the same key works however you
 attached. It asks `spechub-open --why` rather than deciding that a second time.
 
@@ -510,53 +517,53 @@ attached. It asks `spechub-open --why` rather than deciding that a second time.
 | Anywhere else, over SSH | Serves it and prints a clickable link |
 
 The opener is the route you want, and section 8.6 covers what it is and how it
-gets installed. What matters here is what it changes: nothing to arm, no
-extension, and the browser it reaches is your default one rather than a
+gets installed. What matters here is what it changes: nothing to arm, and no
+extension. The browser it reaches is your default one rather than a
 dedicated Chrome profile. Read one document after another and each simply
-appears. Re-render a file you are already looking at and the tab you have open
-updates in place, scroll position kept, instead of a second tab joining the
-first.
+appears. Re-render a file you are already looking at, and the tab you have open
+updates in place, scroll position kept. No second tab joins the first.
 
-That last part is decided by the page itself, not by the opener remembering.
+The page itself decides that last part, rather than the opener remembering it.
 Every page the opener serves polls it for its own version, so a tab that is
 still open says so by asking. Re-render that file and the opener sees a live
-tab and lets it reload itself; close the tab and the asking stops, so the next
+tab and lets it reload itself. Close the tab and the asking stops, so the next
 render opens a fresh one. Remembering that it once opened something would get
 the closed-tab case wrong every time.
 
 The bridge case is the fallback, and it is the one that needs explaining. Under `herdr --remote` the
-tunnel to your laptop runs the *other way*: nothing on the laptop can open a
-port on the dev machine, and a link to `localhost:6419` names the laptop's own
+tunnel to your laptop runs the *other way*. Nothing on the laptop can open a
+port on the dev machine. A link to `localhost:6419` names the laptop's own
 localhost, where nothing is listening. So there is no link to hand over - only
 a document. That is what `--html` is for.
 
 `--html` prints the page `--serve` would have served, once, to stdout, and
 starts nothing. A document you can capture in a variable travels; a port does
-not. `--browser` is `--html` plus the delivery, and the two share one renderer
-so the page cannot differ between them.
+not. The `--browser` flag is `--html` plus the delivery, and the two share one
+renderer, so the page cannot differ between them.
 
 They differ in exactly one place. `--serve` answers for `/mermaid.js` off the
 vendored copy, so its page fetches nothing from a CDN. A document standing on
-its own has no server behind it, so `--html` names the CDN instead - the
+its own has no server behind it, so `--html` names the CDN instead. The
 vendored file is 3.5MB, and inlining it would make the page offline-proof and
 far too big to hand anywhere. A document bound for the opener is the third
-case: it is handed over once like `--html`, but it does end up behind a server
-- the opener's - so it asks for `/mermaid.js` too. The 3.5MB goes up once, the
-first time the opener admits it has no copy, and every document after that
-draws its diagrams without reaching a CDN at all. Measured: this document, 39KB of markdown, renders
-to 50KB of HTML in under 200ms and reaches a laptop browser, diagram drawn, in
-about two seconds.
+case. Here `--browser` hands it over once, like `--html`. But the document does
+end up behind a server, the opener's, so it asks for `/mermaid.js` too.
 
-On the bridge the page replaces what is in the armed tab, and no new tab is
-opened. That is deliberate, and it is the second thing that had to be measured
-rather than assumed: a tab opened over CDP is created in the **background**, and
-nothing on the dev machine can bring it to the front. The document lands in it,
-the helper reports success, and you never see it. Arming the extension is how
-you nominate the tab this may take over, so that is the tab it takes over.
+The 3.5MB goes up once, the first time the opener admits it has no copy. Every
+document after that draws its diagrams without reaching a CDN at all. Measured:
+this document, 39KB of markdown, renders to 50KB of HTML in under 200ms. It
+reaches a laptop browser, diagram drawn, in about two seconds.
+
+On the bridge the page replaces what is in the armed tab, and the helper opens
+no new tab. That is deliberate, and it is the second thing we measured rather
+than assumed. CDP creates a tab in the **background**, and nothing on the dev
+machine can bring it to the front. The document lands in it, the helper reports
+success, and you never see it. Arming the extension is how you nominate the tab
+this may take over, so that is the tab it takes over.
 
 Success is likewise not an exit status. The pushed script ends with the page
-title, so the browser answers with what it is now holding, and `--browser` only
-reports success when that answer is the file you asked for. A command that
+title, so the browser answers with what it is now holding. The `--browser` flag
+only reports success when that answer is the file you asked for. A command that
 exited 0 is not a page that arrived.
 
 When the bridge is the route and the push fails, `--browser` says so and stops
@@ -590,7 +597,7 @@ git config --global delta.line-numbers true
 git config --global merge.conflictstyle zdiff3
 ```
 
-Agents are unaffected: git only pages to a terminal, so a command whose output is piped or captured still gets plain text.
+Agents see no difference. git only pages to a terminal, so a command whose caller pipes or captures the output still gets plain text.
 
 ### 7.2. gh-dash
 
@@ -673,7 +680,7 @@ Because herdr popups inherit the focused pane's directory, `alt+i` from an agent
 
 ### 7.4. spechub-gh: why an action failed
 
-gh-dash shells out to `gh` for everything it does to a pull request and throws the command's stderr away, so GitHub refusing one arrives as `exit status 1` in the footer, for two seconds. Approving your own pull request is the case you meet daily, because GitHub always refuses that: the input box closes, nothing else happens, and the dashboard looks like it ignored the key.
+gh-dash shells out to `gh` for everything it does to a pull request, and throws the command's stderr away. GitHub refusing one therefore arrives as `exit status 1` in the footer, for two seconds. Approving your own pull request is the case you meet daily, because GitHub always refuses that. The input box closes, nothing else happens, and the dashboard looks like it ignored the key.
 
 `spechub-dash` answers that without patching gh-dash. It links `spechub-gh` into a directory of its own at the front of `$PATH` under the name `gh`, so gh-dash finds it before the real one. The real `gh` still does the work and still decides the exit code. The only thing added is a notification carrying gh's own words when a `pr` or `issue` action fails:
 
@@ -682,7 +689,7 @@ gh pr review failed
 Can not approve your own pull request.
 ```
 
-`gh dash` itself is handed straight through, and so is every subcommand that is not an action - `repo view` and `api` among them - because those fail for reasons a notification cannot help with.
+`spechub-gh` passes `gh dash` itself straight through, and every subcommand that is not an action, `repo view` and `api` among them. Those fail for reasons a notification cannot help with.
 
 ### 7.5. gh-dash keys
 
@@ -727,13 +734,13 @@ Can not approve your own pull request.
 A dev VM has no display and no clipboard of its own. Two gh-dash keys land on that fact:
 
 - `o`, open on GitHub, fails with `exit status 1`. gh-dash opens URLs through `$BROWSER`, falling back to `xdg-open`, and `xdg-open` with no `$DISPLAY` exits 1
-- `y` and `Y`, copy the URL and the number, fail with `Failed copying to clipboard`. gh-dash copies through a Go library that shells out to `xclip`, `xsel`, `wl-copy` or `termux-clipboard-set`, and none of them is installed or would work if it were
+- `y` and `Y`, copy the URL and the number, fail with `Failed copying to clipboard`. The gh-dash tool copies through a Go library that shells out to `xclip`, `xsel`, `wl-copy` or `termux-clipboard-set`. A bare VM has none of them installed, and an install would not make them work
 
 Neither is a gh-dash bug. The clipboard and the browser are on the machine you are typing at, several hops away. Two helpers carry each one back across.
 
 ### 8.1. spechub-clip: the clipboard
 
-OSC 52 is the escape sequence that asks a terminal to put text on its own clipboard. It is bytes in the terminal stream, so it crosses SSH for free, herdr forwards it from a pane to whatever terminal hosts it, and Windows Terminal, iTerm2, kitty and Ghostty all act on it.
+OSC 52 is the escape sequence that asks a terminal to put text on its own clipboard. It is bytes in the terminal stream, so it crosses SSH for free. herdr forwards it from a pane to whatever terminal hosts it. Windows Terminal, iTerm2, kitty and Ghostty all act on it.
 
 ```bash
 spechub-clip "some text"      # copy the arguments
@@ -743,11 +750,11 @@ spechub-clip --out            # print what was copied last
 
 Reading back is not symmetrical. Windows Terminal refuses OSC 52 clipboard *reads* on purpose, because a program that can read your clipboard without asking is a security hole. So `--out` replays a local cache, not the real clipboard.
 
-To reach programs that only know how to shell out, `apply` also writes an `xclip` onto `$PATH` backed by `spechub-clip`. That is what makes gh-dash's `y` and `Y` work unchanged, with no rebinding and no flicker. It is skipped on any machine that has a real `xclip` or a display for one to talk to, and `setup.sh uninstall` removes it.
+To reach programs that only know how to shell out, `apply` also writes an `xclip` onto `$PATH` backed by `spechub-clip`. That is what makes gh-dash's `y` and `Y` work unchanged, with no rebinding and no flicker. Setup skips it on any machine that has a real `xclip` or a display for one to talk to, and `setup.sh uninstall` removes it.
 
 ### 8.2. spechub-open: the browser
 
-`o` is a gh-dash keybinding rather than a `$BROWSER` setting, and that is deliberate. gh-dash runs `$BROWSER` with its output discarded while the dashboard is still drawn, so a route that needs to say anything, or to hand you a link to click, has nowhere to put it. As a keybinding gh-dash steps aside and gives `spechub-open` the terminal.
+`o` is a gh-dash keybinding rather than a `$BROWSER` setting, and that is deliberate. The dashboard is still on screen when gh-dash runs `$BROWSER`, and it discards that command's output. A route that needs to say anything, or to hand you a link to click, therefore has nowhere to put it. As a keybinding gh-dash steps aside and gives `spechub-open` the terminal.
 
 It tries, in order:
 
@@ -755,39 +762,39 @@ It tries, in order:
 2. `xdg-open`, when this machine has a display after all
 3. `wslview` or `explorer.exe`, when the Windows half of the machine holds the browser
 4. The opener on your laptop, which puts the page in your default browser with nothing to click. See 8.6
-5. Chrome on your laptop through the [Playwriter bridge](../skills/bridge/SKILL.md), but only once it has proved the browser is really reachable that way. See below
-6. A link you can click: the URL as an OSC 8 hyperlink, which the terminal you are sitting at draws itself, so ctrl+click reaches your own browser with nothing installed in between. The link text is the URL, so a terminal that ignores OSC 8 still shows something its own URL detection can catch, and it goes on your clipboard either way
+5. Chrome on your laptop through the [Playwriter bridge](../skills/bridge/SKILL.md), but only after it proves the browser is really reachable that way. See below
+6. A link you can click: the URL as an OSC 8 hyperlink. The terminal you are sitting at draws it, so ctrl+click reaches your own browser with nothing installed in between. The link text is the URL. A terminal that ignores OSC 8 still shows something its own URL detection can catch. The URL goes on your clipboard either way
 7. With no terminal to draw on either, the URL still goes on the clipboard, but the command reports failure. Silent success is what left gh-dash claiming it had opened a page that never opened
 
-The opener sits ahead of the bridge because the two are not competing for the same job. The bridge exists so an *agent* can drive a browser: it attaches one tab at a time, only after somebody clicks the extension icon, and it does so in a dedicated Chrome profile. The opener exists so a *person* can be shown a page, needs no click at all, and reaches the browser you actually use. Both can be up at once, and each keeps its own job.
+The opener sits ahead of the bridge because the two are not competing for the same job. The bridge exists so an *agent* can drive a browser. It attaches one tab at a time, only after somebody clicks the extension icon, and it does so in a dedicated Chrome profile. The opener exists so it can show a *person* a page, needs no click at all, and reaches the browser you actually use. Both can be up at once, and each keeps its own job.
 
 `setup.sh status` prints which route a machine will take, and the last line of `~/.cache/spechub/open.log` says what the last press actually did.
 
 ### 8.3. Why the bridge has to prove itself
 
-`agent-browser` launches a headless Chrome on the local machine when it cannot attach to the endpoint you gave it. That Chrome navigates perfectly happily, reports success, and shows nobody anything: the page opens on the VM, several hops from the screen you are looking at.
+`agent-browser` launches a headless Chrome on the local machine when it cannot attach to the endpoint you gave it. That Chrome navigates perfectly happily, reports success, and shows nobody anything. The page opens on the VM, several hops from the screen you are looking at.
 
 Nothing about the relay answering on port 19988 rules that out either. Ours answered `/json/version` while refusing every CDP connection with `Multiple extensions connected. Specify extensionId.`, so every open landed in a headless Chrome for hours without one error message.
 
-So the bridge route asks the relay's `/json/list` what is on the far end, and takes the route only when something answers. The Playwriter extension attaches per tab, and `/json/list` is its own answer to that question: `[]` means it is armed on nothing, so there is no browser to drive however healthy the tunnel underneath looks.
+So the bridge route asks the relay's `/json/list` what is on the far end, and takes the route only when something answers. The Playwriter extension attaches per tab, and `/json/list` is its own answer to that question. An empty `[]` means nobody has armed it on a tab, so there is no browser to drive however healthy the tunnel underneath looks.
 
-This used to gate on an `agent-browser` socket existing first, on the reasoning that probing starts a browser as a side effect. It does not - `curl` starts nothing. What that gate did do was make a perfectly healthy bridge unreachable, because nothing creates that socket until an `agent-browser` session is already running, so every press fell through to the link route. Asking the relay is both safer and correct.
+This used to gate on an `agent-browser` socket existing first, on the reasoning that probing starts a browser as a side effect. It does not - `curl` starts nothing. What that gate did do was make a perfectly healthy bridge unreachable. Nothing creates that socket until an `agent-browser` session is already running, so every press fell through to the link route. Asking the relay is both safer and correct.
 
-The opener proves itself the same way and for the same reason: `spechub-open` asks it for `/health`, carrying the shared token, and takes the route only if that round trip is answered. A token sitting on disk proves nothing about a service being up, and a service being up proves nothing without the token it is going to demand.
+The opener proves itself the same way and for the same reason. The `spechub-open` helper asks it for `/health`, carrying the shared token, and takes the route only if the opener answers. A token sitting on disk proves nothing about a service being up. A service being up proves nothing without the token it is going to demand.
 
 ### 8.4. Under `herdr --remote`
 
-*Both helpers are written for this shape and need no change. The clipboard crosses; the browser falls to the link route, which is the one built for it.*
+*We wrote both helpers for this shape; they need no change. The clipboard crosses; the browser falls to the link route, which is the one built for it.*
 
 `herdr --remote <target>` runs the server, and therefore every pane process, on
 the dev machine. The client is a thin attach: it sends input and draws what the
 server sends back.
 
-`spechub-clip` works, and this is measured rather than inferred. A pane's OSC 52
-write reaches the clipboard on the machine you attached from, so
-`spechub-clip "some text"` on the dev machine pastes on your own. herdr's own
-documentation never mentions OSC 52, only OSC 7 and OSC 8, so nothing there
-promises it. It was tested on herdr 0.8.2 and it crossed.
+`spechub-clip` works, and we measured that rather than inferring it. A pane's
+OSC 52 write reaches the clipboard on the machine you attached from, so
+`spechub-clip "some text"` on the dev machine pastes on your own. Nothing in
+herdr's own documentation promises this: it mentions OSC 7 and OSC 8, never
+OSC 52. We tested it on herdr 0.8.2 and it crossed.
 
 Clipboard *images* travel the other way, and only on this path. Copy a
 screenshot on your machine, focus an agent pane, and herdr stages the image on
@@ -795,24 +802,25 @@ the dev machine and pastes its path. An SSH shell cannot do that at all, which
 is the single strongest reason to prefer a remote attach.
 
 `spechub-open` runs on the dev machine, which is the honest answer for routes 1
-to 5: an override, a display, WSL, the opener or a bridge tunnel all have to be
-reachable *from there*. The opener and the bridge are, because both are carried
-back by reverse tunnels the laptop opens - so on a machine set up for either,
-that is the route taken. With neither, it falls to the link route, which is the
-one built for this.
-herdr tracks hyperlinks per cell and re-emits them when it renders, so the link
-is drawn by the client rather than shipped as raw bytes, and ctrl+click opens
-the browser on the machine you attached from.
+to 5. An override, a display, WSL, the opener or a bridge tunnel all have to be
+reachable *from there*. The opener and the bridge are reachable, because the
+laptop opens reverse tunnels that carry them back. So on a machine set up for
+either, that is the route it takes. With neither, it falls to the link route,
+which is the one built for this.
+
+In that route herdr tracks hyperlinks per cell and re-emits them when it renders.
+The client therefore draws the link rather than shipping raw bytes, and
+ctrl+click opens the browser on the machine you attached from.
 
 The link route also degrades further than the others. Even with no OSC 8 and no OSC 52
 at all, the URL is on screen as plain text, which drag-select copies. That is
 why the link is its own text rather than a label over it.
 
-One trap belongs to your SSH config rather than to herdr. `spechub-md --serve`
-prints the URL it is listening on, and that is the port *on the dev machine*. If
-your host block forwards it to a different local port, the printed link is wrong
-from where you are sitting and you want the local number instead. Forwarding
-`6419` to `6419` avoids the question entirely.
+One trap belongs to your SSH config rather than to herdr. The
+`spechub-md --serve` command prints the URL it is listening on, and that is the
+port *on the dev machine*. If your host block forwards it to a different local
+port, the printed link is wrong from where you are sitting. You want the local
+number instead. Forwarding `6419` to `6419` avoids the question entirely.
 
 ### 8.5. On a machine with none of this
 
@@ -824,9 +832,9 @@ export SPECHUB_OPEN_CMD="ssh laptop open"   # or any command taking a URL
 
 ### 8.6. The opener: a page in your own browser, with nothing to click
 
-*A small service on your laptop that takes a page from the dev machine, stores it, serves it back, and opens your default browser on it.*
+*A small service on your laptop. It takes a page from the dev machine, stores it, serves it back, and opens your default browser on it.*
 
-The dev machine has no browser and no way to reach yours. The bridge solved that for agents, but not for reading: it needs a tab armed by hand before every session, and the tab it drives lives in a dedicated Chrome profile rather than your default browser. The opener is the answer for reading, and it is a separate service on purpose - see [ADR 0002](adr/0002-document-opener-service.md).
+The dev machine has no browser and no way to reach yours. The bridge solved that for agents, but not for reading. It needs a tab armed by hand before every session. The tab it drives lives in a dedicated Chrome profile rather than your default browser. The opener is the answer for reading, and it is a separate service on purpose - see [ADR 0002](adr/0002-document-opener-service.md).
 
 What it does is deliberately small:
 
@@ -837,7 +845,7 @@ What it does is deliberately small:
 | A vendored `mermaid.min.js`, once | Keeps it, and answers `/mermaid.js` off it from then on |
 | A request to restart the relay or the tunnel | Restarts that scheduled task |
 
-It rides the same machinery as the bridge: a scheduled task registered by `register-tasks.ps1`, a supervisor that restarts it, deployment reconciled by `sync.ps1` on every Claude Code launch, and a reverse SSH tunnel opened by your laptop. It gets its **own** tunnel task rather than a second forward on the bridge's connection, because ssh runs with `ExitOnForwardFailure=yes` - one wedged port fails the whole connection, so sharing one would let a stuck opener port take the bridge down with it.
+It rides the same machinery as the bridge: a scheduled task from `register-tasks.ps1`, and a supervisor that restarts it. The `sync.ps1` script reconciles the deployment on every Claude Code launch, and your laptop opens a reverse SSH tunnel. It gets its **own** tunnel task rather than a second forward on the bridge's connection. That is because ssh runs with `ExitOnForwardFailure=yes`, so one wedged port fails the whole connection. Sharing one connection would let a stuck opener port take the bridge down with it.
 
 Installing it is the same command that registers the bridge, which now registers the opener too:
 
@@ -846,11 +854,11 @@ cd $env:USERPROFILE\playwriter-bridge
 .\register-tasks.ps1 -VMs @("vm1.example.com")
 ```
 
-That generates a shared secret, stores it at `%LOCALAPPDATA%\playwriter-bridge\opener.token`, and copies it to each VM at `~/.config/spechub/opener.token` over the same ssh the tunnel uses. Every request from the dev machine carries it. Loopback binding alone would not be enough: the reverse tunnel makes the port reachable by anything running on the VM, and this is a service that puts pages on your screen.
+That generates a shared secret, stores it at `%LOCALAPPDATA%\playwriter-bridge\opener.token`, and copies it to each VM at `~/.config/spechub/opener.token` over the same ssh the tunnel uses. Every request from the dev machine carries it. Loopback binding alone would not be enough. The reverse tunnel makes the port reachable by anything running on the VM, and this is a service that puts pages on your screen.
 
-The two recovery actions the dev machine could never perform - restarting the relay, restarting the tunnel - now go through the opener instead of being handed to you as a block to paste into PowerShell. Arming the extension is still yours. It is a click inside a third-party extension, and nothing on either machine can press it.
+Restarting the relay and restarting the tunnel are the two recovery actions the dev machine could never perform. They now go through the opener instead of arriving as a block for you to paste into PowerShell. Arming the extension is still yours. It is a click inside a third-party extension, and nothing on either machine can press it.
 
-Documents outlive the session that rendered them, which is what lets a page still work after the dev machine has gone away. They are pruned after a week.
+Documents outlive the session that rendered them, which is what lets a page still work after the dev machine has gone away. The opener prunes them after a week.
 
 ## 9. The daily loop
 
@@ -870,11 +878,11 @@ Documents outlive the session that rendered them, which is what lets a page stil
 Each of these cost real time to find.
 
 - **`ctrl+b` is both herdr's prefix and Claude Code's "background this task".** Press it twice inside a Claude pane to reach Claude, or rebind herdr's prefix
-- **Never submit a prompt to a blocked agent.** A blocked agent waits on a permission prompt, so injected text answers that prompt instead of giving an instruction. Wait for idle
-- **`--cwd` for `herdr worktree create` must be the main checkout**, never a nested worktree. herdr stores it as the workspace's repository root and groups worktree workspaces under it in the sidebar
+- **Never submit a prompt to a blocked agent.** A blocked agent waits on a permission prompt. Injected text answers that prompt instead of giving an instruction. Wait for idle
+- **`--cwd` for `herdr worktree create` must be the main checkout**, never a nested worktree. herdr stores it as the workspace's repository root. It also groups worktree workspaces under it in the sidebar
 - **Read the created path from the command output.** Never assume where a worktree landed, because the configured root decides
 - **Worktree workspaces nest, plain workspaces do not.** A workspace made with `alt+w` always sits at the top level, whatever directory it points at
 - **Sidebar actions act on the selected workspace**, not the focused pane. Open the sidebar and select before creating a worktree or closing a workspace
 - **In-process teammates are invisible to herdr.** A Claude teammate shares its parent's pane and session, so it never appears as its own agent. Two agents in one worktree means two real sessions
 - **gh-dash never says why an action failed.** It discards gh's stderr, so a refusal shows as `exit status 1` for two seconds. `spechub-gh`, which `spechub-dash` puts on `$PATH` as `gh`, turns that into a notification quoting gh. Approving your own pull request is the one you will hit
-- **A remote machine has no clipboard and no browser.** `o`, `y` and `Y` in gh-dash all fail on a bare VM until `apply` installs `spechub-clip` and `spechub-open`. `setup.sh status` says which one a machine ended up with
+- **A remote machine has no clipboard and no browser.** The `o`, `y` and `Y` keys in gh-dash all fail on a bare VM until `apply` installs `spechub-clip` and `spechub-open`. The `setup.sh status` command says which one a machine ended up with

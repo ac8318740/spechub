@@ -219,9 +219,9 @@ user to paste it into PowerShell themselves.
 ## Restarting the laptop's tasks from here
 
 When the **opener** is up, the two restarts above are no longer a handoff. The
-opener is a small service on the laptop that takes a page from this machine and
-puts it in the default browser there; because it runs on the laptop, it can
-also restart the scheduled tasks this machine cannot reach. See section 8.6 of
+opener is a small service on the laptop. It takes a page from this machine and
+puts it in the default browser there. Because it runs on the laptop, it can also
+restart the scheduled tasks this machine cannot reach. See section 8.6 of
 `docs/terminal-workspace.md`.
 
 ```bash
@@ -229,12 +229,12 @@ spechub-bridge status            # both machines' view, including the tasks
 spechub-bridge fix [relay|tunnel|both]
 ```
 
-`fix` reports success only once the relay answers here again – a restart that
-was accepted is not a bridge that came back. When the opener is not reachable
+`fix` reports success only once the relay answers here again. A restart the
+opener accepted is not a bridge that came back. When the opener is not reachable
 either, `spechub-bridge` prints the `VM-SIDE HANDOFF` block for you rather than
 leaving you to write one.
 
-Arming is still not covered. Nothing changes that.
+The opener still does not cover arming. Nothing changes that.
 
 ## What this intentionally does NOT do
 

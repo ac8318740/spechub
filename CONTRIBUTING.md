@@ -21,54 +21,62 @@ workspace.
 
 Two rules for it:
 
-- **Helper scripts are named `spechub-*` and live in heredocs inside `setup.sh`**,
-  not as separate files. One script to install means one file to keep idempotent.
-  Editing a helper means editing the heredoc. `uninstall` removes them by that
-  prefix, so a helper named anything else leaks.
+- **Every helper script carries the `spechub-*` prefix and lives in a heredoc
+  inside `setup.sh`**, not as separate files. One script to install means one
+  file to keep idempotent. Editing a helper means editing the heredoc.
+  `uninstall` removes them by that prefix, so a helper named anything else leaks.
 - **Every edit to a user's config sits between the managed markers**
   (`# >>> spechub terminal-workspace >>>` / `# <<< ... <<<`). Re-applying replaces
   only those regions, so hand-written config around them survives. Never write
   outside the markers, and never assume the file is absent.
 
-  The exceptions are forced by TOML. A key the block sets is **claimed**: an
-  assignment of the same name in the user's own `[keys]`, and any
-  `[[keys.command]]` bound to a key the block binds, is removed before the merge,
-  because TOML forbids a duplicate key and herdr would reject the whole file.
-  The same applies to `[worktrees]`, which the block re-declares in full. Merging
-  into an existing `[keys]` also produces **two** managed regions rather than one:
-  bare keys must sit inside `[keys]`, while `[[keys.command]]` and `[worktrees]`
-  are top-level tables and cannot. What must hold is that re-applying never
-  accumulates them.
+  TOML forces the exceptions. The block **claims** every key it sets. Before the
+  merge it removes a same-name assignment in the user's own `[keys]`, and any
+  `[[keys.command]]` bound to a key the block binds. It removes them because TOML
+  forbids a duplicate key, and herdr would reject the whole file. The same
+  applies to `[worktrees]`, which the block re-declares in full.
 
-  `yazi.toml` is the same case, and stricter. yazi rejects the whole config on
-  one TOML error and falls back to presets, so a single duplicate costs the user
-  every setting they have. The managed block writes into four namespaces –
-  `mgr`, `opener.markdown`, `plugin.prepend_previewers` and `open.prepend_rules`
-  – and every one of them is a claimed-key case. An array-of-tables entry is
-  additive only where the name is free or already an array of tables:
-  `[[plugin.prepend_previewers]]` is fine under a `[plugin]` that leaves
-  `prepend_previewers` unset, and a duplicate under one holding it as an inline
-  array, which is the form yazi's own documentation teaches.
+  Merging into an existing `[keys]` also produces **two** managed regions rather
+  than one: bare keys must sit inside `[keys]`, while `[[keys.command]]` and
+  `[worktrees]` are top-level tables and cannot. What must hold is that
+  re-applying never accumulates them.
 
-  Which namespaces the user has claimed is decided by putting the question to
-  `tomllib` in the exact form the block would write it: append that header to
-  the config outside the markers and see whether the whole thing still parses.
-  Whatever the parser refuses is theirs. A dict lookup would not do – TOML also
-  refuses to reopen an inline table or to overwrite a scalar, and neither
-  `opener = { text = [...] }` nor `opener = "nope"` has an `opener.markdown`
-  key to find, so a lookup calls both free and the write kills the file. A
-  config that does not parse to begin with concedes all four, since nothing can
-  be known about it and repairing it is not ours to do.
+  `yazi.toml` is the same case, and stricter. One TOML error makes yazi reject
+  the whole config and fall back to presets. A single duplicate therefore costs
+  the user every setting they have. The managed block writes into four namespaces
+  – `mgr`, `opener.markdown`, `plugin.prepend_previewers` and
+  `open.prepend_rules` – and every one of them is a claimed-key case.
 
-  `tomllib` needs Python 3.11, so its absence falls back to naming the
-  top-level table anywhere the text could open one – bare, `"quoted"` or
-  `'literal'`, as a header or as a key of its own. That mostly concedes
-  namespaces which would have been safe to write, and each of those costs one
-  setting where guessing the other way costs the file. It errs the other way in
-  one place: text cannot see that a config never parsed, so the fallback writes
-  all four into a file the parsed path would have conceded whole. Whatever is
-  conceded is left to the user and named in a `say` line, because a config that
-  parses with a setting missing beats one yazi throws out.
+  An array-of-tables entry adds to the config only where the name is free, or
+  where it already holds an array of tables. Under a `[plugin]` that leaves
+  `prepend_previewers` unset, `[[plugin.prepend_previewers]]` is fine. It is a
+  duplicate under a `[plugin]` that holds it as an inline array, which is the
+  form yazi's own documentation teaches.
+
+  `setup.sh` asks `tomllib` which namespaces the user has claimed. It puts the
+  question in the exact form the block would write it. It appends that header to
+  the config outside the markers, then sees whether the whole thing still parses.
+  Whatever the parser refuses is theirs.
+
+  A dict lookup would not do. TOML also refuses to reopen an inline table or to
+  overwrite a scalar. Neither `opener = { text = [...] }` nor `opener = "nope"`
+  has an `opener.markdown` key to find, so a lookup calls both free and the write
+  kills the file. A config that does not parse to begin with concedes all four.
+  The script can learn nothing about such a file, and repairing it is not ours
+  to do.
+
+  `tomllib` needs Python 3.11. Without it, the fallback names the top-level
+  table anywhere the text could open one. That means bare, `"quoted"` or
+  `'literal'`, as a header or as a key of its own.
+
+  That mostly concedes namespaces which would have been safe to write. Each of
+  those concessions costs one setting, where guessing the other way costs the
+  file. The fallback errs the other way in one place. Text cannot see that a
+  config never parsed, so the fallback writes all four into a file the parsed
+  path would have conceded whole.
+
+  `setup.sh` leaves whatever it concedes to the user and names it in a `say`
+  line. A config that parses with a setting missing beats one yazi throws out.
 
 After changing `setup.sh`, test it against a fake home rather than your own:
 
@@ -80,8 +88,9 @@ HOME=$FAKE SPECHUB_TW_CONFIG=$FAKE/.config/spechub/tw.yaml SPECHUB_TW_BIN=$FAKE/
   bash assets/terminal-workspace/setup.sh apply
 ```
 
-Then check the generated config parses, run `apply` twice and confirm the managed
-block count does not grow, and run `uninstall` and confirm nothing is left behind.
+Then check that the generated config parses. Run `apply` twice, and confirm the
+managed block count does not grow. Run `uninstall`, and confirm it leaves nothing
+behind.
 
 Run the guard suite too. It is offline, so it needs no herdr:
 
@@ -89,9 +98,9 @@ Run the guard suite too. It is offline, so it needs no herdr:
 bash tests/test-terminal-workspace.sh
 ```
 
-It checks setup.sh against `docs/terminal-workspace.md` in both directions: every
+It checks setup.sh against `docs/terminal-workspace.md` in both directions. Every
 `spechub-*` and every bound command the docs mention must be something setup.sh
-installs, and every default keybinding must be documented. It also merges the
+installs. The docs must also cover every default keybinding. It also merges the
 generated keymap onto a hand-written config and asserts the result is valid TOML.
 CI runs it on every push and pull request. Rename a helper or change a default
 key and this suite fails until the docs follow.
@@ -147,8 +156,8 @@ it: `.github/workflows/ci.yml` rebuilds and fails the run if `cli/dist` or
 convenience that saves you a red run, not as the guarantee.
 
 `npm run build` syncs `cli/package.json`'s version from
-`.claude-plugin/plugin.json`, then runs esbuild, which is why `cli/package.json`
-is staged alongside `dist/`.
+`.claude-plugin/plugin.json`, then runs esbuild. That is why both the pre-commit
+hook and the `git add` recipe above stage `cli/package.json` alongside `dist/`.
 
 That sync is tidiness, not correctness. `spechub --version` reads
 `.claude-plugin/plugin.json` directly at runtime (`cli/src/lib/version.ts`), so
@@ -163,8 +172,9 @@ The repo has two test layers. Run `cd cli && npm test` for the CLI tests. Run `b
 
 ## Codex agent definitions
 
-`agents/*.md` is the source. `agents/codex/*.toml` is generated from it by
-`scripts/gen-codex-agents.mjs` and committed. Never hand-edit the TOML.
+`agents/*.md` is the source. `scripts/gen-codex-agents.mjs` generates
+`agents/codex/*.toml` from it. Commit the generated files. Never hand-edit the
+TOML.
 
 ```sh
 node scripts/gen-codex-agents.mjs
@@ -172,9 +182,9 @@ node scripts/gen-codex-agents.mjs
 
 Codex cannot ship agent definitions inside a plugin, so the SessionStart hook
 installs them into `~/.codex/agents/` and re-reconciles on every session. It
-only overwrites files carrying the generated marker, so an agent of yours that
-happens to share a name is left alone, and it does nothing at all on a machine
-with no `~/.codex`.
+only overwrites files carrying the generated marker. It therefore leaves alone
+an agent of yours that happens to share a name. It also does nothing at all on a
+machine with no `~/.codex`.
 
 The generator emits only the three keys Codex applies: `name`, `description`
 and `developer_instructions`. It deliberately omits others:
@@ -207,11 +217,11 @@ translation layer.
 
 The CLI ships **only** as part of the plugin, and that is deliberate.
 
-Installing it is not a step. The plugin's `cli/dist/index.js` is committed, so
-it arrives already built when Claude Code copies the plugin into its cache, and
-the SessionStart hook symlinks it into place. There is no npm install, no
-`node_modules` in the cache, and no network call. The only requirement is Node
-20 on PATH.
+Installing it is not a step. The plugin ships `cli/dist/index.js` in the
+repository, so it arrives already built when Claude Code copies the plugin into
+its cache. The SessionStart hook then symlinks it into place. There is no npm
+install, no `node_modules` in the cache, and no network call. The only
+requirement is Node 20 on PATH.
 
 Publishing to npm as well would buy a second door to the same code and cost:
 
@@ -225,24 +235,24 @@ Publishing to npm as well would buy a second door to the same code and cost:
 - **PATH propagation.** Non-interactive agent subshells do not always inherit an
   npm global bin, notably under nvm.
 
-Using SpecHub from another agent harness does not need npm either: on any
+Using SpecHub from another agent harness does not need npm either. On any
 machine with the plugin, `~/.local/bin/spechub` is already on PATH and has no
 Claude Code dependency. What another harness lacks is the orchestrator
 instructions, not the binary.
 
-Revisit this only if a machine needs the CLI with **no plugin installed at all**:
-CI, or a device that runs an agent but not Claude Code. The package is kept
-publishable for that day: `npm pack --dry-run` from `cli/` shows the file list,
-and `prepublishOnly` runs the build. Note the bare `spechub` name on npm belongs
-to an unrelated project, so the package would be `spechub-cli` with `spechub` as
-its binary.
+Revisit this only if a machine needs the CLI with **no plugin installed at all**.
+That means CI, or a device that runs an agent but not Claude Code. We keep the
+package publishable for that day: `npm pack --dry-run` from `cli/` shows the
+file list, and `prepublishOnly` runs the build. Note the bare `spechub` name on
+npm belongs to an unrelated project, so the package would be `spechub-cli` with
+`spechub` as its binary.
 
 #### Who owns `spechub` on PATH
 
 The SessionStart hook defers. If it finds a `spechub` on PATH that is not its
 own symlink, it leaves it alone and says where the winner came from. Two
-managers pointing one command name at different copies is a silent race decided
-by PATH order, and the hook should not be one of the racers.
+managers pointing one command name at different copies make a silent race, which
+PATH order decides. The hook should not be one of the racers.
 
 Agents are outside this entirely. Skills and agents call
 `~/.claude/spechub/bin/spechub` by absolute path, which is always the plugin's

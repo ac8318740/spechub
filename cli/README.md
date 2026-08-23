@@ -4,9 +4,10 @@ The command-line half of [SpecHub](https://github.com/ac8318740/spechub) – a
 spec-driven development workflow where an agent plans changes as a graph of
 nodes before writing code.
 
-**This is not published to npm, and does not need to be installed.** It ships
-inside the SpecHub plugin as a prebuilt bundle, and the plugin's SessionStart
-hook links it into place. See [CONTRIBUTING.md](../CONTRIBUTING.md) for why.
+**SpecHub does not publish this CLI to npm. You do not need to install it.**
+It ships inside the SpecHub plugin as a prebuilt bundle. The plugin's
+SessionStart hook links it into place. See
+[CONTRIBUTING.md](../CONTRIBUTING.md) for why.
 
 ## What it does
 
@@ -34,10 +35,12 @@ Any other subcommand runs `spechub-<name>` from PATH, the way git does.
 Nothing stops you. The binary is on PATH at `~/.local/bin/spechub` on any
 machine with the plugin installed, and it has no Claude Code dependency.
 
-What it does not give you is the *method*: the instructions that tell an agent
-how to use these commands ship with the plugin as skills and agent definitions.
-The CLI is the substrate, not the workflow.
+What it does not give you is the *method*. The plugin ships that separately,
+as skills and agent definitions that tell an agent how to use these commands.
+The CLI runs the commands. The skills and agent definitions define the
+workflow.
 
 ## Requirements
 
-Node 20 or newer. The bundle is self-contained and installs no dependencies.
+Node 20 or newer. The bundle contains everything it needs and installs no
+dependencies.
