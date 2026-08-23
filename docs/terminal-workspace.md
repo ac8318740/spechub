@@ -413,23 +413,46 @@ it. The CLI dispatches to them anyway, the way git does: `spechub md` runs
 
 ```bash
 spechub-md NOTES.md              # terminal, diagrams drawn as text
+spechub-md --numbered NOTES.md   # the source instead, with its line numbers
 spechub-md --diagram 2 NOTES.md  # one diagram alone, scrollable sideways
 spechub-md --serve NOTES.md      # browser, prints a clickable link
 spechub-md --browser NOTES.md    # the browser you are sitting at, wherever that is
 spechub-md --html NOTES.md       # that same page, as one document on stdout
 ```
 
+`--numbered` answers the one question a rendering cannot: which line of the
+file this is. A review comment names a line number, and a rendered heading has
+none, so `--numbered` prints the source with a right-aligned gutter instead.
+The gutter is as wide as the largest number in it, so the source stays on one
+column however long the file. It pages through `less -S`, which chops rather
+than wraps: the arrow keys pan across a long line, and the gutter keeps its
+column. `b` opens the browser from there too, on the rendered page, and `#`
+switches back to it.
+
 While you are reading, `b` opens the page in the browser you are sitting at and
 returns you to where you came from. It works by the routes in 6.5, so it is the
 same key whether you attached over `herdr --remote`, over SSH, or locally.
 
+`#` works while you are reading too, and means the same thing it means in the
+file tree: it switches the document you are in between the rendered view and
+its source with line numbers, and switches it back. That is the moment you
+usually want a line number, so you do not have to quit back to the tree to ask
+for one. `SPECHUB_MD_LINE_NUMBERS_KEY` moves it.
+
 `b` is back-a-page in `less`. `Ctrl-B` and `PageUp` both still do that, so the
 binding costs nothing; `SPECHUB_MD_BROWSER_KEY` moves it if you would rather
-have `b` back. The mechanism is a `lesskey` binding whose `quit` action carries
-an exit status, which `spechub-md` reads and acts on. The `less` pager has no
-action that runs a fixed command. Its one shell escape would hand over the
-rendered temporary copy rather than the file you asked for. It needs `less` 582
-or newer; older versions ignore the binding and leave `b` alone.
+have `b` back. The mechanism behind both keys is a `lesskey` binding whose
+`quit` action carries an exit status, which `spechub-md` reads and acts on. The
+`less` pager has no action that runs a fixed command. Its one shell escape would
+hand over the rendered temporary copy rather than the file you asked for. It
+needs `less` 582 or newer; older versions ignore the bindings and leave both
+keys alone.
+
+The `#` binding is written `\#` in the `lesskey` file. `lesskey` reads a line
+starting with `#` as a comment, so written bare the binding is dropped without a
+word. The key then does nothing but ring the terminal bell. Only a leading `#`
+needs the escape. A backslash means something of its own to `lesskey`, and `\b`
+would bind backspace rather than the letter.
 
 A diagram's width comes from its node labels, so nothing can shrink a wide one
 into a narrow pane, and wrapping box-drawing art destroys it. So `spechub-md`
@@ -456,14 +479,44 @@ running `spechub-md --preview`. The pane is narrow, so a wide diagram shows a
 placeholder there rather than a chopped drawing.
 
 `Enter` on the same file opens `spechub-md` full width, where the diagrams fit.
-An opener rule puts that ahead of the editor, so reading is the default and
-editing is the second entry in the same menu. Nothing shims `$EDITOR`, and nothing changes
-your shell environment.
+An opener rule puts that ahead of the editor, so reading is the default. `O`
+opens the same menu to choose from instead: **Read (spechub-md)**, **Read with
+line numbers**, then **Edit**. Nothing shims `$EDITOR`, and nothing changes your
+shell environment.
+
+The opener templates say `%s` rather than `"$@"`. yazi runs a template as
+`sh -c '<template>'` with nothing after it, so `$0` is `sh` and `$@` is empty. A
+template written with `"$@"` hands the helper no file at all. `%s` is the
+placeholder yazi substitutes, already quoted. Measured on yazi 26.8.15.
 
 `b` on a file hands it to the browser you are sitting at, by the routes in 6.5.
 The key is free in yazi's file list. Its only default binding is a word motion
 while you are typing into a prompt, which this does not touch. Move it with
 `yazi.browser_key`.
+
+`#` switches the preview pane between the rendered markdown and the source with
+line numbers, and switches it back. Press it when you are about to quote a line
+in a review. The pane redraws as `spechub-md --numbered` would print it, numbers
+down the left, and every later `.md` file you move onto previews the same way
+until you press `#` again. The key is unbound in yazi's file list. Move it with
+`yazi.line_numbers_key`.
+
+The same key does the same job one level in, while you are reading a document
+full width after `Enter`. That is the more common moment to want it, and the two
+are deliberately the same key, so there is nothing to remember about which of
+the two places you are standing in. Section 6.3 describes the reader's half. It
+is a `lesskey` binding rather than this one, and `yazi.line_numbers_key` does
+not move it.
+
+The choice lives in a file, `$XDG_STATE_HOME/spechub/md-line-numbers`
+(`~/.local/state/spechub/md-line-numbers` when that is unset), because the key
+and the preview are two processes that never meet. Its presence is the whole
+setting. `spechub-md --toggle-line-numbers` creates and removes it, and that is
+what the key runs. Only the pane reads it. Every other route was asked for a
+rendered document by name, and the full-width read has **Read with line
+numbers** as its own entry under `O`. The `--diagram N` flag outranks it too,
+since asking for one drawing is a different question from which view the pane
+is on.
 
 If you already write your own `yazi.toml`, setup reads it first and leaves alone
 anything you have set: your `mgr` settings, your markdown opener, your
@@ -475,15 +528,22 @@ case yazi is already ignoring the file in favour of presets, so fix the error an
 re-run setup. Add `spechub-md` to your own opener to read markdown with it, and
 `show_hidden = true` to your own `mgr` if you want hidden files shown.
 
-The `b` binding lives in `keymap.toml`, not `yazi.toml`, and setup writes it as
-`[[mgr.prepend_keymap]]`. That spelling is an array of tables, so it stacks with
-bindings you have already written the same way. The one spelling it cannot sit
-beside is the inline `prepend_keymap = [...]` under `[mgr]`. That is a
-single key, and TOML forbids declaring it twice. Setup detects that form and
-gives the binding up rather than cost you the whole keymap, and says so.
+The `b` and `#` bindings live in `keymap.toml`, not `yazi.toml`, and setup
+writes them as `[[mgr.prepend_keymap]]`. That spelling is an array of tables, so
+it stacks with bindings you have already written the same way. The one spelling
+it cannot sit beside is the inline `prepend_keymap = [...]` under `[mgr]`. That
+is a single key, and TOML forbids declaring it twice. Setup detects that form
+and gives the bindings up rather than cost you the whole keymap, and says so.
 
-So: `alt+y` for the tree, cursor onto a markdown file to preview it, `Enter` to
-read it full width with its diagrams drawn, `q` back to the tree.
+`#` runs two actions, not one: it flips the flag, then forces yazi to draw the
+pane again. Without the redraw the pane keeps showing whatever it drew before
+the key was pressed, and the switch looks broken until you move the cursor. The
+flip blocks, though it has nothing to say, because a detached one races the
+redraw and loses about half the time.
+
+So: `alt+y` for the tree, cursor onto a markdown file to preview it, `#` to see
+its source with line numbers, `Enter` to read it full width with its diagrams
+drawn, `q` back to the tree.
 
 Terminal mode replaces each mermaid fence with a box-drawing rendering.
 `mermaid-ascii` handles `graph`, `flowchart`, and `sequenceDiagram`; anything

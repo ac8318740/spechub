@@ -55,11 +55,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # spechub-md renders HTML with the python markdown package. Without it
+      # the helper exits 1 by design, and the suite skips every --html and
+      # --browser check rather than report a missing optional dependency as
+      # fourteen failures. Skipped checks are not coverage, so install it and
+      # let them run.
+      - name: Install the python markdown package
+        run: sudo apt-get update && sudo apt-get install -y python3-markdown
+
       # Guards setup.sh against its docs. Every spechub-* and every bound
       # command the docs name must be something setup.sh installs, every
       # default key must be documented, and the generated keymap must still
-      # be valid TOML after merging onto a config written by hand. Offline,
-      # so no herdr needed.
+      # be valid TOML after merging onto a config written by hand. Offline
+      # apart from the package above, so no herdr needed.
       - name: Terminal workspace and docs
         run: bash tests/test-terminal-workspace.sh
 

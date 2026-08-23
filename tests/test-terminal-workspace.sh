@@ -24,8 +24,35 @@ trap 'rm -rf "$WORK"' EXIT
 
 pass=0
 fail=0
+skipped=0
 ok() { printf '  \033[32mPASS\033[0m %s\n' "$1"; pass=$((pass + 1)); }
 no() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fail=$((fail + 1)); }
+skip() { printf '  \033[33mSKIP\033[0m %s\n' "$1"; skipped=$((skipped + 1)); }
+
+# spechub-md builds its HTML with the python markdown package and exits 1 when
+# it cannot import one, which is deliberate: there is nothing to render. Every
+# check that builds a document then fails for a reason that has nothing to do
+# with the code under test - --html, each --browser route, the pager's browser
+# status, and the document the opener is handed. That is fourteen red lines
+# saying nothing, and it is what a missing optional dependency looked like in
+# CI until this guard existed. Name it once and skip those checks instead.
+#
+# Only the checks that actually render. The refusal paths - --html alongside
+# --serve, "leaves no server behind", a missing opener token - reach no
+# renderer, so they keep running and keep their coverage.
+RENDERS_HTML=1
+python3 -c 'import markdown' 2>/dev/null || RENDERS_HTML=0
+# A skipped check is named by what it checks, never by its failure text: the
+# condition was never evaluated, so "b no longer reaches the browser" would be
+# a claim nothing here established. nor takes the neutral name as a second
+# argument wherever the two differ, and drops any (rc=...) detail otherwise.
+okr() { if [ "$RENDERS_HTML" = "1" ]; then ok "$1"; else skip "$1"; fi; }
+nor() { if [ "$RENDERS_HTML" = "1" ]; then no "$1"; else skip "${2:-${1%% (rc=*}}"; fi; }
+[ "$RENDERS_HTML" = "1" ] || {
+  printf '  note: the python markdown package is not installed, so nothing can\n'
+  printf '        render HTML. The --html and --browser checks are skipped:\n'
+  printf '        apt install python3-markdown, or pip install --user markdown\n'
+}
 
 # Helper names setup.sh actually writes, and the retired ones it cleans up.
 installed=$(grep -oE 'cat > "\$BIN/[a-z-]+"' "$SETUP" | sed 's|.*/||; s|"||')
@@ -82,6 +109,15 @@ while read -r key; do
 done < <(grep -oE 'cfg_get [a-z_]+\.[a-z_]*key "[^"]+"' "$SETUP" | grep -oE '"[^"]+"$' | tr -d '"')
 if [ -z "$missing" ]; then ok "every default keybinding is documented"
 else no "keybindings missing from docs:$missing"; fi
+
+# A key whose default is punctuation slips through the check above: `#` is in
+# every markdown heading, so grepping for it proves nothing. Name the thing
+# the key does instead, which is what a reader is looking for.
+if grep -qi 'line numbers' "$DOCS"; then
+  ok "the line-numbers view is documented"
+else
+  no "the line-numbers view is not documented"
+fi
 
 # The retired-name check above only sees helpers named spechub-*. The names
 # that actually rotted were hdiff and hdash, which predate that convention, so
@@ -255,6 +291,21 @@ assert md, "no opener.markdown"
 assert "spechub-md" in md[0]["run"], md[0]["run"]
 previewers = data.get("plugin", {}).get("prepend_previewers", [])
 assert any(p.get("url") == "*.md" for p in previewers), previewers
+# Reading comes first, editing last, and the numbered read sits between them:
+# the menu is ordered by how often each entry is wanted, and a reader who
+# needs source line numbers still wants to read rather than edit.
+runs = [e.get("run", "") for e in md]
+numbered = [i for i, r in enumerate(runs) if "--numbered" in r]
+assert numbered, runs
+assert 0 < numbered[0] < len(runs) - 1, runs
+assert "EDITOR" in runs[-1], runs
+# An opener template is run as `sh -c '<run>'` with no arguments after it, so
+# $0 is "sh" and $@ is empty - measured on yazi 26.8.15, where "$@" left the
+# helper with no file and Enter did nothing but print its usage. %s is the
+# placeholder yazi substitutes, already quoted.
+for r in runs:
+    assert "$@" not in r and "$0" not in r and "$1" not in r, r
+    assert "%s" in r, r
 PYCHK
 then ok "a fresh yazi.toml gets a working markdown opener and previewer"
 else no "a fresh yazi.toml gets a working markdown opener and previewer"; fi
@@ -1127,18 +1178,21 @@ fi
 usage_text=$("$MD" </dev/null 2>&1)
 if printf '%s' "$usage_text" | grep -q -- '--preview' \
    && printf '%s' "$usage_text" | grep -q -- '--diagram' \
-   && printf '%s' "$usage_text" | grep -q -- '--serve'
+   && printf '%s' "$usage_text" | grep -q -- '--serve' \
+   && printf '%s' "$usage_text" | grep -q -- '--numbered' \
+   && printf '%s' "$usage_text" | grep -q -- '--toggle-line-numbers'
 then
-  ok "usage line lists --preview, --diagram and --serve"
+  ok "usage line lists every flag the helper accepts"
 else
   no "usage line is missing a flag it should list: $usage_text"
 fi
 
 header_block=$(awk '/^#/{print; next} {exit}' "$MD")
-if printf '%s' "$header_block" | grep -q -- '--preview'; then
-  ok "the header comment documents --preview"
+if printf '%s' "$header_block" | grep -q -- '--preview' \
+   && printf '%s' "$header_block" | grep -q -- '--numbered'; then
+  ok "the header comment documents --preview and --numbered"
 else
-  no "the header comment does not document --preview"
+  no "the header comment does not document --preview and --numbered"
 fi
 
 # A diagram too wide for the pane must collapse to a placeholder, not spill
@@ -1186,6 +1240,163 @@ else
   printf '  note: glow, mermaid-ascii or perl not installed - skipping wide-diagram preview check\n'
 fi
 
+echo "spechub-md line numbers"
+# The preview pane renders markdown, and a rendered heading has no line number
+# a reader can quote back in a review. A flag file carries the choice between
+# the two views, so the key binding, the helper and these checks all name one
+# place. XDG_STATE_HOME moves it, which is what keeps this off the real one.
+LNSTATE="$WORK/state"
+LNFLAG="$LNSTATE/spechub/md-line-numbers"
+cat > "$WORK/numbers.md" <<'MDN'
+# Heading
+
+first paragraph
+
+- a list item
+MDN
+
+rm -rf "$LNSTATE"
+XDG_STATE_HOME="$LNSTATE" "$MD" --toggle-line-numbers >/dev/null 2>&1
+toggle_rc=$?
+if [ "$toggle_rc" -eq 0 ] && [ -e "$LNFLAG" ]; then
+  ok "--toggle-line-numbers turns line numbers on"
+else
+  no "--toggle-line-numbers turns line numbers on (rc=$toggle_rc)"
+fi
+
+XDG_STATE_HOME="$LNSTATE" "$MD" --toggle-line-numbers >/dev/null 2>&1
+if [ ! -e "$LNFLAG" ]; then
+  ok "--toggle-line-numbers turns line numbers off again"
+else
+  no "--toggle-line-numbers turns line numbers off again"
+fi
+
+# The toggle has to work on a machine that has never had a state directory,
+# which is every machine the first time. Creating it is the toggle's job.
+rm -rf "$LNSTATE"
+XDG_STATE_HOME="$LNSTATE" "$MD" --toggle-line-numbers >/dev/null 2>&1
+if [ -e "$LNFLAG" ]; then
+  ok "--toggle-line-numbers creates the state directory it needs"
+else
+  no "--toggle-line-numbers creates the state directory it needs"
+fi
+rm -rf "$LNSTATE"
+
+# --numbered is the deterministic view: source, numbered, whatever the flag
+# says. The opener menu and every check below go through it rather than
+# through the flag, so neither depends on which way the toggle was left.
+if command -v less >/dev/null 2>&1; then
+  num_out=$(COLUMNS=100 "$MD" --numbered "$WORK/numbers.md" </dev/null 2>/dev/null)
+  # Source, not a render: glow eats the leading # of a heading, so a literal
+  # one on the first numbered line is what tells the two views apart.
+  if printf '%s\n' "$num_out" | head -1 | grep -qE '^  1  # Heading$'; then
+    ok "--numbered prints the source with its line number"
+  else
+    no "--numbered prints the source with its line number (got '$(printf '%s\n' "$num_out" | head -1)')"
+  fi
+
+  # Every line, not just the first: a gutter that skips blank lines makes
+  # every number after the first blank line wrong.
+  src_lines=$(awk 'END { print NR }' "$WORK/numbers.md")
+  out_lines=$(printf '%s\n' "$num_out" | awk 'END { print NR }')
+  numbered_all=$(printf '%s\n' "$num_out" | awk '!/^ *[0-9]+ /  { print }')
+  if [ "$src_lines" = "$out_lines" ] && [ -z "$numbered_all" ]; then
+    ok "--numbered numbers every source line, blank ones included"
+  else
+    no "--numbered numbers every source line ($src_lines source, $out_lines out)"
+  fi
+
+  # The number a reader quotes has to be the file's own. Line 5 of the fixture
+  # is the list item, and nothing about the view may shift that.
+  if printf '%s\n' "$num_out" | grep -qE '^  5  - a list item$'; then
+    ok "--numbered numbers agree with the source file's own lines"
+  else
+    no "--numbered numbers agree with the source file's own lines"
+  fi
+else
+  printf '  note: less not installed - skipping the --numbered checks\n'
+fi
+
+# The flag is what the key binding flips, so the pane has to follow it.
+XDG_STATE_HOME="$LNSTATE" "$MD" --toggle-line-numbers >/dev/null 2>&1
+prev_on=$(XDG_STATE_HOME="$LNSTATE" COLUMNS=100 "$MD" --preview "$WORK/numbers.md" </dev/null 2>/dev/null)
+if printf '%s\n' "$prev_on" | head -1 | grep -qE '^  1  # Heading$'; then
+  ok "--preview shows numbered source while the flag is set"
+else
+  no "--preview shows numbered source while the flag is set (got '$(printf '%s\n' "$prev_on" | head -1)')"
+fi
+
+XDG_STATE_HOME="$LNSTATE" "$MD" --toggle-line-numbers >/dev/null 2>&1
+prev_off=$(XDG_STATE_HOME="$LNSTATE" COLUMNS=100 "$MD" --preview "$WORK/numbers.md" </dev/null 2>/dev/null)
+if [ -n "$prev_off" ] && ! printf '%s\n' "$prev_off" | head -1 | grep -qE '^ *1  '; then
+  ok "--preview goes back to the rendered view once the flag is cleared"
+else
+  no "--preview goes back to the rendered view once the flag is cleared"
+fi
+
+# A pane cannot page, and the numbered view is still a pane. The stand-ins
+# from the --preview section are still on PATH under $WORK/fakebin.
+rm -f "$WORK/sentinels"/*
+XDG_STATE_HOME="$LNSTATE" "$MD" --toggle-line-numbers >/dev/null 2>&1
+SENTINEL_DIR="$WORK/sentinels" PATH="$WORK/fakebin:$PATH" PAGER="$WORK/fakebin/fake-pager" \
+  XDG_STATE_HOME="$LNSTATE" "$MD" --preview "$WORK/numbers.md" </dev/null >/dev/null 2>&1
+if [ -z "$(ls -A "$WORK/sentinels" 2>/dev/null)" ]; then
+  ok "the numbered preview never invokes a pager"
+else
+  no "the numbered preview invoked a pager: $(ls "$WORK/sentinels" | tr '\n' ' ')"
+fi
+
+# The gutter is right-aligned, and a file long enough to need three digits is
+# what makes that visible: line 1 has to be pushed across to sit under line
+# 100, or the source starts in a different column on either side of it.
+seq 1 120 | sed 's/^/line /' > "$WORK/long-source.md"
+long_out=$(COLUMNS=100 "$MD" --numbered "$WORK/long-source.md" </dev/null 2>/dev/null)
+if printf '%s\n' "$long_out" | grep -qE '^  1  line 1$' \
+   && printf '%s\n' "$long_out" | grep -qE '^100  line 100$'; then
+  ok "the gutter is right-aligned to the widest line number"
+else
+  no "the gutter is not right-aligned (line 1: '$(printf '%s\n' "$long_out" | head -1)')"
+fi
+
+# --diagram asks for one drawing, which is a different question from which of
+# the two views the pane is showing. The flag must not answer it: a reader who
+# left line numbers on and then asked for a diagram still wants the diagram.
+cat > "$WORK/numbers-diagram.md" <<'MDD'
+# Diagram fixture
+
+```mermaid
+graph LR
+  A[One] --> B[Two]
+```
+MDD
+rm -rf "$LNSTATE"
+diag_off=$(COLUMNS=100 "$MD" --preview --diagram 1 "$WORK/numbers-diagram.md" </dev/null 2>/dev/null)
+XDG_STATE_HOME="$LNSTATE" "$MD" --toggle-line-numbers >/dev/null 2>&1
+diag_on=$(XDG_STATE_HOME="$LNSTATE" COLUMNS=100 "$MD" --preview --diagram 1 "$WORK/numbers-diagram.md" </dev/null 2>/dev/null)
+# The same fixture with no diagram asked for still follows the flag, so a pass
+# here cannot be the flag quietly doing nothing at all.
+plain_on=$(XDG_STATE_HOME="$LNSTATE" COLUMNS=100 "$MD" --preview "$WORK/numbers-diagram.md" </dev/null 2>/dev/null)
+if [ -n "$diag_off" ] && [ "$diag_on" = "$diag_off" ] \
+   && printf '%s\n' "$plain_on" | grep -qE '^  1  # Diagram fixture$'; then
+  ok "--diagram outranks the line-numbers flag"
+else
+  no "--diagram is overridden by the line-numbers flag"
+fi
+rm -rf "$LNSTATE"
+
+# A wrapped line makes the gutter lie about which line you are on, so the pane
+# chops instead. The fixture line is far wider than the pane asked for.
+{ printf 'short\n'; printf 'x%.0s' $(seq 1 300); printf '\n'; } > "$WORK/wide-source.md"
+XDG_STATE_HOME="$LNSTATE" "$MD" --toggle-line-numbers >/dev/null 2>&1
+narrow=$(XDG_STATE_HOME="$LNSTATE" COLUMNS=40 "$MD" --preview "$WORK/wide-source.md" </dev/null 2>/dev/null)
+overflow=$(printf '%s\n' "$narrow" | awk 'length($0) > 40 { print }')
+if [ -n "$narrow" ] && [ -z "$overflow" ]; then
+  ok "the numbered preview chops to COLUMNS so the gutter stays honest"
+else
+  no "the numbered preview spills past COLUMNS: $(printf '%s\n' "$overflow" | head -1 | cut -c1-60)"
+fi
+rm -rf "$LNSTATE"
+
 echo "spechub-md --html"
 # Every browser route needs the same primitive: the whole document on stdout,
 # built without a server. --serve already renders exactly this document, so
@@ -1213,17 +1424,20 @@ if [ "$html_rc" -eq 0 ] \
    && grep -qi '</html>' "$html_out" \
    && ! grep -q 'usage: spechub-md' "$html_out" "$html_err"
 then
-  ok "--html writes a whole document to stdout and exits 0"
+  okr "--html writes a whole document to stdout and exits 0"
 else
-  no "--html writes a whole document to stdout and exits 0 (rc=$html_rc)"
+  nor "--html writes a whole document to stdout and exits 0 (rc=$html_rc)"
+  # Captured and then thrown away is how this cost an afternoon: the helper
+  # said exactly what it wanted and no one could see it.
+  [ -s "$html_err" ] && printf '        stderr: %s\n' "$(head -3 "$html_err")"
 fi
 
 # Rendered, not passed through. Markdown source reaching the browser raw is
 # the failure this catches.
 if grep -q '<h1' "$html_out" && grep -q 'Prose before the diagram' "$html_out"; then
-  ok "--html renders the markdown body"
+  okr "--html renders the markdown body"
 else
-  no "--html renders the markdown body"
+  nor "--html renders the markdown body"
 fi
 
 # mermaid.js reads <pre class="mermaid"> holding raw diagram source. An
@@ -1233,9 +1447,9 @@ if grep -q '<pre class="mermaid">' "$html_out" \
    && grep -q 'A\[start\] --> B\[end\]' "$html_out" \
    && ! grep -q 'language-mermaid' "$html_out"
 then
-  ok "--html hands mermaid fences over unescaped"
+  okr "--html hands mermaid fences over unescaped"
 else
-  no "--html hands mermaid fences over unescaped"
+  nor "--html hands mermaid fences over unescaped"
 fi
 
 # The one thing --html cannot inherit from --serve. --serve answers for
@@ -1245,9 +1459,9 @@ fi
 if grep -q '<script src="https://' "$html_out" \
    && ! grep -q 'src="/mermaid.js"' "$html_out"
 then
-  ok "--html names a mermaid source reachable with no server behind the page"
+  okr "--html names a mermaid source reachable with no server behind the page"
 else
-  no "--html names a mermaid source reachable with no server behind the page"
+  nor "--html names a mermaid source reachable with no server behind the page"
 fi
 
 # A document is not a server. Hold the serve port and the document must still
@@ -1271,9 +1485,9 @@ if [ -n "$held" ] \
    && SPECHUB_MD_PORT="$held" timeout 20 "$MD" --html "$WORK/html.md" \
         </dev/null 2>/dev/null | grep -qi '</html>'
 then
-  ok "--html renders with the serve port already taken, and returns"
+  okr "--html renders with the serve port already taken, and returns"
 else
-  no "--html renders with the serve port already taken, and returns"
+  nor "--html renders with the serve port already taken, and returns"
 fi
 kill "$HOLD_PID" 2>/dev/null; wait "$HOLD_PID" 2>/dev/null
 rm -f "$WORK/held.port"
@@ -1351,9 +1565,9 @@ PATH="$BRBIN:$PATH" SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$br_log" \
 br_rc=$?
 
 if [ "$br_rc" -eq 0 ] && grep -q 'agent-browser.*eval' "$br_log" 2>/dev/null; then
-  ok "--browser hands the page to agent-browser on the bridge route"
+  okr "--browser hands the page to agent-browser on the bridge route"
 else
-  no "--browser hands the page to agent-browser on the bridge route (rc=$br_rc)"
+  nor "--browser hands the page to agent-browser on the bridge route (rc=$br_rc)"
 fi
 
 # The payload has to be the rendered document, not the markdown and not a
@@ -1370,9 +1584,9 @@ for want in ("<!doctype html", "<pre class=\"mermaid\">", "</html>"):
         sys.exit(f"payload missing {want!r}")
 DECODE
 then
-  ok "--browser pushes the whole rendered document, diagrams included"
+  okr "--browser pushes the whole rendered document, diagrams included"
 else
-  no "--browser pushes the whole rendered document, diagrams included"
+  nor "--browser pushes the whole rendered document, diagrams included"
 fi
 
 # A document delivered over CDP needs no port here, and must not leave a
@@ -1405,9 +1619,9 @@ pkill -f "spechub-md-serve.*$WORK/html.md" 2>/dev/null
 if printf '%s' "$br_body" | grep -qi '</html>' \
    && ! grep -q 'agent-browser' "$br_log" 2>/dev/null
 then
-  ok "--browser serves the page when the browser can reach this machine"
+  okr "--browser serves the page when the browser can reach this machine"
 else
-  no "--browser serves the page when the browser can reach this machine"
+  nor "--browser serves the page when the browser can reach this machine"
 fi
 
 # The page goes into a tab of its own, and never over a page that is already
@@ -1421,9 +1635,10 @@ PATH="$BRBIN:$PATH" SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$br_log" \
   SPECHUB_TEST_PUSH="$br_push" timeout 30 "$MD" --browser "$WORK/html.md" \
   </dev/null >/dev/null 2>&1
 if grep -q 'tab new' "$br_log" 2>/dev/null; then
-  ok "--browser writes into a tab of its own, leaving the armed tab armed"
+  okr "--browser writes into a tab of its own, leaving the armed tab armed"
 else
-  no "--browser rewrites a live page, which detaches the extension"
+  nor "--browser rewrites a live page, which detaches the extension" \
+      "--browser writes into a tab of its own, leaving the armed tab armed"
 fi
 
 # A tab created over CDP is created in the background, so writing into it is
@@ -1431,11 +1646,12 @@ fi
 # correct, and never seen. agent-browser carries Page.bringToFront on its tab
 # switch, so the tab just written into is switched to explicitly.
 if grep -qE 'agent-browser .*tab 1$' "$br_log" 2>/dev/null; then
-  ok "--browser brings the tab it wrote into to the front"
+  okr "--browser brings the tab it wrote into to the front"
 elif grep -qE 'agent-browser .*tab [0-9]+$' "$br_log" 2>/dev/null; then
-  no "--browser raises the wrong tab: $(grep -oE 'tab [0-9]+$' "$br_log" | tail -1)"
+  nor "--browser raises the wrong tab: $(grep -oE 'tab [0-9]+$' "$br_log" | tail -1)"
 else
-  no "--browser leaves the tab in the background, where nobody sees it"
+  nor "--browser leaves the tab in the background, where nobody sees it" \
+      "--browser brings the tab it wrote into to the front"
 fi
 
 # "It said it opened but it did not" has to be impossible to say twice. An exit
@@ -1519,9 +1735,9 @@ fi
 # 65 is "A", the first character of the extra string in the binding above.
 run_pager 65
 if grep -q 'agent-browser' "$key_log" 2>/dev/null; then
-  ok "the pager's browser status opens the browser"
+  okr "the pager's browser status opens the browser"
 else
-  no "the pager's browser status opens the browser"
+  nor "the pager's browser status opens the browser"
 fi
 
 # Somebody else's pager gets none of this: the binding is a less feature, and
@@ -1584,6 +1800,126 @@ else
   printf '  note: script or less not installed - skipping the real-less check\n'
 fi
 
+echo "spechub-md line-numbers key in the pager"
+# The reader is where somebody actually wants a line number: they pressed
+# Enter to read the document, and the file list with its own # binding is no
+# longer in front of them. So the key means the same thing in both places.
+#
+# lesskey reads a leading # as a comment, so this binding has to be escaped.
+# Unescaped it is silently dropped and the key does nothing but ring the
+# terminal bell - which is exactly how this arrived as a bug report.
+if command -v script >/dev/null 2>&1 && command -v less >/dev/null 2>&1; then
+  press_less() {  # press_less <lesskey-body> <key> -> prints RC=<n>
+    printf '#command\n%s\n' "$1" > "$WORK/hash.lesskey"
+    printf 'one\ntwo\nthree\n' > "$WORK/hash.txt"
+    rm -f "$WORK/hash.fifo" "$WORK/hash.out"; mkfifo "$WORK/hash.fifo"
+    ( LESSKEYIN="$WORK/hash.lesskey" timeout 20 \
+        script -qec "stty rows 20 cols 60; less -R $WORK/hash.txt; echo RC=\$?" \
+          /dev/null < "$WORK/hash.fifo" > "$WORK/hash.out" 2>&1 & )
+    exec 8>"$WORK/hash.fifo"
+    # q after it, always: a binding that does not fire leaves less sitting
+    # there, and a test that reads no exit status at all cannot tell that
+    # apart from one that never started.
+    sleep 3; printf '%s' "$2" >&8; sleep 3
+    # In a subshell: when the binding did fire, less is already gone and the
+    # fifo has no reader, and a SIGPIPE here would kill the command
+    # substitution this runs inside before it ever reads the exit status.
+    ( printf 'q' >&8 ) 2>/dev/null || true
+    sleep 2
+    exec 8>&-
+    tr -d '\000' < "$WORK/hash.out" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' \
+      | grep -oE 'RC=[0-9]+' | tail -1
+  }
+
+  esc_rc=$(press_less '\# quit B' '#')
+  if [ "$esc_rc" = "RC=66" ]; then
+    ok "a real less quits with 66 when the escaped # binding is pressed"
+  else
+    no "a real less quits with 66 when the escaped # binding is pressed (got '$esc_rc')"
+  fi
+
+  # The other half, and the one that makes the escape load-bearing rather than
+  # decorative: written bare, the binding is a comment and the key does nothing.
+  # RC=0 is the q above doing the quitting: the # went nowhere, which on a
+  # real terminal is the bell and nothing else.
+  bare_rc=$(press_less '# quit B' '#')
+  if [ "$bare_rc" = "RC=0" ]; then
+    ok "a bare # binding is read as a comment and never fires"
+  else
+    no "a bare # binding fired, so nothing here is testing the escape (got '$bare_rc')"
+  fi
+else
+  printf '  note: script or less not installed - skipping the real-less # checks\n'
+fi
+
+# A pager stand-in that answers once with the status under test and then gets
+# out of the way. Without the counter the round trip never ends: every re-exec
+# pages again, and a stand-in that always returns 66 flips views forever.
+RTBIN="$WORK/rt-bin"
+mkdir -p "$RTBIN"
+cat > "$RTBIN/less" <<'RTLESS'
+#!/bin/sh
+n=$(cat "$SPECHUB_TEST_COUNT" 2>/dev/null || echo 0)
+n=$((n + 1)); printf '%s' "$n" > "$SPECHUB_TEST_COUNT"
+for a in "$@"; do
+  case "$a" in -*) ;; *) [ -f "$a" ] && cp "$a" "$SPECHUB_TEST_DIR/page.$n" ;; esac
+done
+[ -n "${LESSKEYIN:-}" ] && [ -f "$LESSKEYIN" ] && cp "$LESSKEYIN" "$SPECHUB_TEST_DIR/keys.$n"
+[ "$n" = "1" ] && exit "${SPECHUB_TEST_LESS_RC:-0}"
+exit 0
+RTLESS
+chmod +x "$RTBIN/less"
+
+RTDIR="$WORK/rt"
+rt_run() {  # rt_run <less-exit-status> [extra spechub-md flag]
+  rm -rf "$RTDIR"; mkdir -p "$RTDIR"
+  printf '0' > "$RTDIR/count"
+  PATH="$RTBIN:$BRBIN:$PATH" \
+    SPECHUB_TEST_LESS_RC="$1" SPECHUB_TEST_COUNT="$RTDIR/count" \
+    SPECHUB_TEST_DIR="$RTDIR" \
+    SPECHUB_TEST_ROUTE=bridge SPECHUB_TEST_LOG="$RTDIR/log" \
+    SPECHUB_TEST_PUSH="$RTDIR/push" \
+    timeout 60 "$MD" ${2:+"$2"} "$WORK/numbers.md" </dev/null >/dev/null 2>&1
+}
+
+# What the helper actually writes, as opposed to what a hand-written fixture
+# proves above.
+rt_run 0
+if [ -f "$RTDIR/keys.1" ] \
+   && grep -qE '^\\# +quit +B' "$RTDIR/keys.1" \
+   && [ "$(grep -c '^#' "$RTDIR/keys.1")" = "1" ]; then
+  ok "the lesskey file binds # escaped, and its only bare # line is #command"
+else
+  no "the lesskey file does not bind # escaped: $(cat "$RTDIR/keys.1" 2>/dev/null | tr '\n' '|')"
+fi
+
+# 66 is "B", the first character of the extra string in that binding.
+rt_run 66
+if [ -f "$RTDIR/page.2" ] && head -1 "$RTDIR/page.2" | grep -qE '^  1  # Heading$'; then
+  ok "the reader's # status reopens the same file as numbered source"
+else
+  no "the reader's # status does not reopen it numbered (got '$(head -1 "$RTDIR/page.2" 2>/dev/null)')"
+fi
+
+# And back, so one key is the whole switch rather than a one-way door.
+rt_run 66 --numbered
+if [ -f "$RTDIR/page.1" ] && head -1 "$RTDIR/page.1" | grep -qE '^  1  # Heading$' \
+   && [ -f "$RTDIR/page.2" ] && ! head -1 "$RTDIR/page.2" | grep -qE '^ *[0-9]+  '; then
+  ok "pressing it again in the numbered view returns to the rendered one"
+else
+  no "the numbered view does not return to the rendered one (got '$(head -1 "$RTDIR/page.2" 2>/dev/null)')"
+fi
+
+# The browser key is not collateral: both bindings live in the same lesskey
+# file, and the numbered view is still a document somebody may want to open.
+rt_run 65 --numbered
+if grep -q 'agent-browser' "$RTDIR/log" 2>/dev/null; then
+  okr "b still reaches the browser from the numbered view"
+else
+  nor "b no longer reaches the browser from the numbered view" \
+      "b still reaches the browser from the numbered view"
+fi
+
 echo "yazi keymap merge safety"
 # The same key, in the other place ;v can land you. The keymap lives in its own
 # file, so this writer has its own collision to worry about: prepend_keymap can
@@ -1593,8 +1929,8 @@ echo "yazi keymap merge safety"
 KEYMAP="$WORK/keymap.py"
 awk "/^    py \"\\\$HOME\/\.config\/yazi\/keymap\.toml\" <<'PY'\$/{f=1; next} f && /^PY\$/{exit} f" \
   "$SETUP" > "$KEYMAP"
-run_keymap() {  # run_keymap <key> <path>
-  SPECHUB_ARGS="$1|$BEGIN_MARK|$END_MARK" python3 "$KEYMAP" "$2" 2>/dev/null
+run_keymap() {  # run_keymap <browser-key> <line-numbers-key> <path>
+  SPECHUB_ARGS="$1|$2|$BEGIN_MARK|$END_MARK" python3 "$KEYMAP" "$3" 2>/dev/null
 }
 
 if [ -s "$KEYMAP" ]; then
@@ -1605,7 +1941,7 @@ fi
 
 # No file at all is the ordinary case - the user has never written one.
 rm -f "$WORK/km-fresh.toml"
-run_keymap b "$WORK/km-fresh.toml"
+run_keymap b "#" "$WORK/km-fresh.toml"
 if parses "$WORK/km-fresh.toml" && python3 - "$WORK/km-fresh.toml" <<'PYKM'
 import sys, tomllib
 data = tomllib.load(open(sys.argv[1], "rb"))
@@ -1627,8 +1963,38 @@ else
   no "a fresh keymap.toml binds b to the browser on the hovered file"
 fi
 
+# The line-numbers key is two actions, not one: flipping the flag changes
+# nothing a reader can see until the pane is drawn again.
+if python3 - "$WORK/km-fresh.toml" <<'PYLN'
+import sys, tomllib
+data = tomllib.load(open(sys.argv[1], "rb"))
+binds = data.get("mgr", {}).get("prepend_keymap", [])
+hit = [b for b in binds if b.get("on") == "#"]
+if not hit:
+    sys.exit("no # binding")
+run = hit[0].get("run")
+if not isinstance(run, list):
+    sys.exit(f"binding is one action, so the pane never redraws: {run!r}")
+if not any("--toggle-line-numbers" in step for step in run):
+    sys.exit(f"binding does not flip the flag: {run!r}")
+if not any(step.startswith("peek") for step in run):
+    sys.exit(f"binding does not redraw the pane: {run!r}")
+if run.index(next(s for s in run if "--toggle-line-numbers" in s)) > \
+   run.index(next(s for s in run if s.startswith("peek"))):
+    sys.exit(f"the pane is redrawn before the flag is flipped: {run!r}")
+# A detached shell races the redraw: whichever wins decides what the reader
+# sees, so the flip has to finish first.
+if "--block" not in next(s for s in run if "--toggle-line-numbers" in s):
+    sys.exit(f"the flip is detached and races the redraw: {run!r}")
+PYLN
+then
+  ok "a fresh keymap.toml binds # to flip line numbers and redraw the pane"
+else
+  no "a fresh keymap.toml binds # to flip line numbers and redraw the pane"
+fi
+
 cp "$WORK/km-fresh.toml" "$WORK/km-twice.toml"
-run_keymap b "$WORK/km-twice.toml"
+run_keymap b "#" "$WORK/km-twice.toml"
 if diff -q "$WORK/km-fresh.toml" "$WORK/km-twice.toml" >/dev/null; then
   ok "re-applying the yazi keymap is idempotent"
 else
@@ -1646,7 +2012,7 @@ desc = "Toggle the preview pane"
 [input]
 keymap = []
 KMHAND
-run_keymap b "$WORK/km-hand.toml"
+run_keymap b "#" "$WORK/km-hand.toml"
 if parses "$WORK/km-hand.toml" \
    && grep -q 'toggle-pane' "$WORK/km-hand.toml" \
    && grep -q 'spechub-md --browser' "$WORK/km-hand.toml"
@@ -1665,7 +2031,7 @@ prepend_keymap = [
   { on = "<C-y>", run = "plugin something", desc = "Mine" },
 ]
 KMCLAIM
-run_keymap b "$WORK/km-claimed.toml"
+run_keymap b "#" "$WORK/km-claimed.toml"
 if parses "$WORK/km-claimed.toml" && grep -q 'C-y' "$WORK/km-claimed.toml"; then
   ok "a keymap already claiming prepend_keymap stays valid TOML"
 else
@@ -1890,17 +2256,17 @@ if [ -s "$pushed" ] \
    && grep -q '<title>doc.md</title>' "$pushed" \
    && grep -q 'class="mermaid"' "$pushed" \
    && grep -q 'graph LR' "$pushed"; then
-  ok "--browser pushes the whole rendered document to the opener, diagrams included"
+  okr "--browser pushes the whole rendered document to the opener, diagrams included"
 else
-  no "--browser pushes the whole rendered document to the opener, diagrams included"
+  nor "--browser pushes the whole rendered document to the opener, diagrams included"
 fi
 
 # The opener serves the page, so a relative src resolves against it - and
 # unlike --serve that holds whether or not this machine vendored anything.
 if grep -q '<script src="/mermaid.js"></script>' "$pushed"; then
-  ok "a document bound for the opener asks it for mermaid rather than a CDN"
+  okr "a document bound for the opener asks it for mermaid rather than a CDN"
 else
-  no "a document bound for the opener asks it for mermaid rather than a CDN"
+  nor "a document bound for the opener asks it for mermaid rather than a CDN"
 fi
 
 # The key is what lets the opener recognise the same file again, so it has to
@@ -2078,5 +2444,9 @@ if [ -f "$FREEPORT" ]; then
 fi
 
 
-printf '\nResult: %d passed, %d failed\n' "$pass" "$fail"
+if [ "$skipped" -gt 0 ]; then
+  printf '\nResult: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
+else
+  printf '\nResult: %d passed, %d failed\n' "$pass" "$fail"
+fi
 [ "$fail" -eq 0 ]
