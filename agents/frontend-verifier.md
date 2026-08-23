@@ -24,9 +24,9 @@ Read `spechub/project.yaml` for frontend settings:
 - `frontend.dev_server_check` – command to check if the server is running
 - `frontend.helpers_dir` – path to the knowledge base (default: `<frontend.directory>/tests/helpers/`)
 - `frontend.commands.dev` – command to start the dev server
-- `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
-- `frontend.browser.fallback` – what to do when the primary mode is unavailable: `headless` or `none`
-- `frontend.browser.cdp_port` – CDP (Chrome DevTools Protocol) port. Default `19988` for `mode: remote` (Playwriter bridge), `9555` for `headless`/`local`.
+- `frontend.browser.cdp_port` – CDP (Chrome DevTools Protocol) port. Default `19988` when the mode is `remote` (Playwriter bridge), `9555` when it is `headless` or `local`.
+
+You do not read `frontend.browser.mode` or `frontend.browser.fallback`. Step 3 asks the SpecHub CLI which browser mode to use, and the CLI reads both.
 
 If `spechub/project.yaml` has no `frontend` section, report SKIP and exit.
 
@@ -81,9 +81,47 @@ exit 1
 
 ## Step 3: Confirm the browser connection
 
-Read `frontend.browser.mode` from project.yaml to determine the connection strategy. Use `frontend.browser.cdp_port` for the CDP port (default `19988` for `mode: remote`, `9555` for `headless`/`local`).
+### Ask which browser mode to use
 
-First, check if a browser is already reachable. Probe for about 24 seconds. This window covers the first two backoff tiers of the Playwriter bridge, the reverse-SSH connection to the user's browser. The script `tunnel.ps1` backs off 5, 10, 20, 40, 80, then 120 seconds. The probe stops after two tiers to avoid a false fallback. The task scheduler handles longer waits, not this probe:
+Run this command first:
+
+```bash
+~/.claude/spechub/bin/spechub config browser-mode --json
+```
+
+It answers from declared configuration alone. It probes nothing, so it returns at once and always gives the same answer on the same machine.
+
+On exit 0 it prints one JSON object:
+
+```json
+{
+  "mode": "headless",
+  "preferred": "remote",
+  "reason": "the project prefers remote, which this host does not declare available, so headless stands in",
+  "fallback": true
+}
+```
+
+- `mode` – the browser mode to use: `remote`, `headless`, or `local`.
+- `preferred` – the project's stated `frontend.browser.mode`, or `null` when it states none.
+- `reason` – one sentence that explains the choice.
+- `fallback` – `true` only when `mode` differs from a stated preference.
+
+**On exit 1**: verification FAILS here. The command writes one plain-text message to stderr and nothing to stdout. Report that message verbatim as the reason.
+
+Do not guess a mode. Do not pick a fallback yourself. The command already applied every fallback rule this project allows. Three things make it exit 1:
+
+- the project configures no frontend, or there is no SpecHub project here
+- this host declares no browser mode available, or nobody has described this host yet
+- the project forbids a fallback, and this host does not declare the mode it prefers
+
+**On exit 0**: the `mode` field names the mode to use. You no longer choose the mode, and you never override it. Keep `mode` and `reason` for the Browser block of your report.
+
+Then read `frontend.browser.cdp_port` from project.yaml for the CDP port. When the project states no port, use `19988` for `remote`, and `9555` for `headless` and `local`.
+
+### Probe the port
+
+Check whether a browser already answers on that port. Probe for about 24 seconds. This window covers the first two backoff tiers of the Playwriter bridge, the reverse-SSH connection to the user's browser. The script `tunnel.ps1` backs off 5, 10, 20, 40, 80, then 120 seconds. The probe stops after two tiers. The task scheduler handles longer waits, not this probe:
 
 ```bash
 for i in 1 2 3 4 5 6 7 8; do
@@ -99,19 +137,17 @@ done
 
 **If `CDP_READY=1`** (JSON response received on any attempt): A browser is available. Proceed to Step 4.
 
-**If all 8 attempts failed**, act based on the configured mode:
+**If all 8 attempts failed**, act on the `mode` the command returned. The CLI settled the mode before the probe ran. An empty probe is therefore a failure of that mode, not a cue to try another one.
 
 ### Mode: `remote`
 
-The user has a browser on another machine connected via the Playwriter bridge (relay on the browser machine, reverse-tunnelled to this machine on port 19988).
+The user has a browser on another machine, reached through the Playwriter bridge. A relay runs on the browser machine. A reverse-SSH tunnel carries it to this machine on port 19988.
 
-Check `frontend.browser.fallback`:
-
-**If fallback is `headless`** (or unset): Log a warning that the bridge is unavailable. Launch headless Chromium as if mode were `headless`. Verification still runs – just without the user's real browser.
+An empty probe means the bridge is down. Report FAIL with this text. Do not launch Chromium instead:
 
 ```
-No remote bridge on CDP port <cdp_port>. Falling back to headless Chromium.
-Troubleshooting (for next time):
+No remote bridge on CDP port <cdp_port>. Browser verification cannot run.
+Troubleshooting:
 1. Is `playwriter serve --host 127.0.0.1` running on the browser machine?
 2. Is the SSH reverse tunnel active? (ssh -N -R 19988:127.0.0.1:19988 <user>@<this-machine>)
 3. In Chrome, is the Playwriter extension installed in the active profile, with its icon clicked on the target tab?
@@ -120,11 +156,7 @@ Troubleshooting (for next time):
 For a persistent cross-device setup (Windows laptop + Linux VM, auto-reconnecting scheduled tasks, ssh-agent key persistence, automated diagnosis via doctor.ps1), see plugins/spechub/skills/bridge/SKILL.md.
 ```
 
-Then launch headless Chromium (same as the headless mode section below).
-
-**If fallback is `none`**: Report FAIL with the same troubleshooting steps above. Do not launch headless.
-
-### Mode: `headless` (or unset)
+### Mode: `headless`
 
 Launch headless Chromium locally:
 
@@ -150,7 +182,7 @@ sleep 2
 curl -s --max-time 3 http://localhost:<cdp_port>/json/version
 ```
 
-Same binary fallback as headless mode. Omit `--headless` so the user can see the browser.
+Try the same binary names as headless mode. Omit `--headless` so the user can see the browser.
 
 ---
 
@@ -256,13 +288,13 @@ If it doesn't exist, create it with what you learned during this run.
 
 ## Step 8: Clean up
 
-If you launched headless Chromium in Step 3, shut it down:
+If you launched Chromium in Step 3, which happens in `headless` and `local` mode, shut it down:
 
 ```bash
 kill $CHROME_PID 2>/dev/null
 ```
 
-Do NOT kill the browser if you connected to an existing one (remote tunnel or user's browser).
+Do NOT kill the browser if you connected to an existing one. In `remote` mode the browser belongs to the user.
 
 ## Output format
 
@@ -279,6 +311,7 @@ Do NOT kill the browser if you connected to an existing one (remote tunnel or us
 - Status: running
 
 ### Browser
+- Mode: <mode> (<reason>)
 - Type: remote (Playwriter bridge) | local headless (launched by verifier)
 - CDP: localhost:<cdp_port>
 

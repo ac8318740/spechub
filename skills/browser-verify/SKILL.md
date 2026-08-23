@@ -18,9 +18,64 @@ Read `spechub/project.yaml` for:
 - `frontend.directory` – frontend source directory
 - `frontend.dev_server_url` – dev server URL
 - `frontend.helpers_dir` – path to verification knowledge (default: `<frontend.directory>/tests/helpers/`)
-- `frontend.browser.mode` – browser environment: `remote`, `headless`, or `local`
-- `frontend.browser.fallback` – what to do when primary mode unavailable: `headless` (launch Chromium) or `none` (fail)
+- `frontend.browser.mode` – the browser environment this project prefers: `remote`, `headless`, or `local`
+- `frontend.browser.fallback` – set it to `none` to forbid any other mode standing in. Every other value allows one
 - `frontend.browser.cdp_port` – CDP port. Default `19988` for `mode: remote` (Playwriter bridge), `9555` for `headless`/`local`.
+
+## Which browser mode to use
+
+The project states a preference. The host states what it can actually provide. One command reads both and returns the answer:
+
+```bash
+~/.claude/spechub/bin/spechub config browser-mode --json
+```
+
+It answers from declared configuration alone. It probes nothing, so it returns at once and always gives the same answer on the same machine.
+
+On exit 0 it prints one JSON object:
+
+```json
+{
+  "mode": "headless",
+  "preferred": "remote",
+  "reason": "the project prefers remote, which this host does not declare available, so headless stands in",
+  "fallback": true
+}
+```
+
+- `mode` – the browser mode to use: `remote`, `headless`, or `local`
+- `preferred` – the project's stated `frontend.browser.mode`, or `null` when it states none
+- `reason` – one sentence that explains the choice
+- `fallback` – `true` only when `mode` differs from a stated preference
+
+Without `--json` it prints the same two facts on one line: the mode, then the reason.
+
+### How it decides
+
+The host declares which modes this machine can provide. It does so on three axes in the global config at `~/.config/spechub/config.json`:
+
+- `host.browser.remote` – this machine can reach a browser on another machine
+- `host.browser.headless` – this machine can launch headless Chromium
+- `host.browser.local` – this machine has a display for a visible browser
+
+`/spechub:host` sets them. From there the rules are short:
+
+1. The project's preferred mode wins when the host declares that mode available.
+2. Otherwise the first mode the host does declare stands in, in the order remote, headless, local.
+3. A project that sets `frontend.browser.fallback: none` allows no mode to stand in.
+4. A project that states no preferred mode takes the first mode the host declares. This is not a fallback, so `fallback` stays `false` and `frontend.browser.fallback` has no say.
+
+### When it has no answer
+
+The command exits 1, writes one plain-text message to stderr, and prints nothing on stdout. This happens even with `--json`, so a caller parsing the output gets an empty stdout rather than an object to check a field on.
+
+Three situations produce it. Each message names the one command that fixes it:
+
+- the project configures no frontend, or there is no SpecHub project here. The message names `/spechub:init`
+- this host declares no browser mode available, or nobody has described this host yet. The message names `/spechub:host`
+- the project forbids a fallback, and this host does not declare the mode it prefers. The message names `/spechub:host`
+
+The frontend-verifier treats exit 1 as a FAIL and reports the message verbatim. It never guesses a mode of its own.
 
 ## Browser environments
 
@@ -32,7 +87,9 @@ Best experience – you interact with the user's real browser on their machine. 
 
 Remote mode uses the Playwriter bridge. A relay runs on the browser machine and exposes a CDP-shaped endpoint. The Playwriter Chrome extension drives Chrome through the `chrome.debugger` API. Chrome itself opens no CDP listener. The dev machine reaches the relay through an SSH reverse tunnel.
 
-If the bridge is down, the frontend-verifier checks `frontend.browser.fallback`. With `fallback: headless` (recommended), it launches headless Chromium so verification still runs. With `fallback: none`, it fails and reports troubleshooting steps.
+This section does not decide whether remote mode runs here. `spechub config browser-mode` decides that, from the project's preference and the host's `host.browser.*` axes together. Run it before you connect.
+
+Once that command returns `remote`, the answer is final. If the bridge is then down, the frontend-verifier reports FAIL with troubleshooting steps. It does not launch headless Chromium instead, because the command already ruled on any stand-in mode.
 
 #### Setup
 
