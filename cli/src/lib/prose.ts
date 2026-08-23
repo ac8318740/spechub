@@ -607,7 +607,7 @@ function checkVocabulary(line: CheckLine, vocabulary: CompiledEntry[]): Finding[
 // optionally followed by variation selectors, skin-tone modifiers, and further
 // zero-width-joined parts, so a joined sequence counts once. The property needs
 // the `u` flag, which Node 20 and above supports.
-const EMOJI_PART = '\\p{Extended_Pictographic}[\\uFE0F\\u{1F3FB}-\\u{1F3FF}]*';
+const EMOJI_PART = '\\p{Extended_Pictographic}(?:\\uFE0F|[\\u{1F3FB}-\\u{1F3FF}])*';
 const EMOJI = new RegExp(`${EMOJI_PART}(?:\\u200D${EMOJI_PART})*`, 'gu');
 
 // The copyright, registered and trade mark signs carry Extended_Pictographic

@@ -1,8 +1,7 @@
 ---
 name: map
-description: The entry point for planned work. A map is a graph of question and work nodes. Charts one if none exists – an opening grill, meaning a round of interview questions, that fixes the destination and surfaces the fog, meaning what cannot yet be stated precisely – and works the frontier, the nodes ready to be worked now, if one does. No tiers and no routing – the graph is however big the fog made it, and nothing declares which.
+description: The entry point for planned work. A map is a graph of question and work nodes. Charts one if none exists – an opening grill, meaning a round of interview questions, that fixes the destination and surfaces the fog, meaning what cannot yet be stated precisely – and works the frontier, the nodes ready to be worked now, if one does. No tiers and no routing – the graph is however big the fog made it, and nothing declares which. Invoke whenever decisions need settling before work can start, the request is foggy or underspecified, or a map already exists and has open nodes. Use implement instead when the way is already clear.
 argument-hint: "[map name, or the request to chart]"
-disable-model-invocation: true
 ---
 
 ## User Input
@@ -167,3 +166,7 @@ The map is cleared when the frontier is empty and no fog remains. The durable
 residue – what the map leaves behind: living specs via commit-time sync, ADRs
 and glossary via `record-context` – has already been extracted along the way. Report what was
 settled and point at anything the map left `out-of-scope`.
+
+Then invoke `archive` to close the map out. It re-checks the gate itself and
+refuses if anything is still open, verifies the residue actually landed, and
+asks before disposing of the nodes.

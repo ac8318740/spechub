@@ -10,7 +10,7 @@ interface GlobalConfig {
 
 function readGlobalConfig(): GlobalConfig {
   if (!existsSync(GLOBAL_CONFIG_FILE)) return {};
-  return JSON.parse(readFileSync(GLOBAL_CONFIG_FILE, 'utf-8'));
+  return JSON.parse(readFileSync(GLOBAL_CONFIG_FILE, 'utf-8')) as GlobalConfig;
 }
 
 function writeGlobalConfig(config: GlobalConfig): void {

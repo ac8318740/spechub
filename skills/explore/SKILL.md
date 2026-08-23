@@ -1,7 +1,6 @@
 ---
 name: explore
-description: Enter explore mode - a thinking partner for exploring ideas, investigating problems, and clarifying requirements. Use when the user wants to think through something before or during a change.
-disable-model-invocation: true
+description: Enter explore mode - a thinking partner for exploring ideas, investigating problems, and clarifying requirements. Invoke when the user signals they want to think rather than build – thinking out loud, weighing options, asking what if, or saying they are not ready to start yet. Explore mode never writes code, so do not invoke it on a request to build something; use implement, quick-fix or map for that.
 ---
 
 ## User Input

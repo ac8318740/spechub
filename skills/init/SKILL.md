@@ -278,6 +278,8 @@ Next: describe what you want to build, or run /spechub:bootstrap for existing co
 
 Note: `frontend.browser.cdp_port` defaults to `19988` when `mode: remote` (Playwriter bridge) and `9555` otherwise.
 
+Note: the `nudge_*` keys drive the context-pressure nudge, which fires only on the session's own stop – teammates and subagents are never nudged, because neither can hand the user's work over. Its ladder is per session, as is the quiet marker a finished handoff or compaction leaves behind, and both reset when the session compacts: the recorded rung described context the compaction just threw away, so the ladder starts again from its first rung.
+
 ```yaml
 profile: node-typescript
 
@@ -291,6 +293,23 @@ workflow:
     strict: true
     orchestrator_strict: true
   frontend_verification: true
+  handoff:
+    agent: "claude"           # command template, not a bare name, so flags fit
+    ack_turns: 5              # turns after delivery before silence is reported
+    self_invoke: true         # whether the agent may invoke handoff itself
+    nudge_warn: 200000        # absolute tokens; small-context models want lower
+    nudge_severe: 500000      # absolute tokens
+    nudge_step: 100000        # spacing of the rungs above the last one, so a
+                              # long session is nudged once per step
+    # context_thresholds: [150000, 300000]   # an explicit ladder, replacing
+    #                                        # nudge_warn/nudge_severe as rungs;
+    #                                        # percentages such as "40%" work too
+    # context_window: 200000                 # what a percentage rung is a
+    #                                        # percentage of; unset, it comes
+    #                                        # from the model id – 200000 for
+    #                                        # haiku and the 4.x families,
+    #                                        # 1000000 for [1m] ids and the
+    #                                        # 5.x families
 
 commands:
   test: "npm test"

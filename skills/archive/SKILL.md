@@ -1,8 +1,7 @@
 ---
 name: archive
-description: Close out a cleared map – one with no questions left open – by verifying the durable residue, meaning what the effort leaves behind in living specs, ADRs and the glossary, was extracted, then disposing of the nodes per workflow.maps.persist. Also archives legacy spechub/changes/ directories from the pre-map workflow.
+description: Close out a cleared map – one whose frontier is empty with no fog and no claims left – by verifying the durable residue, meaning what the effort leaves behind in living specs, ADRs and the glossary, was extracted, then disposing of the nodes per workflow.maps.persist. Invoke when a map has just been cleared, when the last node on a map resolves, or when the user asks to archive or close out a map. Refuses and asks first if anything is still open. Also archives legacy spechub/changes/ directories from the pre-map workflow.
 argument-hint: "[map or legacy change name]"
-disable-model-invocation: true
 ---
 
 ## User Input
@@ -70,6 +69,12 @@ should have:
    hearing once more before the map disappears.
 
 ## Step 4: Dispose of the Nodes
+
+**Confirm first when you invoked this yourself.** A user who typed
+`/spechub:archive` has already asked for disposal – proceed. If you reached
+this skill on your own, because a map just cleared, state what will be deleted
+or moved and wait for the user's go-ahead. Deletion is irreversible and they
+never asked for it.
 
 `workflow.maps.persist` in `spechub/project.yaml` decides (default `false`):
 

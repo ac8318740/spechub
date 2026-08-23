@@ -22,6 +22,7 @@ cd cli
 npm install     # only needed when package.json changed
 npm run build   # rebuilds dist/index.js via esbuild (see build.mjs)
 npm run typecheck  # tsc --noEmit, catches type errors the bundler skips
+npm run lint    # eslint, type-aware rules over src/ (see eslint.config.js)
 git add src/ dist/ package.json package-lock.json
 ```
 
@@ -52,6 +53,10 @@ fi
 ```
 
 This runs `npm run build` (esbuild) only when `cli/src/` is part of the staged diff, then stages the regenerated `dist/`. If the build fails, the commit aborts.
+
+## Testing
+
+The repo has two test layers: `cd cli && npm test` for the CLI, and `bash tests/run-all.sh` for the hook suites.
 
 ## Releasing
 

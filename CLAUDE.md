@@ -322,7 +322,12 @@ See the `browser-verify` skill for the `agent-browser` command reference, select
 | Verify build before marking done     | Handle their own lint/typecheck       | Update documentation      |
 | Manage spec updates via /commit      | Do NOT edit files outside their scope | Verify & fix UI issues    |
 
-**User manages all git operations (commits, branches, PRs).**
+**Git is yours to run, within limits.** Low-risk operations – `status`, `diff`,
+`log`, listing branches, staging – need no permission; just run them. Anything
+that publishes or rewrites – commit, push, branch deletion, force operations,
+opening a PR – needs the user to have asked for it or permitted it. When you do
+commit, route through `/spechub:commit` rather than raw git; it is the only path
+that runs spec sync.
 
 **If you find yourself about to use Edit, Write, Grep, or read code directly – STOP.**
 **Delegate that work to a subagent or teammate instead.**
@@ -361,5 +366,5 @@ See the `browser-verify` skill for the `agent-browser` command reference, select
 - **Living specs** – Always kept in sync via commit-time spec sync
 - **Progressive materialisation** – structure appears only when it must persist; a map exists only when fog outlives a session, and nothing declares how big the work is
 - **Cross-device setups** – When a task spans two devices (Playwriter bridge, remote tunnels, etc.), invoke the `bridge` skill first to establish the platform-detection + handoff convention, then proceed
-- **Handing work over** – `/spechub:handoff` writes a summary outside the repo and launches a fresh session with it. It records only what nothing on disk holds (next action, decisions, blockers, file ownership) and references the rest
-- **Survive compaction** – `/spechub:handoff compact` is the variant for staying in this session. It writes an in-repo anchor instead of launching anything. Run it before `/compact`, then type `continue` to resume from the anchor
+- **Handing work over** – `/spechub:handoff` hands the work to a visible agent: a new one in its own pane, or one already running. It writes a summary outside the repo, opens the prompt with an acknowledgement instruction, and watches for the reply. It records only what nothing on disk holds (next action, decisions, blockers, file ownership) and references the rest
+- **Survive compaction** – `/spechub:compact-and-continue` keeps the work in this session. It writes an in-repo anchor instead of launching anything. Run it before `/compact`, then type `continue` to resume from the anchor

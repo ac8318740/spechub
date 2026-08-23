@@ -33,6 +33,7 @@ Workflow:
   Grilling:      tool (question tool, inline fallback)
   TDD:           strict
   Orchestrator:  strict (delegates all code work)
+  Handoff:       agent=claude, ack_turns=5, self_invoke=true, nudge_warn=200000, nudge_severe=500000, nudge_step=100000
 
 Frontend:
   Directory:     frontend/
@@ -258,9 +259,21 @@ Modify a setting. Supported keys:
 | `workflow.grilling.questions` | `tool`, `inline` | How grilling presents a round – the host's question tool, or prose. `tool` falls back to inline when a round exceeds 4 questions or a question has no discrete options |
 | `workflow.maps.tracker` | `github`, `files` | Which tracker holds the map's node records. Unset means the map skill picks when a map is first created, and writes the choice here |
 | `workflow.maps.persist` | `true`, `false` | Keep the map's archived node records under `spechub/archive/` instead of deleting them (files tracker only, default `false`) |
+| `workflow.handoff.agent` | command template string | Command used to launch a handoff target agent when herdr is unavailable. A template, not a bare name, so flags fit (e.g. a model or permission-mode flag) – default `claude` |
+| `workflow.handoff.ack_turns` | number | Turns after message delivery before a handoff reports silence (default `5`) |
+| `workflow.handoff.self_invoke` | `true`, `false` | Whether the agent may invoke the handoff skill itself. Checked behaviourally at the skill's first step, since frontmatter model-invocation flags are static and cannot be toggled per project (default `true`) |
+| `workflow.handoff.nudge_warn` | number | Context tokens at which the context-pressure hook starts nudging, and the ladder's first rung. Small-context models want lower values (default `200000`) |
+| `workflow.handoff.nudge_severe` | number | Context tokens at which the nudge escalates to severe, and the ladder's second rung (default `500000`) |
+| `workflow.handoff.nudge_step` | number | How far apart the rungs sit above the last one, so a long session is nudged once per step rather than on every stop (default `100000`) |
+| `workflow.handoff.context_thresholds` | list of numbers or percentage strings | Replaces the default `nudge_warn`/`nudge_severe` rungs with an explicit ladder, e.g. `[150000, 300000]` or `["40%", "70%"]`. `nudge_step` still extends it past the last listed rung, and `nudge_severe` then only picks the wording |
+| `workflow.handoff.context_window` | number | The window a percentage rung is a percentage of. Unset, it is inferred from the session's model id: `[1m]` in the id means 1,000,000; the haiku line and the 4.x families (`claude-opus-4-8`, `claude-haiku-4-5-...`, `claude-sonnet-4-5`) mean 200,000; anything else – the 5.x families, or no model id at all – means 1,000,000 |
 | `frontend.browser.mode` | `remote`, `headless`, `local` | Browser environment for verification |
 | `frontend.browser.fallback` | `headless`, `none` | What to do when primary mode unavailable |
 | `frontend.browser.cdp_port` | number | CDP port – default `19988` for `mode: remote`, `9555` for `headless`/`local` |
+
+The nudge fires only on the session's own stop. Teammates and subagents are never nudged, because neither can hand the user's work over.
+
+The ladder is per session, and so is the quiet marker a finished handoff or compaction leaves behind to silence the rest of the session. Both reset when the session compacts: a compaction throws away the context the recorded rung described, so the ladder starts again from its first rung.
 
 Examples:
 - `/spechub:config set workflow.tdd.strict false`
@@ -279,6 +292,13 @@ workflow:
     strict: true
     orchestrator_strict: true
   frontend_verification: true
+  handoff:
+    agent: "claude"
+    ack_turns: 5
+    self_invoke: true
+    nudge_warn: 200000
+    nudge_severe: 500000
+    nudge_step: 100000
 ```
 
 ## Steps

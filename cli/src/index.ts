@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 const pkg = JSON.parse(
   readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')
-);
+) as { version: string };
 
 const program = new Command()
   .name('spechub')
@@ -20,6 +20,7 @@ const commands = await Promise.all([
   import('./commands/node.js'),
   import('./commands/config.js'),
   import('./commands/feedback.js'),
+  import('./commands/handoff.js'),
   import('./commands/lint-prose.js'),
 ]);
 

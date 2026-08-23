@@ -1,8 +1,7 @@
 ---
 name: implement
-description: Execute implementation work via the TDD pipeline (test-writer -> task-executor -> task-checker). A map is a stored graph of question and work nodes. Claims afk nodes – away from keyboard, meaning nodes an agent settles alone – from the map frontier, the nodes ready to be worked now, when a map exists; runs the same discipline directly on the request when none does. A unit of work carries its own size – one node is a quick change, forty is a long effort, and nothing declares which.
+description: Execute implementation work via the TDD pipeline (test-writer -> task-executor -> task-checker). A map is a stored graph of question and work nodes. Claims afk nodes – away from keyboard, meaning nodes an agent settles alone – from the map frontier, the nodes ready to be worked now, when a map exists; runs the same discipline directly on the request when none does. A unit of work carries its own size – one node is a quick change, forty is a long effort, and nothing declares which. Invoke whenever the way is clear and something needs building, changing or extending, however small. Use quick-fix instead when something is broken and needs a root cause found, and map instead when decisions still need settling before anyone can build.
 argument-hint: "[map name, or the request to implement]"
-disable-model-invocation: true
 ---
 
 ## User Input

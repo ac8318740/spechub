@@ -1,8 +1,7 @@
 ---
 name: commit
-description: Create git commit(s) with proper pre-commit hook handling, MECE commit messages, safe staging, and mandatory living spec sync. Invoke via /commit.
+description: Create git commit(s) with proper pre-commit hook handling, MECE commit messages, safe staging, and mandatory living spec sync. Invoke whenever work is about to be committed – the user asked to commit, or told you to finish and commit a batch of work. Never commit with raw git commands instead; this skill is the only path that runs spec sync, so bypassing it silently stops living specs from updating. Committing is still the user's call – do not invoke it unprompted on work they have not asked you to land.
 argument-hint: "[scope: 'all', or describe which changes]"
-disable-model-invocation: true
 ---
 
 ## User Input

@@ -11,8 +11,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { collectFiles, summarize, reportFile } from './lint-prose.js';
+import type { FileReport } from './lint-prose.js';
 import { findUp, findPluginRoot } from '../lib/project.js';
 import { compileVocabulary } from '../lib/prose.js';
+import type { Finding } from '../lib/prose.js';
 
 let root: string;
 
@@ -183,26 +185,33 @@ describe('collectFiles', () => {
 });
 
 describe('summarize', () => {
-  const findings = (n: number) => Array.from({ length: n }, () => ({}) as any);
+  // Only the count matters to summarize, so every finding is the same stub.
+  const findings = (n: number): Finding[] =>
+    Array.from({ length: n }, (_, index) => ({
+      line: index + 1,
+      column: 1,
+      rule: 'vocabulary',
+      message: 'stub finding',
+    }));
 
   it('sums findings across all files into total', () => {
-    const reports = [
+    const reports: FileReport[] = [
       { path: 'a.md', findings: findings(2) },
       { path: 'b.md', findings: findings(1) },
       { path: 'c.md', findings: findings(0) },
     ];
 
-    expect(summarize(reports as any).total).toBe(3);
+    expect(summarize(reports).total).toBe(3);
   });
 
   it('sorts perFile by count descending, breaking ties by path', () => {
-    const reports = [
+    const reports: FileReport[] = [
       { path: 'z.md', findings: findings(2) },
       { path: 'a.md', findings: findings(2) },
       { path: 'm.md', findings: findings(5) },
     ];
 
-    const summary = summarize(reports as any);
+    const summary = summarize(reports);
 
     expect(summary.perFile).toEqual([
       { path: 'm.md', count: 5 },
@@ -212,14 +221,14 @@ describe('summarize', () => {
   });
 
   it('counts every file considered in totalFiles, including skipped and unreadable ones', () => {
-    const reports = [
+    const reports: FileReport[] = [
       { path: 'a.md', findings: findings(3) },
       { path: 'clean.md', findings: findings(0) },
       { path: 'vocab.md', findings: [], skipped: true },
       { path: 'broken.md', findings: [], unreadable: true },
     ];
 
-    const summary = summarize(reports as any);
+    const summary = summarize(reports);
 
     expect(summary.totalFiles).toBe(4);
     expect(summary.filesWithFindings).toBe(1);
@@ -227,24 +236,24 @@ describe('summarize', () => {
   });
 
   it('keeps a skipped vocabulary file out of perFile despite counting it in totalFiles', () => {
-    const reports = [
+    const reports: FileReport[] = [
       { path: 'a.md', findings: findings(1) },
       { path: 'vocab.md', findings: [], skipped: true },
     ];
 
-    const summary = summarize(reports as any);
+    const summary = summarize(reports);
 
     expect(summary.perFile).toEqual([{ path: 'a.md', count: 1 }]);
     expect(summary.totalFiles).toBe(2);
   });
 
   it('keeps an unreadable file out of perFile despite counting it in totalFiles', () => {
-    const reports = [
+    const reports: FileReport[] = [
       { path: 'a.md', findings: findings(1) },
       { path: 'broken.md', findings: [], unreadable: true },
     ];
 
-    const summary = summarize(reports as any);
+    const summary = summarize(reports);
 
     expect(summary.perFile).toEqual([{ path: 'a.md', count: 1 }]);
     expect(summary.totalFiles).toBe(2);
@@ -470,7 +479,7 @@ describe('reportFile', () => {
       }
 
       const vocabulary = testVocabulary();
-      const reports = [
+      const reports: FileReport[] = [
         reportFile(goodFile, goodDisplay, vocabulary),
         reportFile(badFile, badDisplay, vocabulary),
       ];

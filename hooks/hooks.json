@@ -16,6 +16,24 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start-handoff.sh\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/context-pressure.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/context-pressure.sh\""
+          }
+        ]
       }
     ]
   }

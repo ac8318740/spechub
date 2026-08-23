@@ -16327,6 +16327,247 @@ var init_feedback = __esm({
   }
 });
 
+// src/lib/ackwatch.ts
+import { readFileSync as readFileSync6 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { join as join10 } from "node:path";
+function transcriptPath(cwd, sessionId, projectsDir) {
+  const base = projectsDir ?? join10(homedir2(), ".claude", "projects");
+  return join10(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
+}
+function parseAck(text) {
+  const match = ACK_PATTERN.exec(text ?? "");
+  if (!match) return { decision: null, reason: null };
+  const decision = match[1].toLowerCase();
+  const reason = match[2].trim();
+  return { decision, reason: reason.length > 0 ? reason : null };
+}
+function parseLines(lines) {
+  const records = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed !== null && typeof parsed === "object") {
+        records.push(parsed);
+      }
+    } catch {
+    }
+  }
+  return records;
+}
+function isSidechain(record) {
+  return record.isSidechain === true;
+}
+function isDelivery(record, token) {
+  if (record.type !== "queue-operation" || record.operation !== "remove") return false;
+  const content = record.content;
+  if (typeof content !== "string") return false;
+  return content.startsWith(CROSS_SESSION_PREFIX) && content.includes(token);
+}
+function isTurnBoundary(record) {
+  return record.type === "assistant" && record.message?.stop_reason === "end_turn";
+}
+function findSendMessage(record) {
+  if (record.type !== "assistant") return void 0;
+  const content = record.message?.content;
+  if (!Array.isArray(content)) return void 0;
+  for (const block of content) {
+    if (block === null || typeof block !== "object") continue;
+    const { type, name, input } = block;
+    if (type !== "tool_use" || name !== "SendMessage") continue;
+    const to = typeof input?.to === "string" ? input.to : "";
+    const message = typeof input?.message === "string" ? input.message : "";
+    return { to, message, ...parseAck(message) };
+  }
+  return void 0;
+}
+function findTextAck(record) {
+  if (record.type !== "assistant") return void 0;
+  const content = record.message?.content;
+  if (!Array.isArray(content)) return void 0;
+  for (const block of content) {
+    if (block === null || typeof block !== "object") continue;
+    const { type, text } = block;
+    if (type !== "text" || typeof text !== "string") continue;
+    const parsed = parseAck(text);
+    if (parsed.decision === null) continue;
+    return { to: null, message: text, ...parsed };
+  }
+  return void 0;
+}
+function resolveAnchor(records, options) {
+  if (options.fresh) return records.length > 0 ? 0 : -1;
+  const token = options.token;
+  return records.findIndex((record) => !isSidechain(record) && isDelivery(record, token));
+}
+function requireOneMode(options) {
+  const hasToken = typeof options.token === "string" && options.token.length > 0;
+  const hasFresh = Boolean(options.fresh);
+  if (hasToken && hasFresh) {
+    throw new Error("Pass either a token or fresh, not both.");
+  }
+  if (!hasToken && !hasFresh) {
+    throw new Error("Pass a token (anchor on delivery) or fresh (anchor at transcript start).");
+  }
+}
+function analyze(lines, options) {
+  requireOneMode(options);
+  const turns = options.turns ?? DEFAULT_TURNS;
+  const records = parseLines(lines);
+  const anchor = resolveAnchor(records, options);
+  if (anchor < 0) {
+    return { outcome: "pending", anchored: false, turnsElapsed: 0 };
+  }
+  let boundaries = 0;
+  for (let i = anchor; i < records.length; i += 1) {
+    const record = records[i];
+    if (isSidechain(record)) continue;
+    const ack = findSendMessage(record) ?? (options.fresh ? findTextAck(record) : void 0);
+    if (ack) {
+      return {
+        outcome: "acknowledged",
+        anchored: true,
+        turnsElapsed: Math.min(boundaries, turns),
+        ack
+      };
+    }
+    if (isTurnBoundary(record)) boundaries += 1;
+  }
+  const turnsElapsed = Math.min(boundaries, turns);
+  return {
+    outcome: turnsElapsed >= turns ? "silence" : "pending",
+    anchored: true,
+    turnsElapsed
+  };
+}
+function readLines(path) {
+  try {
+    return readFileSync6(path, "utf-8").split("\n");
+  } catch (err) {
+    if (err.code === "ENOENT") return [];
+    throw err;
+  }
+}
+function sleep(ms) {
+  return new Promise((resolve5) => {
+    setTimeout(resolve5, ms);
+  });
+}
+async function watch(path, options = {}) {
+  requireOneMode(options);
+  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+  let last = { outcome: "pending", anchored: false, turnsElapsed: 0 };
+  for (; ; ) {
+    last = analyze(readLines(path), options);
+    if (last.outcome === "acknowledged" || last.outcome === "silence") {
+      return { ...last, outcome: last.outcome };
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return { outcome: "timeout", anchored: last.anchored, turnsElapsed: last.turnsElapsed };
+    }
+    await sleep(Math.min(pollIntervalMs, remaining));
+  }
+}
+var DEFAULT_TURNS, DEFAULT_POLL_INTERVAL_MS, DEFAULT_TIMEOUT_MS, CROSS_SESSION_PREFIX, ACK_PATTERN;
+var init_ackwatch = __esm({
+  "src/lib/ackwatch.ts"() {
+    "use strict";
+    DEFAULT_TURNS = 5;
+    DEFAULT_POLL_INTERVAL_MS = 1e3;
+    DEFAULT_TIMEOUT_MS = 30 * 60 * 1e3;
+    CROSS_SESSION_PREFIX = "<cross-session-message";
+    ACK_PATTERN = /^\s*(accept|decline)\b[\s]*[:,;.\-–—!]*\s*([\s\S]*)$/i;
+  }
+});
+
+// src/commands/handoff.ts
+var handoff_exports = {};
+__export(handoff_exports, {
+  register: () => register8
+});
+import { isAbsolute } from "node:path";
+function parseIntAtLeast(name, min) {
+  return (value) => {
+    const parsed = value.trim() === "" ? NaN : Number(value);
+    if (!Number.isInteger(parsed) || parsed < min) {
+      fail(`Invalid ${name} '${value}'. Expected an integer >= ${min}.`);
+    }
+    return parsed;
+  };
+}
+function resolveTranscript(opts) {
+  const hasDirect = typeof opts.transcript === "string";
+  const hasDerived = typeof opts.sessionId === "string" || typeof opts.cwd === "string";
+  if (hasDirect && hasDerived) {
+    fail("Use --transcript, or --session-id with --cwd, not both.");
+  }
+  if (hasDirect) {
+    const transcript = opts.transcript;
+    if (transcript.length === 0) {
+      fail("--transcript needs a path to the target session transcript (.jsonl).");
+    }
+    return transcript;
+  }
+  if (!opts.sessionId || !opts.cwd) {
+    fail("Pass --transcript, or both --session-id and --cwd.");
+  }
+  if (!isAbsolute(opts.cwd)) {
+    fail(`--cwd must be an absolute path, got '${opts.cwd}'.`);
+  }
+  return transcriptPath(opts.cwd, opts.sessionId);
+}
+function register8(program3) {
+  const handoffCmd = program3.command("handoff").description("Hand work to another agent session");
+  handoffCmd.command("watch").description(
+    "Watch a handoff target's transcript and report whether it acknowledged the handoff, went silent for N turns, or timed out"
+  ).option("--transcript <path>", "path to the target session transcript (.jsonl)").option("--session-id <id>", "target session id, to derive the transcript path (needs --cwd)").option("--cwd <dir>", "absolute working directory of the target session (needs --session-id)").option("--token <token>", "correlation token in the delivered message; anchors on its delivery").option("--fresh", "target was launched for this handoff; anchor at the transcript start").option(
+    "--turns <n>",
+    "turn boundaries to allow before reporting silence",
+    parseIntAtLeast("turns", 1),
+    DEFAULT_TURNS
+  ).option(
+    "--poll-interval <ms>",
+    "milliseconds between re-reads of the transcript",
+    parseIntAtLeast("poll interval", 1),
+    DEFAULT_POLL_INTERVAL_MS
+  ).option(
+    "--timeout <ms>",
+    "milliseconds before giving up",
+    parseIntAtLeast("timeout", 1),
+    DEFAULT_TIMEOUT_MS
+  ).action(async (opts) => {
+    const hasToken = typeof opts.token === "string" && opts.token.length > 0;
+    if (hasToken === Boolean(opts.fresh)) {
+      fail("Pass exactly one of --token or --fresh.");
+    }
+    const path = resolveTranscript(opts);
+    try {
+      const result = await watch(path, {
+        token: opts.token,
+        fresh: opts.fresh,
+        turns: opts.turns,
+        pollIntervalMs: opts.pollInterval,
+        timeoutMs: opts.timeout
+      });
+      console.log(JSON.stringify({ transcript: path, ...result }, null, 2));
+    } catch (err) {
+      fail(err.message);
+    }
+  });
+}
+var init_handoff = __esm({
+  "src/commands/handoff.ts"() {
+    "use strict";
+    init_ackwatch();
+    init_utils();
+  }
+});
+
 // node_modules/fast-glob/out/utils/array.js
 var require_array = __commonJS({
   "node_modules/fast-glob/out/utils/array.js"(exports) {
@@ -19524,7 +19765,7 @@ var require_pattern = __commonJS({
       const absolute = [];
       const relative2 = [];
       for (const pattern of patterns) {
-        if (isAbsolute(pattern)) {
+        if (isAbsolute2(pattern)) {
           absolute.push(pattern);
         } else {
           relative2.push(pattern);
@@ -19533,10 +19774,10 @@ var require_pattern = __commonJS({
       return [absolute, relative2];
     }
     exports.partitionAbsoluteAndRelative = partitionAbsoluteAndRelative;
-    function isAbsolute(pattern) {
+    function isAbsolute2(pattern) {
       return path.isAbsolute(pattern);
     }
-    exports.isAbsolute = isAbsolute;
+    exports.isAbsolute = isAbsolute2;
   }
 });
 
@@ -22340,7 +22581,7 @@ var init_prose = __esm({
     HEADING = /^\s{0,3}#{1,6}(?:\s|$)/;
     FENCE_OPEN = /^\s{0,3}(`{3,}|~{3,})/;
     FENCE_CLOSE = /^\s{0,3}(`{3,}|~{3,})\s*$/;
-    EMOJI_PART = "\\p{Extended_Pictographic}[\\uFE0F\\u{1F3FB}-\\u{1F3FF}]*";
+    EMOJI_PART = "\\p{Extended_Pictographic}(?:\\uFE0F|[\\u{1F3FB}-\\u{1F3FF}])*";
     EMOJI = new RegExp(`${EMOJI_PART}(?:\\u200D${EMOJI_PART})*`, "gu");
     LEGAL_MARKS = /* @__PURE__ */ new Set([169, 174, 8482]);
     BE_FORMS = ["am", "is", "are", "was", "were", "be", "been", "being"];
@@ -22494,12 +22735,12 @@ var init_prose = __esm({
 var lint_prose_exports = {};
 __export(lint_prose_exports, {
   collectFiles: () => collectFiles,
-  register: () => register8,
+  register: () => register9,
   reportFile: () => reportFile,
   summarize: () => summarize
 });
-import { existsSync as existsSync9, readFileSync as readFileSync6, statSync as statSync2 } from "node:fs";
-import { join as join10, relative, resolve as resolve4 } from "node:path";
+import { existsSync as existsSync9, readFileSync as readFileSync7, statSync as statSync2 } from "node:fs";
+import { join as join11, relative, resolve as resolve4 } from "node:path";
 function loadVocabulary() {
   const pluginRoot = findPluginRoot();
   if (!pluginRoot) {
@@ -22508,7 +22749,7 @@ function loadVocabulary() {
       VOCABULARY_HINT
     );
   }
-  const path = join10(pluginRoot, VOCABULARY_PATH);
+  const path = join11(pluginRoot, VOCABULARY_PATH);
   let markdown = null;
   try {
     markdown = readMarkdown(path);
@@ -22578,7 +22819,7 @@ function displayPath(root, file) {
 function reportFile(file, display, vocabulary) {
   let text;
   try {
-    text = readFileSync6(file, "utf-8");
+    text = readFileSync7(file, "utf-8");
   } catch {
     console.error(source_default.yellow(`Cannot read, skipping: ${display}`));
     return { path: display, findings: [], unreadable: true };
@@ -22618,7 +22859,7 @@ function printSummary(summary, missing) {
     `  ${source_default.bold(String(summary.total).padStart(5))}  total in ${summary.filesWithFindings} of ${summary.totalFiles} file(s)`
   );
 }
-function register8(program3) {
+function register9(program3) {
   program3.command("lint-prose").description("Warn about prose that drifts from the writing standard").argument("[paths...]", "files or directories to lint").option("--all", "lint every .md file in the repository").action((paths, opts) => {
     const root = findProjectRoot() ?? process.cwd();
     if (paths.length === 0 && !opts.all) {
@@ -22684,10 +22925,10 @@ var {
 } = import_index.default;
 
 // src/index.ts
-import { readFileSync as readFileSync7 } from "node:fs";
-import { join as join11 } from "node:path";
+import { readFileSync as readFileSync8 } from "node:fs";
+import { join as join12 } from "node:path";
 var pkg = JSON.parse(
-  readFileSync7(join11(import.meta.dirname, "..", "package.json"), "utf-8")
+  readFileSync8(join12(import.meta.dirname, "..", "package.json"), "utf-8")
 );
 var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(pkg.version);
 var commands = await Promise.all([
@@ -22698,6 +22939,7 @@ var commands = await Promise.all([
   Promise.resolve().then(() => (init_node(), node_exports)),
   Promise.resolve().then(() => (init_config(), config_exports)),
   Promise.resolve().then(() => (init_feedback(), feedback_exports)),
+  Promise.resolve().then(() => (init_handoff(), handoff_exports)),
   Promise.resolve().then(() => (init_lint_prose(), lint_prose_exports))
 ]);
 for (const mod of commands) {

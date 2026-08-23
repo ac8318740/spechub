@@ -31,7 +31,7 @@ Always fetch first, then branch off the remote ref.
 
 ### Inside herdr
 
-If `$HERDR_ENV` is set, the session is running in a [herdr](https://herdr.dev) pane. Create the worktree through herdr, then move this pane into the workspace herdr made for it. The session ends up in the sidebar row for the worktree it is actually working in, indented under its parent repo.
+If `$HERDR_ENV` is `1`, the session is running in a [herdr](https://herdr.dev) pane. Create the worktree through herdr, then move this pane into the workspace herdr made for it. The session ends up in the sidebar row for the worktree it is actually working in, indented under its parent repo.
 
 All four steps are one operation. Stopping after step 2 is the old broken behaviour: the session keeps running in the parent repo's workspace while the worktree row holds nothing but an idle shell.
 
@@ -55,13 +55,15 @@ Skip this when the workspace has other tabs, or when it is already a linked work
 
 #### 2. Create the worktree
 
+`<base>` per the base rule above.
+
 ```bash
 cd <main-root> \
   && git fetch origin --quiet \
   && herdr worktree create \
        --cwd "$(pwd)" \
        --branch <branch> \
-       --base origin/dev \
+       --base <base> \
        --label <slug> \
        --no-focus
 ```
@@ -110,12 +112,12 @@ herdr worktree open --path <path-to-existing-checkout>
 
 ### Outside herdr
 
-No `$HERDR_ENV`, no pane moving – nothing above applies. Plain git:
+`$HERDR_ENV` is not `1`, no pane moving – nothing above applies. Plain git, `<base>` per the base rule above:
 
 ```bash
 cd <main-root> \
   && git fetch origin --quiet \
-  && git worktree add .claude/worktrees/<slug> -b <branch> origin/dev \
+  && git worktree add .claude/worktrees/<slug> -b <branch> <base> \
   && git -C .claude/worktrees/<slug> log -1 --oneline
 ```
 
