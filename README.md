@@ -40,8 +40,8 @@ For the full picture – each step and how they connect – read [docs/workflows
 ## Installation
 
 ```
-/plugin marketplace add ac8318740/ac8318740-plugins
-/plugin install spechub@ac8318740-plugins
+/plugin marketplace add ac8318740/ac-agentic-coding
+/plugin install spechub@ac-agentic-coding
 ```
 
 Then in your project:
