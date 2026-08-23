@@ -21,6 +21,7 @@ const commands = await Promise.all([
   import('./commands/config.js'),
   import('./commands/feedback.js'),
   import('./commands/handoff.js'),
+  import('./commands/lint-prose.js'),
 ]);
 
 for (const mod of commands) {

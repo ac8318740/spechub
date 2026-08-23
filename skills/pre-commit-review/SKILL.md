@@ -67,7 +67,7 @@ Categorize changed files into scopes using the project configuration:
 - **tests**: files under `directories.tests` from project.yaml
 - **other**: everything else
 
-If no meaningful code changes exist (only docs, config, assets), report "No code changes to review" and exit.
+If no meaningful code changes exist (only docs, config, assets), report "No code changes to review" and exit. Run the prose lint from Step 3 before you exit, when Markdown files changed.
 
 ## Step 2: DISCOVER – Learn Project Conventions (Parallel)
 
@@ -161,6 +161,16 @@ For each finding, report:
   FILE:LINE | SEVERITY (MUST/SHOULD/CONSIDER) | WHAT | WHY | SUGGESTED FIX
 ```
 
+**Prose lint on changed Markdown:**
+
+```bash
+~/.claude/spechub/bin/spechub lint-prose <changed .md files>
+```
+
+Run the lint on the changed Markdown files, and on nothing else. Skip the command when no Markdown file changed, because it exits 1 with no paths. The lint exits 0 even when it reports findings. It groups findings by file with line numbers, then prints a summary per file. It skips `skills/writing/vocabulary.md` on purpose.
+
+Add each finding to the review as `SHOULD | PROSE`, at the `file:line` it names. The writing standard is a project convention, so it sits at the same severity as other convention drift.
+
 ## Step 4: ADJACENT – Check Surrounding Code for Rot
 
 For each file that has findings from Step 3, launch an **Explore subagent** (up to 3 in parallel)
@@ -190,7 +200,7 @@ Merge all subagent findings. Deduplicate. Sort by:
 For each finding, ensure it has:
 
 - `file:line` reference
-- Category tag (HARDCODE, SSOT, SCALABILITY, READABILITY, EDGE-CASE, ADJACENT)
+- Category tag (HARDCODE, SSOT, SCALABILITY, READABILITY, EDGE-CASE, PROSE, ADJACENT)
 - Severity (MUST / SHOULD / CONSIDER)
 - Clear 1-sentence description of the problem
 - Why it matters (1 sentence)

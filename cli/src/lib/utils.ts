@@ -4,6 +4,16 @@ import { parse as parseYaml } from 'yaml';
 import chalk from 'chalk';
 import { SPECHUB_DIR, CHANGES_DIR, SPECS_DIR, ARCHIVE_DIR } from './constants.js';
 
+/**
+ * Print an error to stderr and exit 1. The optional hint goes on a second
+ * line, dimmed, for the "what to do about it" half of the message.
+ */
+export function fail(message: string, hint?: string): never {
+  console.error(chalk.red(message));
+  if (hint) console.error(chalk.dim(hint));
+  process.exit(1);
+}
+
 export function ensureDir(path: string): void {
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
 }
@@ -43,16 +53,7 @@ export function listArchivedChanges(root: string): string[] {
 }
 
 export function requireProject(root: string | null): asserts root is string {
-  if (!root) {
-    console.error(chalk.red('Not in a SpecHub project. Run `spechub init` first.'));
-    process.exit(1);
-  }
-}
-
-/** Print a red error and exit 1 – the one way a command reports user error. */
-export function fail(message: string): never {
-  console.error(chalk.red(message));
-  process.exit(1);
+  if (!root) fail('Not in a SpecHub project. Run `spechub init` first.');
 }
 
 export function formatDate(): string {

@@ -67,10 +67,5 @@ The repo has two test layers: `cd cli && npm test` for the CLI, and `bash tests/
 
 ## Writing standards
 
-Match the marketplace repo's standards:
-
-- En dashes (–), never em dashes.
-- Short sentences. Plain words.
-- Active voice.
-- No filler, no marketing tone.
-- Write for a reader without context – plain language, every term of art defined at first use.
+Prose follows the `writing` skill in `skills/writing/`. It covers every durable
+artifact this repository ships, the skill files and these docs included.

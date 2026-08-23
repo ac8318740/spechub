@@ -63,11 +63,13 @@ The TDD pipeline (section 4) runs to completion inside each claim. The node only
 
 ## 3. Grilling and durable records
 
-*Two model-invoked primitives – skills the agent reaches for itself, not commands you type – carry the interviewing and the remembering.*
+*Three model-invoked primitives – skills the agent reaches for itself, not commands you type – carry the interviewing, the remembering and the writing.*
 
 **`grilling`** works decisions in rounds. A round asks the whole frontier – every question whose prerequisites are settled – numbered, each with a recommended answer, then recomputes and repeats. Facts are the agent's job, never the user's: a question an environment fact would answer is dispatched to explorer subagents instead. Presentation follows `workflow.grilling.questions` (the host's question tool by default, inline prose past 4 questions or for open questions), and there is no question cap – the frontier bounds itself.
 
 **`record-context`** fires when a decision lands. It writes an ADR (`docs/adr/`) only when the decision is hard to reverse *and* surprising *and* a real trade-off; a glossary term (root `CONTEXT.md` for cross-domain vocabulary, `spechub/specs/<domain>/CONTEXT.md` for domain terms) when a term got settled; both, or neither. The ADR index is generated from the files, never hand-edited.
+
+**`writing`** holds the standard every durable artifact follows – node answers, ADRs, glossary entries, specs and handoffs – with the words to avoid in `skills/writing/vocabulary.md`.
 
 ## 4. Build under TDD
 

@@ -33,9 +33,30 @@ an obvious choice buries the ones that matter.
 - Body: a `# title` heading, then one to three sentences stating the decision
   and the why. Optional short `## Considered options` and `## Consequences`
   sections when they carry weight the summary cannot.
-- Tone: plain prose, en dashes, no emoji. Write for a reader with little
-  context – define any term of art at first use. An ADR is read months later
-  by someone who was not in this conversation.
+- Tone: per the `writing` skill.
+
+### Example
+
+`docs/adr/0004-invariant-tool-path.md`:
+
+```markdown
+# One invariant path for the command line tool
+
+Every skill calls the SpecHub command line tool as
+`~/.claude/spechub/bin/spechub`. The SessionStart hook repoints that symlink
+at the copy inside the current plugin cache. A version bump moves the target,
+and no skill file changes.
+
+## Considered options
+
+A bare `spechub` command reads the user's shell PATH. A subshell, a fresh
+agent context and a continuous integration run each start without that PATH.
+
+## Consequences
+
+A skill that runs before the hook finds no symlink. An absent symlink means
+the hook did not run, so the fix is to restart Claude Code.
+```
 
 ### The index is generated
 
@@ -62,11 +83,10 @@ sharpened a fuzzy term, coined one – record it:
   `domain-map.yaml` already lists every domain.
 
 Format: a `# Glossary` heading, then one `**term** – definition` line per
-term, alphabetical, one or two sentences each. Each definition must stand on
-its own for someone new to the project – plain language, and no leaning on
-other jargon to explain the term. Glossary and nothing else – no
-implementation notes, no specs, no scratch content. The moment it accepts
-anything else it becomes another document competing with the living specs.
+term, alphabetical, one or two sentences each. Each definition follows the
+`writing` skill. Glossary and nothing else – no implementation notes, no
+specs, no scratch content. The moment it accepts anything else it becomes
+another document competing with the living specs.
 
 **The human wins.** A glossary records the vocabulary humans agreed on, so it
 is never rewritten to match code. If code and glossary disagree, surface the

@@ -130,7 +130,7 @@ If the user mentions a map or you detect one is relevant:
 - **Don't rush** - Discovery is thinking time, not task time
 - **Don't force structure** - Let patterns emerge naturally
 - **Don't auto-capture** - Offer to save insights, don't just do it
-- **Write for the reader** - Captured artifacts are read by someone with none of this conversation; use plain language, define terms of art at first use
+- **Write for the reader** - Captured artifacts follow the `writing` skill
 - **Do visualize** - A good diagram is worth many paragraphs
 - **Do explore the codebase** - Ground discussions in reality
 - **Do question assumptions** - Including the user's and your own

@@ -106,10 +106,8 @@ a decision lands).
 ## Writing for a Reader Without Context
 
 Nodes, ADRs, glossary entries, specs and handoffs are read weeks later, by
-someone who was not in the conversation. Write for that reader: plain
-language, short sentences, no shorthand only this session would understand.
-Define every term of art at first use, in a clause, and spell out an
-abbreviation the first time it appears.
+someone who was not in the conversation. Write for that reader: invoke the
+`writing` skill before you write or edit any of them.
 
 ---
 

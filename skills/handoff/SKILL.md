@@ -101,8 +101,7 @@ in context. If you are about to search source files, stop – the conversation h
 
 Omit any that do not apply. Do not pad.
 
-The handoff is read by a session with none of this conversation – plain language,
-no unexplained shorthand, every term of art defined at first use.
+Prose follows the `writing` skill.
 
 ## Redaction
 

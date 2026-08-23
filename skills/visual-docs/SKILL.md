@@ -9,6 +9,8 @@ description: "Write or restructure documentation that leads with a diagram and d
 
 Most technical docs fail the same way: they explain in reading order rather than importance order, so the reader assembles the picture themselves and only knows what mattered at the end. This skill inverts that. One diagram carries the whole shape, and the section structure is derived from the diagram rather than invented alongside it.
 
+This skill owns document shape. Prose follows the `writing` skill.
+
 ```mermaid
 flowchart TD
     A["Establish the shape<br/>(read code, not existing docs)"] --> B["Draw the lead diagram<br/>(section 3)"]
@@ -26,7 +28,7 @@ flowchart TD
 | Derive sections          | section 1       |
 | SCQA, vertical, MECE     | section 2       |
 | Draw and label           | section 3       |
-| Headings and voice       | section 4       |
+| Headings and duplication | section 4       |
 | Full order of operations | section 5       |
 | What to avoid            | section 6       |
 
@@ -141,14 +143,10 @@ The `<br/>` line carries the file, agent, or command name. Someone who knows the
 
 ## 4. Conventions
 
-*Numbered headings, no trailing periods on fragments, and never repeat a parent doc.*
+*Numbered headings, and never repeat a parent doc.*
 
-- **Number every heading, with a trailing period** – `## 1.`, `### 1.1.`. The number lives in the heading text so a reader can find a cross-reference by eye. Drop the third level in docs under roughly 200 lines
-- **No trailing periods** on headings, table cells, or bullets that are not full sentences. Full sentences and paragraphs get them
+- **Number every heading** – `## 1.`, `### 1.1.` – the period belongs to the number. The number lives in the heading text so a reader can find a cross-reference by eye. Drop the third level in docs under roughly 200 lines
 - **Do not duplicate up the tree** – a child doc adds detail and links to its parent. If a section would restate what the parent says, cut it and link
-- **En dashes only.** Never em dashes
-- **Active voice, short sentences, no marketing register.** "The hook creates two symlinks", not "Two symlinks are created by the hook"
-- **Write for a reader without context** – plain language, terms of art defined at first use
 
 ## 5. Process
 

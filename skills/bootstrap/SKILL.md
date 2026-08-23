@@ -76,7 +76,7 @@ Each pass outputs domain drafts using this format:
 ### FR-002: ...
 ```
 
-Write each FR for a reader unfamiliar with the codebase – plain language, terms of art defined at first use.
+Write each FR per the `writing` skill.
 
 ```markdown
 ## Integration Points
