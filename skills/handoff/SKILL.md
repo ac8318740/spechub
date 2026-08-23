@@ -69,6 +69,75 @@ propose it. Ask the user to confirm a target whose working directory sits
 outside this repository, unless the user named that target. *Routing to an agent
 already running*, below, gives the way to propose the work to such a session.
 
+## Naming workspaces and tabs
+
+herdr labels a new tab with a number, such as `1` or `2`. A user with four tabs
+open cannot tell which agent works on what. So every workspace and tab a handoff
+touches carries a descriptive label. `label` is the only naming field herdr has.
+There is no `--name`, no `--title`, and no `tab update`.
+
+A tab label reads `<topic>-<thread>.<step>`.
+
+- **topic** names the work in one or two words, lower-case and hyphenated, such
+  as `auth-bug` or `csv-export`. For a new worktree it is the workspace slug
+  already passed to `--label`, or a shortening of it. For a new tab it is the
+  subject of the handoff.
+- **thread** numbers a line of work inside the workspace. The numbering restarts
+  in each workspace. So a handoff into a new worktree labels the receiving tab
+  `<topic>-1.0`, and a handoff inside this workspace labels it `<topic>-1.1`.
+- **step** counts the handoffs along that line. The session that started the
+  line is step 0. The agent it hands to is step 1. That agent's own handoff is
+  step 2.
+
+Keep the topic to two words at most, so the whole label fits the tab strip.
+
+| Tab label      | Who holds it                                      |
+| -------------- | ------------------------------------------------- |
+| `auth-bug-1.0` | the session that started the line of work         |
+| `auth-bug-1.1` | the agent that session hands to                   |
+| `auth-bug-1.2` | the agent the step 1 agent hands to               |
+| `auth-bug-2.0` | a fresh line of work started in the same workspace |
+
+Read the labels already in use before you create a tab, so the new one continues
+the numbering instead of colliding with it:
+
+```bash
+herdr tab list --workspace "$HERDR_WORKSPACE_ID"
+# {"result":{"tabs":[{"tab_id":"w1X:t1","label":"1","number":1}]}}
+```
+
+Find this session's own tab in that list. `$HERDR_TAB_ID` names it. herdr sets
+that variable in every managed pane, so an empty value means this session sits
+in no herdr pane. Skip the rename of this session's tab then, and never fall
+back to the focused tab. The focused tab belongs to whichever pane the user is
+looking at, which is often another workspace.
+
+A label of digits only is still the herdr default. Rename such a tab before you
+create its successor, so the pair reads as a sequence:
+
+```bash
+herdr tab rename <tab_id> <topic>-<thread>.0
+```
+
+Rename another tab only when its label is digits only. Any other label may be
+one the user or another agent set. Leave it alone.
+
+A new worktree gets its workspace label from `herdr worktree create --label
+<slug>`. Rename the workspace when that slug is long, or says little to a
+reader – one or two words plus the branch intent:
+
+```bash
+herdr workspace rename <workspace_id> <label>
+```
+
+The first tab of a new workspace is the spare root pane's tab. Rename it to
+`<topic>-1.0` after `worktree create`. Read its tab id from the create JSON, or
+from `herdr tab list --workspace <new_ws_id>`. Never hardcode a tab id.
+
+Match the agent name in `herdr agent start <name>` to the tab label. The handle
+regex is `[a-z][a-z0-9_-]{0,31}`, which allows no dot. So the agent whose tab is
+`auth-bug-1.1` takes the name `auth-bug-1-1`.
+
 ## The rule that governs the handoff
 
 *Reference state. Never copy it.*
@@ -190,10 +259,16 @@ herdr worktree create --cwd "<main-repo-root>" --branch <branch> --base <base> \
 # read .result.root_pane.pane_id from the JSON – never hardcode
 # .result.worktree.path confirms where the checkout landed, for the report at the end
 
+# name the workspace's first tab – read its tab id from the JSON, never hardcode
+herdr tab rename <root_tab_id> <topic>-1.0
+
 # the quoted prompt is the FRESH AGENT opener defined above – use it verbatim
 herdr agent start <handoff-name> --kind claude --pane <root_pane_id> \
   -- "The first line of your first reply must be the single word ACCEPT or DECLINE, followed by a one-line reason. Use plain text, with nothing at all before that word and no bold, heading, quote or code formatting. The sender matches that line literally, and cannot report this work as yours until it sees it. You may read <handoff-file> first to judge whether the work suits you, but reply before doing any other work. Then continue that work."
 ```
+
+`--label <slug>` names the workspace, and the rename names its first tab –
+*Naming workspaces and tabs*, above, gives the format.
 
 `<base>` is `origin/dev` when that ref exists, otherwise `origin/main` – the same
 rule the `new-worktree` skill follows. Local `dev` is often behind. So the fetch
@@ -237,9 +312,13 @@ succeeded, but herdr never registered the handle.
 Same shape one level down – no new checkout, so no worktree:
 
 ```bash
-herdr tab create --workspace "$HERDR_WORKSPACE_ID" --no-focus
+herdr tab list --workspace "$HERDR_WORKSPACE_ID"   # the labels already in use
+herdr tab create --workspace "$HERDR_WORKSPACE_ID" --label <topic>-<thread>.<step> --no-focus
 # read the new tab's root pane ID from .result.root_pane.pane_id – same field the worktree's uses above
 ```
+
+`--label` sets the tab label at creation – *Naming workspaces and tabs*, above,
+gives the format and the numbering.
 
 Then `herdr agent start` into that pane, exactly as above – same fresh-agent
 opener, same handoff file path.
@@ -440,7 +519,8 @@ the session compacts, because it resets its state on `SessionStart` with
 
 Always name the target, the handoff file path, and the next action the receiving
 agent would take. The target is an agent name with its pane or workspace, or the
-existing session.
+existing session. For a launched agent, also name the workspace label and the
+tab label. Those are what the user reads off the tab strip to find the pane.
 
 Then say where the handoff actually stands, in the terms of the outcome above.
 There are four cases. The target accepted it. The target declined on fit, and
