@@ -54,6 +54,8 @@ Then in your project:
 
 This detects your project type and generates `spechub/project.yaml` with workflow settings. SpecHub loads its orchestrator instructions at session start whenever it detects a spechub project. Your CLAUDE.md stays clean for project-specific content.
 
+Each machine also declares its own dev setup once, with `/spechub:host`. For every axis, what reads it, and how to describe a fresh machine, read [docs/dev-setups.md](docs/dev-setups.md).
+
 ## CLI
 
 SpecHub ships a Node.js CLI (`spechub init`, `spechub list`, `spechub node ...`, `spechub archive`).

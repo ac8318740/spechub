@@ -2,3 +2,4 @@
 - [0002](0002-version-gate-not-auto-bump.md) – A PR gate enforces the version bump; CI never bumps it
 - [0003](0003-handoff-ack-command.md) – Handoff acknowledgement is a CLI command, not a reply
 - [0004](0004-dev-setup-per-host.md) – Dev setup is declared per host, not per project
+- [0005](0005-two-orchestrators-per-host.md) – Two orchestrators coexist on one host, and a checkout's path names its owner
