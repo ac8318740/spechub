@@ -9,6 +9,10 @@
 # own interactive SSH session. Killing that would drop the shell running
 # the script.
 #
+# Guardrail: refuses to kill anything that still answers HTTP on the port. A
+# forward that is serving is the bridge, not litter, and the operator who runs
+# this out of habit would be taking the browser away from whoever is using it.
+#
 # Scoped strictly to the two ports this setup owns: 19988 (the bridge's CDP
 # port) and 19989 (the document opener). Any other port is refused. This is an
 # allowlist rather than a free --port flag on purpose - the guardrails below
@@ -52,6 +56,33 @@ if [ -z "$line" ]; then
 fi
 
 log "current holder: $line"
+
+# Guardrail: is the forward still carrying traffic? A holder on this port is not
+# garbage by default - while the tunnel is up it is the bridge, and this is the
+# socket agent-browser drives Chrome through. The question is asked of the port
+# rather than of the process, and asked first, because a non-root ss cannot name
+# the owner of someone else's socket: the checks below would give up at "could
+# not parse PID" and never reach the one guardrail that matters most. doctor.ps1 prints this
+# script as the remedy for an amber "Tunnel logs" row, and that row trails for
+# five minutes after the tunnel has already healed itself, so running the
+# clearer against a healthy forward is the ordinary mistake, not the rare one.
+#
+# Any HTTP answer counts as alive. A 401 or a 404 comes from a CDP endpoint
+# that is serving and merely guarded, or asked for a path it does not have, so
+# --fail is deliberately absent: it would read those as dead and kill them. The
+# probe is bounded at 3 seconds, because a genuinely wedged socket is exactly
+# the one that would otherwise hang the clearer called to free it.
+#
+# There is no override flag for this refusal, on purpose. A live tunnel is
+# released by closing the session holding it, and a switch that skipped the
+# probe would just be the habit the probe exists to stop.
+if curl -s -o /dev/null -m 3 "http://127.0.0.1:$PORT/" 2>/dev/null; then
+    err "port $PORT is carrying a live tunnel: something answered HTTP on it just now."
+    err "Killing the holder would take the browser away from whoever is using it."
+    err "If the tunnel really is finished with, close the SSH session holding the"
+    err "forward - on the laptop that is stop.ps1 - and this port frees itself."
+    exit 7
+fi
 
 # ss -lntp line format includes users:(("<name>",pid=<pid>,fd=<fd>))
 pid=$(printf '%s' "$line" | grep -oE 'pid=[0-9]+' | head -n1 | cut -d= -f2)

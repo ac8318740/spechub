@@ -200,6 +200,13 @@ while ($true) {
     try {
         $proc = Start-Process -FilePath $sshExe -ArgumentList $sshArgs -NoNewWindow -PassThru `
             -RedirectStandardError $errFile -RedirectStandardOutput $outFile
+        # Touching .Handle caches the native process handle in this object. Without
+        # -Wait, Start-Process does not hold one open, so Windows releases the
+        # handle the moment ssh exits and $proc.ExitCode below reads $null - which
+        # every log line then renders as [] or, through Write-Log's [int] parameter,
+        # as a flat [0]. Every ssh failure reported success. WaitForExit() does not
+        # rescue it; by then the handle is already gone.
+        $null = $proc.Handle
     } catch {
         Write-Log -State 'error' -ExitCode 1 -Message "Could not start ${sshExe}: $($_.Exception.Message)"
     }

@@ -2419,6 +2419,9 @@ fi
 # "before" is a thing the test can see rather than assume.
 cat > "$OWORK/bin/free-port-stub" <<FP
 #!/bin/sh
+# Advertises --port the way the shipped clearer does, so the caller's
+# older-version check reads this stub as current and still clears both ports.
+case "\${1:-}" in --port) ;; esac
 printf 'free-port [%s]\n' "\$*" >> "$OWORK/opener.log"
 exit 0
 FP
@@ -2462,6 +2465,58 @@ if grep -q '^bridge-restart both$' "$OWORK/opener.log" \
   ok "a missing port clearer is a warning, not a refusal to restart"
 else
   no "a missing port clearer is a warning, not a refusal to restart (err: $err)"
+fi
+
+# An installed clearer that predates --port is the awkward case between the two
+# above: it exists, so the missing-file warning never fires, but it only knows
+# how to free 19988. Called bare it would clear the bridge port twice and never
+# touch 19989 - and worse, the caller would read two successes and believe both
+# ports were freed. The version is the thing to report; guessing is not.
+cat > "$OWORK/bin/free-port-old" <<'FP'
+#!/bin/sh
+printf 'oldclearer [%s]\n' "$*" >> OWORKLOG
+exit 0
+FP
+sed -i "s|OWORKLOG|$OWORK/opener.log|" "$OWORK/bin/free-port-old"
+chmod +x "$OWORK/bin/free-port-old"
+
+: > "$OWORK/opener.log"
+err=$(obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL=http://127.0.0.1:1 \
+        SPECHUB_FREE_PORT="$OWORK/bin/free-port-old" spechub-bridge fix both 2>&1 >/dev/null)
+if ! grep -q '^oldclearer ' "$OWORK/opener.log" \
+   && printf '%s' "$err" | grep -qi 'older' \
+   && printf '%s' "$err" | grep -qF "$OWORK/bin/free-port-old" \
+   && grep -q '^bridge-restart both$' "$OWORK/opener.log"; then
+  ok "a clearer with no --port support is reported as older, not called bare"
+else
+  no "a clearer with no --port support is reported as older, not called bare (log: $(tr '\n' '|' < "$OWORK/opener.log"), err: $(printf '%s' "$err" | tr '\n' '|'))"
+fi
+
+# The other way the same clearer announces its age: it takes the flag, sees an
+# argument it does not know, and exits 64 - the usage code. That is not "the
+# port could not be freed", and retrying without the flag would clear the wrong
+# port. Same verdict, reached from the exit status instead of the text.
+cat > "$OWORK/bin/free-port-usage64" <<'FP'
+#!/bin/sh
+printf 'usage64 [%s]\n' "$*" >> OWORKLOG
+case "${1:-}" in
+  --port) exit 64 ;;
+esac
+exit 0
+FP
+sed -i "s|OWORKLOG|$OWORK/opener.log|" "$OWORK/bin/free-port-usage64"
+chmod +x "$OWORK/bin/free-port-usage64"
+
+: > "$OWORK/opener.log"
+err=$(obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL=http://127.0.0.1:1 \
+        SPECHUB_FREE_PORT="$OWORK/bin/free-port-usage64" spechub-bridge fix both 2>&1 >/dev/null)
+if ! grep -qE '^usage64 \[\]$' "$OWORK/opener.log" \
+   && printf '%s' "$err" | grep -qi 'older' \
+   && printf '%s' "$err" | grep -qF "$OWORK/bin/free-port-usage64" \
+   && grep -q '^bridge-restart both$' "$OWORK/opener.log"; then
+  ok "a clearer that exits 64 on --port is reported as older, not retried bare"
+else
+  no "a clearer that exits 64 on --port is reported as older, not retried bare (log: $(tr '\n' '|' < "$OWORK/opener.log"), err: $(printf '%s' "$err" | tr '\n' '|'))"
 fi
 
 # Two tunnels, two verdicts. A relay that came back says nothing about the

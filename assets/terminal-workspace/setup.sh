@@ -1393,7 +1393,26 @@ clear_port() {  # clear_port <port> - let go of a forward this machine still hol
     echo "no port clearer at $FREE_PORT - asking for the restart without freeing $1 first." >&2
     return 0
   fi
-  if ! bash "$FREE_PORT" --port "$1" >/dev/null 2>&1; then
+  #
+  # A clearer that predates --port is the awkward case in between: it exists,
+  # so the missing-file warning never fires, but it only knows how to free
+  # 19988. Called bare it would clear the bridge port twice, never touch 19989,
+  # and hand back two successes - so the caller would believe both ports were
+  # freed. Report the version and clear nothing; guessing is worse than saying.
+  # It announces its age two ways: the flag is nowhere in its text, or it takes
+  # the flag, does not recognise the argument, and exits 64 - the usage code,
+  # which is not "the port is stuck" and is not worth a retry without the flag.
+  local older="is older than this branch, so it cannot free $1 on request."
+  local fix="Update spechub on this machine to refresh it. Asking for the restart anyway."
+  if ! grep -q -- '--port' "$FREE_PORT" 2>/dev/null; then
+    echo "$FREE_PORT $older It has no --port support at all. $fix" >&2
+    return 0
+  fi
+  local rc=0
+  bash "$FREE_PORT" --port "$1" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" = "64" ]; then
+    echo "$FREE_PORT $older It refused --port with the usage code 64. $fix" >&2
+  elif [ "$rc" != "0" ]; then
     echo "$FREE_PORT could not free $1 - asking for the restart anyway." >&2
   fi
 }

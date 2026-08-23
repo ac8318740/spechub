@@ -201,6 +201,21 @@ with a clear reason. Common outcomes:
 - **Holder is an `sshd` forward channel, now orphaned** – the script
   kills it. `ClientAliveInterval` would have prevented this; consider
   adding the config from step 4.
+- **"port 19988 is carrying a live tunnel"** – the script refuses and
+  exits non-zero without killing anything. Before it looks at the holder
+  at all it asks the port for an HTTP response, bounded at 3 seconds. Any
+  answer counts as alive. It asks the port rather than the process because
+  a non-root `ss` cannot name who owns someone else's socket. A 401 or a 404 comes from a CDP
+  endpoint that is serving; only silence means a half-open forward.
+
+That last refusal matters because the amber `Tunnel logs` row trails five
+minutes behind the log line that raised it. A tunnel often wedges and then
+heals itself while the row stays amber. So the ordinary way to reach this
+script is to read advice about a forward that has already come back. Running
+it then costs nothing.
+
+No flag overrides the refusal. To free a port that a live forward holds,
+close the session holding it: on the laptop, run `stop.ps1`.
 
 After clearing, confirm:
 

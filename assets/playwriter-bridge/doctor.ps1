@@ -289,8 +289,11 @@ if ($stuckHosts.Count -eq 0 -and $authHosts.Count -eq 0 -and $hostKeyHosts.Count
         $who = ($retryHosts | ForEach-Object { $_.Label }) -join ', '
         $free = ($retryHosts | ForEach-Object { "bash ~/.claude/spechub/bin/vm-free-port.sh --port $($_.Port)" } |
             Select-Object -Unique) -join ' ; '
+        # The window trails five minutes, so the row can still be amber after the
+        # tunnel has quietly rebound. Say that the clearer is safe anyway: it
+        # probes the port first and refuses a forward that still answers.
         Add-Result 'Tunnel logs' 'amber' "tunnel retrying in the last 5 min: $who (no marker yet)" `
-            "stuck-retry: the VM still holds the forward - run on that VM: $free. start-failed: ssh never launched on this laptop - kill any orphaned ssh.exe holding the tunnel log files."
+            "stuck-retry: the VM still holds the forward - run on that VM: $free. Safe to run even if the tunnel has already rebound: vm-free-port.sh refuses a live forward instead of killing it. start-failed: ssh never launched on this laptop - kill any orphaned ssh.exe holding the tunnel log files."
     } else {
         Add-Result 'Tunnel logs' 'green' 'no stuck markers, no tunnel retrying a held port'
     }

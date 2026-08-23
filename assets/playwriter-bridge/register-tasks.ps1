@@ -287,22 +287,15 @@ foreach ($vm in $VMs) {
     }
 }
 
-Write-Host ""
-Write-Host "Starting tasks..."
-Start-ScheduledTask -TaskName "Playwriter-Relay"
-Start-ScheduledTask -TaskName "Playwriter-Opener"
-Start-Sleep -Seconds 2
-for ($i = 0; $i -lt $VMs.Count; $i++) {
-    Start-ScheduledTask -TaskName "Playwriter-Tunnel-VM$($i + 1)"
-    Start-ScheduledTask -TaskName "Playwriter-OpenerTunnel-VM$($i + 1)"
-}
-
 # Tasks whose VM is not in -VMs. A re-run with a shorter list leaves the earlier
 # tunnels registered and untouched: this script removes nothing. The case that
 # matters is a VM behind a VPN that was down at registration time. Its
 # Playwriter-Tunnel-VM2 must survive a re-run that could not reach it, because
 # dropping the task would silently drop that VM from the bridge - and the user
 # would find out the next time they needed a browser on it.
+#
+# Reported here rather than after the start loop, because a warning printed
+# under "Starting tasks..." reads as a task that failed to start.
 $leftover = @()
 foreach ($t in @(Get-ScheduledTask -TaskName 'Playwriter-Tunnel-*','Playwriter-OpenerTunnel-*' -ErrorAction SilentlyContinue)) {
     # The VM is in the action arguments, not the task name: an index-based guess
@@ -320,6 +313,16 @@ if ($leftover.Count -gt 0) {
     foreach ($l in $leftover) {
         Write-Warning ("Left alone: task '{0}' forwards to {1}, which is not in -VMs. It stays registered and keeps running. This script removes nothing. Re-run with {1} in -VMs to update it, or delete the task yourself in Task Scheduler." -f $l.Name, $l.Target)
     }
+}
+
+Write-Host ""
+Write-Host "Starting tasks..."
+Start-ScheduledTask -TaskName "Playwriter-Relay"
+Start-ScheduledTask -TaskName "Playwriter-Opener"
+Start-Sleep -Seconds 2
+for ($i = 0; $i -lt $VMs.Count; $i++) {
+    Start-ScheduledTask -TaskName "Playwriter-Tunnel-VM$($i + 1)"
+    Start-ScheduledTask -TaskName "Playwriter-OpenerTunnel-VM$($i + 1)"
 }
 
 Write-Host "Done. Logs: $env:LOCALAPPDATA\playwriter-bridge\"

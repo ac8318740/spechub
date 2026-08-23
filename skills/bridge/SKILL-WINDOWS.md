@@ -210,13 +210,29 @@ All tasks run at user logon from now on. Logs land in
 lingering bridge processes. It then checks that port 19988 and port 19989 are
 both free, and prints a verdict line.
 
-### Restart a single tunnel
+### Restart a tunnel
 
 ```powershell
-Stop-ScheduledTask Playwriter-Tunnel-VM1
-Start-ScheduledTask Playwriter-Tunnel-VM1
+.\stop.ps1
+Start-ScheduledTask -TaskName 'Playwriter-Relay'
+Start-ScheduledTask -TaskName 'Playwriter-Opener'
+Get-ScheduledTask -TaskName 'Playwriter-Tunnel-*','Playwriter-OpenerTunnel-*' |
+  ForEach-Object { Start-ScheduledTask -TaskName $_.TaskName }
 .\doctor.ps1
 ```
+
+Do not restart one tunnel with a bare `Stop-ScheduledTask` and
+`Start-ScheduledTask`. Task Scheduler stops the task, not the process tree
+under it. The old supervisor and its `ssh.exe` stay alive, still holding the
+reverse forward, so the instance you just started never binds the port.
+Meanwhile `/health` answers 200 off the orphan, so the bridge looks healthy
+and drives nothing. Measured on `Playwriter-Tunnel-VM1`: supervisor 38296
+survived the stop. Its `ssh.exe` 5108 kept `-R 19989` open, so the new
+instance 36408 never got the port.
+
+`stop.ps1` is the only stop that reaps the tree, so it is the one to reach
+for even when a single tunnel is what needs restarting. It stops every
+`Playwriter-*` task, which is why the recipe starts them all again.
 
 ### Updates (automatic)
 
@@ -340,9 +356,14 @@ at logon. Two in-process tricks do not solve this on modern Windows:
 The fix is `launcher.exe`, a small C# `WindowsApplication`. It starts the
 child with `CreateNoWindow = true`, so `CREATE_NO_WINDOW` propagates and
 Windows attaches no console. The launcher also waits for the child. It
-propagates the child's exit code. It kills the descendant process tree on
-shutdown through WMI. That last part is why `Stop-ScheduledTask` now takes
-the whole bridge down cleanly.
+propagates the child's exit code. When it shuts down on its own it kills the
+descendant process tree through WMI.
+
+That last part does not fire under `Stop-ScheduledTask`. Measured twice:
+Task Scheduler force-terminates `launcher.exe`, so the `ProcessExit` handler
+never runs, the WMI kill never happens, and the children outlive the task.
+`stop.ps1`, `sync.ps1` and `register-tasks.ps1` each reap the tree themselves
+for that reason. Anything you stop by hand has to go through `stop.ps1` too.
 
 The plugin ships the launcher as source on purpose, not as a prebuilt
 binary. Each user compiles their own, so no unsigned third-party `.exe`
