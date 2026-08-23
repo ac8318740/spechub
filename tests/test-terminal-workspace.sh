@@ -2407,6 +2407,82 @@ else
   no "spechub-bridge fix fails when the restart did not bring the relay back"
 fi
 
+
+# --- clearing this machine's ports before the laptop is asked to restart -----
+# A tunnel that will not rebind is usually held from this side: the VM's sshd
+# still owns the forward channel of a session that dropped. Restarting the task
+# on the laptop then fails exactly the way it failed before, because nothing
+# here let go of the port. So the clearing happens first - and for both ports,
+# because the opener's 19989 is forwarded by its own task and wedges on its own.
+#
+# The clearer is recorded into the opener's log rather than a log of its own, so
+# "before" is a thing the test can see rather than assume.
+cat > "$OWORK/bin/free-port-stub" <<FP
+#!/bin/sh
+printf 'free-port [%s]\n' "\$*" >> "$OWORK/opener.log"
+exit 0
+FP
+chmod +x "$OWORK/bin/free-port-stub"
+
+: > "$OWORK/opener.log"
+obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL=http://127.0.0.1:1 \
+  SPECHUB_FREE_PORT="$OWORK/bin/free-port-stub" spechub-bridge fix both >/dev/null 2>&1
+fp_count=$(grep -c '^free-port ' "$OWORK/opener.log")
+last_fp=$(grep -n '^free-port ' "$OWORK/opener.log" | tail -1 | cut -d: -f1)
+first_restart=$(grep -n '^bridge-restart ' "$OWORK/opener.log" | head -1 | cut -d: -f1)
+if [ "$fp_count" = "2" ] \
+   && grep -qxF 'free-port [--port 19989]' "$OWORK/opener.log" \
+   && grep -qE '^free-port \[(|--port 19988)\]$' "$OWORK/opener.log" \
+   && [ -n "$last_fp" ] && [ -n "$first_restart" ] && [ "$last_fp" -lt "$first_restart" ]; then
+  ok "spechub-bridge fix clears 19988 and 19989 here before asking for a restart"
+else
+  no "spechub-bridge fix clears 19988 and 19989 here before asking for a restart (log: $(tr '\n' '|' < "$OWORK/opener.log"))"
+fi
+
+# fix relay touches no tunnel, so clearing a forwarded port would be tearing
+# down a working connection to fix something else.
+: > "$OWORK/opener.log"
+obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL=http://127.0.0.1:1 \
+  SPECHUB_FREE_PORT="$OWORK/bin/free-port-stub" spechub-bridge fix relay >/dev/null 2>&1
+if ! grep -q '^free-port ' "$OWORK/opener.log" \
+   && grep -q '^bridge-restart relay$' "$OWORK/opener.log"; then
+  ok "spechub-bridge fix relay leaves the forwarded ports alone"
+else
+  no "spechub-bridge fix relay leaves the forwarded ports alone (log: $(tr '\n' '|' < "$OWORK/opener.log"))"
+fi
+
+# The clearer ships with spechub and may simply not be installed on a machine
+# that got the terminal workspace some other way. That is worth saying, but it
+# is not a reason to refuse the restart - which may be all that was needed.
+: > "$OWORK/opener.log"
+err=$(obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL=http://127.0.0.1:1 \
+        SPECHUB_FREE_PORT="$OWORK/no-such-clearer" spechub-bridge fix both 2>&1 >/dev/null)
+if grep -q '^bridge-restart both$' "$OWORK/opener.log" \
+   && printf '%s' "$err" | grep -qF "$OWORK/no-such-clearer"; then
+  ok "a missing port clearer is a warning, not a refusal to restart"
+else
+  no "a missing port clearer is a warning, not a refusal to restart (err: $err)"
+fi
+
+# Two tunnels, two verdicts. A relay that came back says nothing about the
+# opener, and an opener that stayed down is the half that leaves this machine
+# unable to reach a browser at all - so it has to be checked, and named.
+relay_up '[{"id":"1","type":"page","url":"https://example.com"}]'
+: > "$OWORK/opener.log"
+( sleep 2; kill "$OPENER_PID" 2>/dev/null ) &
+killer=$!
+out=$(obare env SPECHUB_OPENER_URL="$OURL" SPECHUB_BRIDGE_URL="$BURL" \
+        SPECHUB_FREE_PORT="$OWORK/bin/free-port-stub" spechub-bridge fix both 2>&1)
+rc=$?
+wait "$killer" 2>/dev/null
+kill "$RELAY_PID" 2>/dev/null; wait "$RELAY_PID" 2>/dev/null
+rm -f "$WORK/relay.port"
+if [ "$rc" != "0" ] && printf '%s' "$out" | grep -q '19989'; then
+  ok "spechub-bridge fix fails and names 19989 when the opener did not come back"
+else
+  no "spechub-bridge fix fails and names 19989 when the opener did not come back (rc=$rc, out: $(printf '%s' "$out" | tr '\n' '|'))"
+fi
+
 opener_down
 
 block=$(obare env SPECHUB_OPENER_URL=http://127.0.0.1:1 spechub-bridge fix both 2>&1)
@@ -2441,6 +2517,105 @@ if [ -f "$FREEPORT" ]; then
   else
     no "vm-free-port.sh accepts the bridge and opener ports and refuses every other ($a/$b/$c/$d/$e)"
   fi
+fi
+
+
+
+echo "the opener's bridge restart"
+# The two forwards are separate scheduled tasks - Playwriter-Tunnel-<host>
+# carries the relay's 19988, Playwriter-OpenerTunnel-<host> the opener's 19989 -
+# because ExitOnForwardFailure means one wedged port on a shared connection
+# would take both down. That split is why "restart the tunnel" cannot mean one
+# pattern: 'Playwriter-Tunnel*' does not match the opener's task name, so a fix
+# that only asked for it would leave the opener's forward dead and the VM with
+# no way to reach a browser.
+#
+# This drives the real opener.js. It shells out to powershell.exe by name, so a
+# recording stand-in first on PATH shows which task patterns it asked for, on a
+# machine that has no PowerShell at all.
+OPENER_JS="$ROOT/assets/playwriter-bridge/opener.js"
+if ! command -v node >/dev/null 2>&1; then
+  skip "the opener restarts both tunnel tasks for what=tunnel"
+  skip "the opener restarts only the relay for what=relay"
+  skip "the opener restarts everything for what=both"
+else
+NWORK="$WORK/opener-node"
+mkdir -p "$NWORK/bin" "$NWORK/state/playwriter-bridge"
+NTOKEN="node-token-0123456789"
+printf '%s' "$NTOKEN" > "$NWORK/state/playwriter-bridge/opener.token"
+PSLOG="$NWORK/powershell.log"
+
+cat > "$NWORK/bin/powershell.exe" <<PSFAKE
+#!/bin/sh
+# Every argument on its own line, so the -Command text can be grepped whole.
+# Answers the way Get-ScheduledTask piped into ForEach-Object does: task names,
+# one per line.
+{ echo "--- invocation ---"; for a in "\$@"; do printf '%s\n' "\$a"; done; } >> "$PSLOG"
+echo Playwriter-Relay
+exit 0
+PSFAKE
+chmod +x "$NWORK/bin/powershell.exe"
+
+NPORT=$(python3 -c 'import socket
+s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+env PATH="$NWORK/bin:$PATH" LOCALAPPDATA="$NWORK/state" SPECHUB_OPENER_PORT="$NPORT" \
+  node "$OPENER_JS" >/dev/null 2>&1 &
+NODE_PID=$!
+i=0
+while [ "$i" -lt 80 ] && ! curl -fsS -m 2 -H "X-Spechub-Token: $NTOKEN" \
+      "http://127.0.0.1:$NPORT/health" >/dev/null 2>&1; do
+  i=$((i + 1)); sleep 0.1
+done
+
+nrestart() {  # nrestart <what> -> every PowerShell command it caused, on stdout
+  : > "$PSLOG"
+  curl -fsS -m 15 -X POST -H "X-Spechub-Token: $NTOKEN" \
+    -H 'Content-Type: application/json' --data "$(printf '{"what":"%s"}' "$1")" \
+    "http://127.0.0.1:$NPORT/bridge/restart" >/dev/null 2>&1
+  cat "$PSLOG" 2>/dev/null
+}
+
+asked=$(nrestart tunnel)
+if printf '%s' "$asked" | grep -qF 'Playwriter-Tunnel*' \
+   && printf '%s' "$asked" | grep -qF 'Playwriter-OpenerTunnel*'; then
+  ok "the opener restarts both tunnel tasks for what=tunnel"
+else
+  no "the opener restarts both tunnel tasks for what=tunnel (asked: $(printf '%s' "$asked" | tr '\n' '|'))"
+fi
+
+# The relay is not a tunnel. Restarting it must not take either forward down
+# with it, which is the whole reason for asking for one thing at a time.
+asked=$(nrestart relay)
+if printf '%s' "$asked" | grep -qF 'Playwriter-Relay' \
+   && ! printf '%s' "$asked" | grep -qF 'Tunnel'; then
+  ok "the opener restarts only the relay for what=relay"
+else
+  no "the opener restarts only the relay for what=relay (asked: $(printf '%s' "$asked" | tr '\n' '|'))"
+fi
+
+# both means the relay and both tunnels - not everything under the prefix. The
+# opener itself runs as Playwriter-Opener, so a bare 'Playwriter-*' stops the
+# process that is serving this very request: the VM never gets a reply, and the
+# one service that could have restarted anything is now down. Every task-name
+# pattern asked for is matched against Playwriter-Opener here, so a future
+# 'Playwriter-Opener*' is caught the same way the wildcard is.
+asked=$(nrestart both)
+cmd=$(printf '%s\n' "$asked" | grep -F 'Get-ScheduledTask')
+selfkill=""
+for pat in $(printf '%s' "$cmd" | grep -o "'[^']*'" | tr -d "'"); do
+  case "Playwriter-Opener" in $pat) selfkill="$selfkill $pat" ;; esac
+done
+if printf '%s' "$cmd" | grep -qF 'Playwriter-Relay' \
+   && printf '%s' "$cmd" | grep -qF 'Playwriter-Tunnel*' \
+   && printf '%s' "$cmd" | grep -qF 'Playwriter-OpenerTunnel*' \
+   && [ -z "$selfkill" ]; then
+  ok "what=both restarts the relay and both tunnels, never the opener itself"
+else
+  no "what=both restarts the relay and both tunnels, never the opener itself (self-killing patterns:${selfkill:- none}; asked: $(printf '%s' "$cmd" | tr '\n' '|'))"
+fi
+
+kill "$NODE_PID" 2>/dev/null
+wait "$NODE_PID" 2>/dev/null
 fi
 
 

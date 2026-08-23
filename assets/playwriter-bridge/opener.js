@@ -279,11 +279,23 @@ const server = http.createServer(async (req, res) => {
     if (p === '/bridge/restart' && req.method === 'POST') {
       const body = JSON.parse((await readBody(req, 4096)).toString('utf8') || '{}');
       const what = String(body.what || 'both');
-      const pattern = what === 'relay' ? 'Playwriter-Relay*'
-        : what === 'tunnel' ? 'Playwriter-Tunnel*'
-        : 'Playwriter-*';
+      // The two forwards are separate scheduled tasks - Playwriter-Tunnel-VM<n>
+      // carries the relay's 19988, Playwriter-OpenerTunnel-VM<n> the opener's
+      // 19989 - because ExitOnForwardFailure means one wedged port on a shared
+      // connection would take both down. So "restart the tunnel" is two
+      // patterns: 'Playwriter-Tunnel*' does not match the opener's task name,
+      // and asking for it alone would leave the opener's forward dead and the
+      // VM with no way to reach a browser.
+      // 'both' is the relay and both tunnels, never everything under the
+      // prefix: the opener itself runs as Playwriter-Opener, so 'Playwriter-*'
+      // would stop the process serving this very request. The VM would get no
+      // reply, and the one service that can restart anything would be down.
+      const patterns = what === 'relay' ? ['Playwriter-Relay*']
+        : what === 'tunnel' ? ['Playwriter-Tunnel*', 'Playwriter-OpenerTunnel*']
+        : ['Playwriter-Relay', 'Playwriter-Tunnel*', 'Playwriter-OpenerTunnel*'];
+      const taskNames = patterns.map((x) => `'${x}'`).join(',');
       const r = await runPowerShell(
-        `Get-ScheduledTask -TaskName '${pattern}' | ForEach-Object { Stop-ScheduledTask -TaskName $_.TaskName -ErrorAction SilentlyContinue; Start-ScheduledTask -TaskName $_.TaskName; $_.TaskName }`);
+        `Get-ScheduledTask -TaskName ${taskNames} -ErrorAction SilentlyContinue | ForEach-Object { Stop-ScheduledTask -TaskName $_.TaskName -ErrorAction SilentlyContinue; Start-ScheduledTask -TaskName $_.TaskName; $_.TaskName }`);
       log(`bridge restart ${what}: ok=${r.ok}`);
       return json(res, r.ok ? 200 : 500, { restarted: r.stdout.trim().split(/\r?\n/).filter(Boolean), error: r.ok ? null : r.stderr.trim() });
     }

@@ -68,13 +68,15 @@ dead client, which takes `ClientAliveInterval × ClientAliveCountMax`
 seconds. Until then the laptop's reconnect hits
 `remote port forwarding failed`.
 
-The Windows `tunnel.ps1` retries a stuck port for ~10 min, so the bridge
-self-heals as long as the reap happens inside that window. Two cases
-still break it:
+The Windows `tunnel.ps1` retries a stuck port forever. It waits 30 s, then
+doubles the wait to a 120 s cap. The bridge therefore self-heals whenever
+the reap happens. What keepalive changes is how long that takes:
 
 - **Keepalive disabled** (`ClientAliveInterval 0`) – the orphan never
-  reaps, the port stays wedged, and the tunnel gives up after ~10 min.
-  Self-heal is impossible.
+  reaps and the port stays wedged until someone frees it by hand. The
+  tunnel keeps retrying, and writes `tunnel-<host>[-<port>].stuck` after
+  8 consecutive stuck attempts (~11 min) so `doctor.ps1` reports it in red.
+  Run `vm-free-port.sh` and the next attempt binds. You restart nothing.
 - **Keepalive very loose** – recovery is slow. A default Azure / cloud
   image ships `ClientAliveInterval 120` (≈360 s reap); the runbook value
   of 30 (≈90 s) recovers about 4× faster.
@@ -174,6 +176,11 @@ Symptom: the Windows `tunnel-<this-host>.log` shows
 `remote port forwarding failed for listen port 19988` repeatedly, or
 `ss -lnt 'sport = :19988'` shows an `sshd` bound but the relay is
 unreachable.
+
+The Windows agent sees this first. `doctor.ps1` turns its `Tunnel logs` row
+amber as soon as `tunnel-*.log` carries a `stuck-retry` line under 5 minutes
+old. The row names the host and the port. It goes red later, once the marker
+lands. Either colour gives you the same instruction below.
 
 Run:
 

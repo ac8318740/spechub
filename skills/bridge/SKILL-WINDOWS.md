@@ -9,6 +9,8 @@
   on `127.0.0.1:19988`.
 - The Playwriter Chrome extension that attaches to individual tabs.
 - One reverse SSH tunnel per VM (`tunnel.ps1 -TargetHost <host>`).
+- The document opener (`opener.ps1`) on `127.0.0.1:19989`, and its own
+  tunnel per VM. See [The document opener](#the-document-opener).
 - The scheduled tasks that keep those running across logons.
 - `ssh-agent` holding the key that authenticates the tunnels.
 
@@ -105,9 +107,14 @@ Copy every file from the plugin into `%USERPROFILE%\playwriter-bridge\`:
 - `build-launcher.ps1`
 - `relay.ps1`
 - `tunnel.ps1`
+- `opener.ps1`
+- `opener.js`
 - `register-tasks.ps1`
 - `stop.ps1`
 - `doctor.ps1`
+
+`register-tasks.ps1` refuses to run when `relay.ps1`, `tunnel.ps1`,
+`opener.ps1` or `opener.js` is missing from this directory.
 
 They live in the plugin at `plugins/spechub/assets/playwriter-bridge/`.
 The same directory holds `vm-free-port.sh`, which belongs on the VM. You
@@ -148,15 +155,35 @@ the VM-side agent to fix `authorized_keys`.
 Pass every VM you want a tunnel to. Add `-TunnelUser dev` if your SSH
 username on the VMs is not the same as your Windows username.
 
-The script registers `Playwriter-Relay` plus one `Playwriter-Tunnel-VM<N>`
-per VM under `LogonType Interactive` with `RunLevel Limited`, each action
-invoking `launcher.exe`. The task restart policy is a small backstop only
-(2 retries, 5 min apart) – the scripts themselves own resilience.
+The script registers four kinds of task under `LogonType Interactive` with
+`RunLevel Limited`. Each action invokes `launcher.exe`.
+
+| Task | Runs |
+| --- | --- |
+| `Playwriter-Relay` | `relay.ps1`, one only |
+| `Playwriter-Opener` | `opener.ps1`, one only |
+| `Playwriter-Tunnel-VM<N>` | `tunnel.ps1 -TargetHost <vm>`, one per VM |
+| `Playwriter-OpenerTunnel-VM<N>` | `tunnel.ps1 -TargetHost <vm> -Port 19989` |
+
+The task restart policy is a small backstop only (2 retries, 5 min apart) –
+the scripts themselves own resilience.
 
 Fresh installs work from a regular PowerShell. `Register-ScheduledTask`
 fails with `Access is denied` when you replace tasks that you registered
 earlier from an elevated shell. Re-run the script from an elevated
-PowerShell in that case.
+PowerShell in that case. Elevation is a property of the earlier
+registration, not of the script.
+
+To validate a change from a checkout, deploy it first:
+
+```powershell
+.\sync.ps1 -PluginRoot <checkout>
+.\register-tasks.ps1 -VMs @("vm1.example.com")
+```
+
+`register-tasks.ps1` reads `opener.ps1` and `opener.js` from the deploy
+directory, never from the checkout. Run it before `sync.ps1` and it
+validates the files you just replaced.
 
 All tasks run at user logon from now on. Logs land in
 `%LOCALAPPDATA%\playwriter-bridge\`.
@@ -169,7 +196,7 @@ All tasks run at user logon from now on. Logs land in
 .\doctor.ps1
 ```
 
-`doctor.ps1` reports six checks. It exits 0 when every check is green, and
+`doctor.ps1` reports nine checks. It exits 0 when every check is green, and
 1 when any check is red. When a red row implies VM-side action,
 `doctor.ps1` prints a ready-to-paste handoff block.
 
@@ -179,8 +206,9 @@ All tasks run at user logon from now on. Logs land in
 .\stop.ps1
 ```
 
-`stop.ps1` stops all `Playwriter-*` tasks, kills lingering bridge
-processes, and checks that port 19988 is free. It prints a verdict line.
+`stop.ps1` stops all `Playwriter-*` tasks, which covers the opener. It kills
+lingering bridge processes. It then checks that port 19988 and port 19989 are
+both free, and prints a verdict line.
 
 ### Restart a single tunnel
 
@@ -213,6 +241,54 @@ In Chrome, open the Playwriter Dev profile. Click the Playwriter toolbar
 icon on each tab you want the VM to automate. Playwriter attaches per tab.
 It cannot attach to `chrome://` and `about:` pages.
 
+## The document opener
+
+The opener shows a page from a dev VM in this laptop's default browser. It is
+a second service, not part of the bridge. The bridge carries CDP to a Chrome
+the extension drives. The opener takes a document and opens a tab. See
+`docs/adr/0004-document-opener-service.md` for why these stay apart.
+
+Two tasks run it:
+
+- `Playwriter-Opener` runs `opener.ps1`. That script supervises `opener.js`
+  on Node, restarts it when it exits, and logs to
+  `%LOCALAPPDATA%\playwriter-bridge\opener-supervisor.log`. `opener.js`
+  listens on `127.0.0.1:19989`.
+- `Playwriter-OpenerTunnel-VM<N>` runs `tunnel.ps1 -TargetHost <vm> -Port
+  19989`. Each VM gets its own. The opener never shares the bridge's
+  connection, because `ExitOnForwardFailure=yes` makes one wedged port fail
+  the whole `ssh`. A stuck 19989 would take the bridge down with it.
+
+### The opener token
+
+Every request from a VM carries a shared secret. `register-tasks.ps1`
+generates it, stores it at `%LOCALAPPDATA%\playwriter-bridge\opener.token`,
+and pushes it over `ssh` to `~/.config/spechub/opener.token` on each VM.
+
+The token is not optional. The reverse tunnel makes 19989 reachable by
+anything running on the VM, and this service puts pages on your screen.
+Loopback binding alone does not scope that.
+
+`register-tasks.ps1` warns and continues when a push fails. Copy the file to
+that VM by hand in this case.
+
+### What doctor.ps1 reports
+
+Three of the nine rows cover the opener:
+
+| Row | Green when |
+| --- | --- |
+| `Opener listening on 19989` | a process listens on `127.0.0.1:19989` |
+| `Opener token` | the token file exists on this laptop |
+| `Opener /health` | `opener.js` answers HTTP 200 |
+
+The token row reports only this laptop's copy. It cannot see whether a VM
+holds the same one. A VM that gets HTTP 401 has a stale copy, so re-run
+`register-tasks.ps1` to push it again.
+
+`stop.ps1` covers the opener too. It stops every `Playwriter-*` task, and it
+checks 19989 alongside 19988.
+
 ## Resilience behaviour
 
 `tunnel.ps1` sorts an ssh failure into three kinds and reacts to each:
@@ -224,21 +300,28 @@ It cannot attach to `chrome://` and `about:` pages.
   session lands here, so the tunnel reconnects on its own. Laptop sleep, a
   wifi roam and a VPN flap all drop a session that way.
 - **Stuck remote port** (`remote port forwarding failed for listen port
-  19988`) – the VM still holds the port through the dropped session's
-  orphaned forward channel. For about 10 min, `tunnel.ps1` retries every
-  30 s. That span outlasts the VM's `sshd` reap window, so the bridge heals
-  itself without a restart. If the VM still holds the port after that,
-  `tunnel.ps1` writes `tunnel-<host>.stuck` and exits. The port is then
-  genuinely stuck, either through a holder other than `sshd` or through
-  keepalive turned off on the VM.
+  19988`). The dropped session left an orphaned forward channel, and the VM
+  still holds the port through it. `tunnel.ps1` retries this one forever. It
+  waits 30 s, then doubles the wait to a 120 s cap. Those waits outlast the
+  VM's `sshd` reap window, so the bridge heals itself without a restart.
 - **Auth or host-key failure** – `tunnel.ps1` writes the marker and exits
   at once. These failures need user action. Retrying only floods the log.
 
-A genuinely stuck port, an auth failure or a host-key failure makes
-`tunnel.ps1` exit and lands the task in `Ready`. The Scheduler backstop then
-retries twice, 5 min apart. `doctor.ps1` reports which host needs attention.
-A recoverable network drop never reaches that point, because the tunnel loop
-heals it.
+A port held past 8 consecutive stuck attempts, about 11 min, needs a human.
+The holder is not `sshd`, or the VM has keepalive turned off. `tunnel.ps1`
+writes `tunnel-<host>[-<port>].stuck` for `doctor.ps1` to report. It keeps
+retrying underneath it. Free the port on the VM and the next attempt binds.
+`tunnel.ps1` removes the marker once that forward stays up for 30 s.
+
+`doctor.ps1` does not wait for the marker. It turns the `Tunnel logs` row
+amber from the first `stuck-retry` line in `tunnel-*.log`, inside a 5 minute
+window. That is minutes before any marker exists.
+
+An auth failure or a host-key failure makes `tunnel.ps1` exit and lands the
+task in `Ready`. The Scheduler backstop then retries twice, 5 min apart.
+`doctor.ps1` reports which host needs attention. Neither a recoverable
+network drop nor a stuck port reaches that point: the tunnel loop keeps
+working both.
 
 ## How console windows stay hidden
 

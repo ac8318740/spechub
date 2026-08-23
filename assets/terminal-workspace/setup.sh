@@ -1373,11 +1373,30 @@ set -uo pipefail
 BRIDGE="${SPECHUB_BRIDGE_URL:-http://127.0.0.1:19988}"
 OPENER="${SPECHUB_OPENER_URL:-http://127.0.0.1:19989}"
 OPENER_TOKEN="${XDG_CONFIG_HOME:-$HOME/.config}/spechub/opener.token"
+FREE_PORT="${SPECHUB_FREE_PORT:-$HOME/.claude/spechub/bin/vm-free-port.sh}"
 
 CMD="${1:-status}"
 WHAT="${2:-both}"
 
 tok() { cat "$OPENER_TOKEN" 2>/dev/null; }
+
+clear_port() {  # clear_port <port> - let go of a forward this machine still holds
+  # A tunnel that will not rebind is usually held from this side: the VM's sshd
+  # still owns the forward channel of a session that dropped. Restarting the
+  # task on the laptop then fails exactly the way it failed before, because
+  # nothing here let go of the port. So this runs first.
+  #
+  # The clearer ships with spechub and may simply not be installed on a machine
+  # that got the terminal workspace some other way. Worth saying, but not a
+  # reason to refuse the restart, which may be all that was needed.
+  if [ ! -f "$FREE_PORT" ]; then
+    echo "no port clearer at $FREE_PORT - asking for the restart without freeing $1 first." >&2
+    return 0
+  fi
+  if ! bash "$FREE_PORT" --port "$1" >/dev/null 2>&1; then
+    echo "$FREE_PORT could not free $1 - asking for the restart anyway." >&2
+  fi
+}
 
 opener_call() {  # opener_call <method> <path> [data]
   local t; t=$(tok) || return 1
@@ -1454,20 +1473,43 @@ case "$CMD" in
       relay|tunnel|both) ;;
       *) echo "usage: spechub-bridge fix [relay|tunnel|both]" >&2; exit 2 ;;
     esac
+    # A tunnel restart is the only case where a port here is in the way. Both
+    # ports get cleared, because the opener's 19989 is forwarded by its own task
+    # and wedges on its own. fix relay touches no tunnel, so clearing a port
+    # there would be tearing down a working connection to fix something else.
+    if [ "$WHAT" != "relay" ]; then
+      clear_port 19988
+      clear_port 19989
+    fi
     if out=$(opener_call POST /bridge/restart "$(printf '{"what":"%s"}' "$WHAT")"); then
       echo "asked the laptop to restart: $WHAT"
       printf '%s\n' "$out"
-      # Restarting is not recovering. Give the tunnel a moment to rebind, then
-      # say whether it actually came back rather than reporting the request.
+      # Restarting is not recovering. Give the tunnels a moment to rebind, then
+      # say whether they actually came back rather than reporting the request.
       sleep 5
+      rc=0
       if curl -fsS --connect-timeout 1 -m 3 "$BRIDGE/json/version" >/dev/null 2>&1; then
         echo "relay is answering again on $BRIDGE"
-        exit 0
+      else
+        echo "the restart was accepted but the relay is still not answering here on 19988." >&2
+        echo "  if this persists the port may be wedged on this machine:" >&2
+        echo "  bash $FREE_PORT --port 19988" >&2
+        rc=1
       fi
-      echo "the restart was accepted but the relay is still not answering here." >&2
-      echo "  if this persists the port may be wedged on this machine:" >&2
-      echo "  bash ~/.claude/spechub/bin/vm-free-port.sh" >&2
-      exit 1
+      # Two tunnels, two verdicts. A relay that came back says nothing about
+      # the opener, and an opener that stayed down is the half that leaves this
+      # machine unable to reach a browser at all - so it is checked, and named.
+      if [ "$WHAT" != "relay" ]; then
+        if opener_call GET /health >/dev/null; then
+          echo "opener is answering again on $OPENER"
+        else
+          echo "the restart was accepted but the opener is still not answering here on 19989." >&2
+          echo "  if this persists the port may be wedged on this machine:" >&2
+          echo "  bash $FREE_PORT --port 19989" >&2
+          rc=1
+        fi
+      fi
+      exit $rc
     fi
     handoff "a restart of $WHAT"
     exit 1

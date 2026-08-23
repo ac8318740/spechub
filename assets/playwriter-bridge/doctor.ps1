@@ -1,6 +1,6 @@
 ﻿# doctor.ps1 – Automated Playwriter bridge diagnosis (Windows side).
 #
-# Runs six checks and prints a colour-coded table with one-line remediation
+# Runs nine checks and prints a colour-coded table with one-line remediation
 # per red row. When a red row implies VM-side action, emits a paste-ready
 # handoff block (see bridge/HANDOFF.md) that the user can hand to a coding
 # agent on the VM.
@@ -49,8 +49,9 @@ if (-not $tasks) {
     #   Stop-ScheduledTask). Expected state is Running, so flag as amber
     #   so the user knows to restart it, not as red.
     # - Ready + non-benign last-result: the task script crashed or hit
-    #   one of our own fatal exit codes (10=stuck-port, 11=auth,
-    #   12=host-key from tunnel.ps1). Flag as red.
+    #   one of our own fatal exit codes (11=auth, 12=host-key from
+    #   tunnel.ps1 - a stuck port no longer exits, it keeps retrying).
+    #   Flag as red.
     # - Any other state (Disabled etc): flag as red.
     #
     # Benign last-result codes for a Ready task:
@@ -184,49 +185,150 @@ if ($openerListener -and (Test-Path $openerToken)) {
 
 # ---- Check 5: tunnel log signatures ---------------------------------------
 
+# tunnel.ps1 names both its log and its marker tunnel-<host> for the bridge's
+# 19988 and tunnel-<host>-<port> for anything else. Stripping only the prefix
+# would leave the host as '<host>-19989', not a machine anyone can ssh to, and
+# would lose the one detail that says which port is wedged.
+function Split-TunnelName {
+    param([string]$BaseName)
+    # Only a port register-tasks.ps1 registers its own tunnel task for can
+    # appear as a suffix, and 19988 never gets one - so the opener's 19989 is
+    # the whole list. Add to it if a third port is ever registered there.
+    $suffixPorts = @(19989)
+    $raw = ($BaseName -replace '^tunnel-', '')
+    $name = $raw
+    $port = 19988
+    if ($raw -match '^(.+)-(\d+)$' -and $suffixPorts -contains [int]$Matches[2]) {
+        $name = $Matches[1]
+        $port = [int]$Matches[2]
+    }
+    return [pscustomobject]@{ Name = $name; Port = $port; Raw = $raw }
+}
+
 $stuckHosts = @()
 $authHosts = @()
 $hostKeyHosts = @()
+$retryHosts = @()
 
 if (Test-Path $logDir) {
     $stuckFiles = Get-ChildItem -Path $logDir -Filter 'tunnel-*.stuck' -ErrorAction SilentlyContinue
     foreach ($f in $stuckFiles) {
         $content = Get-Content $f.FullName -Raw
-        $target = ($f.BaseName -replace '^tunnel-', '')
-        if ($content -match 'remote port forwarding failed') { $stuckHosts += $target }
+        # The split is deliberately narrow: host names end in digits all the
+        # time, and on a bare \d+ the laptop 'alt-p14-12' would become host
+        # 'alt-p14' on port 12, which vm-free-port.sh refuses.
+        $split = Split-TunnelName -BaseName $f.BaseName
+        # .Name, never .Raw: an opener marker's Raw is 'alt-p14-19989', which is
+        # not a machine anyone can ssh to, and the auth and host-key handoffs
+        # below tell a reader to run commands on it.
+        $target = $split.Name
+        $stuckHost = $split.Name
+        $markerPort = $split.Port
+        $suffix = if ($markerPort -eq 19988) { '' } else { "-$markerPort" }
+        $entry = [pscustomobject]@{
+            Name   = $stuckHost
+            Port   = $markerPort
+            Log    = "tunnel-$stuckHost$suffix.log"
+            Marker = $f.FullName
+            Label  = "$stuckHost`:$markerPort"
+        }
+        if ($content -match 'remote port forwarding failed') { $stuckHosts += $entry }
         elseif ($content -match 'Permission denied') { $authHosts += $target }
         elseif ($content -match 'Host key verification') { $hostKeyHosts += $target }
-        else { $stuckHosts += $target }  # unknown fatal – group with stuck for visibility
+        else { $stuckHosts += $entry }  # unknown fatal - group with stuck for visibility
+    }
+
+    # The marker only lands after 8 consecutive stuck attempts, which is ~11 min
+    # of a down bridge before anything is written. tunnel.ps1 logs a
+    # [stuck-retry] line on every one of those attempts, so the log says it
+    # first - and a row keyed only on tunnel-*.stuck cannot see it. That gap is
+    # not hypothetical: during the orphan episode on the laptop, tunnel-*.log
+    # carried a stuck-retry every 30 s while this row reported green.
+    $logFiles = Get-ChildItem -Path $logDir -Filter 'tunnel-*.log' -ErrorAction SilentlyContinue
+    foreach ($lf in $logFiles) {
+        $split = Split-TunnelName -BaseName $lf.BaseName
+        # A marker for the same host and port already reports this, in red.
+        if ($stuckHosts | Where-Object { $_.Name -eq $split.Name -and $_.Port -eq $split.Port }) { continue }
+        $lastRetry = $null
+        $lastState = ''
+        foreach ($line in (Get-Content $lf.FullName -Tail 200 -ErrorAction SilentlyContinue)) {
+            if ($line -notmatch '^\[([^\]]+)\] \[(stuck-retry|start-failed)\]') { continue }
+            # Write-Log's format in tunnel.ps1, fixed. A truncated or
+            # half-written line parses as nothing and is skipped, rather than
+            # throwing and taking the whole check down with it.
+            $stamp = [datetime]::MinValue
+            if ([datetime]::TryParseExact($Matches[1], 'yyyy-MM-dd HH:mm:ss',
+                    [Globalization.CultureInfo]::InvariantCulture,
+                    [Globalization.DateTimeStyles]::None, [ref]$stamp)) {
+                $lastRetry = $stamp
+                $lastState = $Matches[2]
+            }
+        }
+        # A log keeps its stuck-retry lines long after the port clears, so
+        # without a horizon this row would stay amber forever on the strength of
+        # a wedge that resolved days ago. 300 s is two of the capped 120 s waits
+        # plus slack, so a tunnel still in its backoff is inside the window.
+        if ($null -ne $lastRetry -and ((Get-Date) - $lastRetry).TotalSeconds -le 300) {
+            $retryHosts += [pscustomobject]@{
+                Name  = $split.Name
+                Port  = $split.Port
+                State = $lastState
+                Label = "$($split.Name)`:$($split.Port) [$lastState]"
+            }
+        }
     }
 }
 
 if ($stuckHosts.Count -eq 0 -and $authHosts.Count -eq 0 -and $hostKeyHosts.Count -eq 0) {
-    Add-Result 'Tunnel logs' 'green' 'no stuck markers'
+    if ($retryHosts.Count -gt 0) {
+        # Amber, not red: the port is held right now, but a tunnel two attempts
+        # into its backoff may well bind on the next one. Red is reserved for a
+        # marker, where the retries have already outlasted the VM's reaper and a
+        # human has to act. Reporting both the same way either cries wolf or
+        # buries the marker.
+        $who = ($retryHosts | ForEach-Object { $_.Label }) -join ', '
+        $free = ($retryHosts | ForEach-Object { "bash ~/.claude/spechub/bin/vm-free-port.sh --port $($_.Port)" } |
+            Select-Object -Unique) -join ' ; '
+        Add-Result 'Tunnel logs' 'amber' "tunnel retrying in the last 5 min: $who (no marker yet)" `
+            "stuck-retry: the VM still holds the forward - run on that VM: $free. start-failed: ssh never launched on this laptop - kill any orphaned ssh.exe holding the tunnel log files."
+    } else {
+        Add-Result 'Tunnel logs' 'green' 'no stuck markers, no tunnel retrying a held port'
+    }
 } else {
     $parts = @()
-    if ($stuckHosts.Count -gt 0) { $parts += "stuck port: $($stuckHosts -join ', ')" }
+    if ($stuckHosts.Count -gt 0) { $parts += "stuck port: $(($stuckHosts | ForEach-Object { $_.Label }) -join ', ')" }
     if ($authHosts.Count -gt 0)  { $parts += "auth denied: $($authHosts -join ', ')" }
     if ($hostKeyHosts.Count -gt 0) { $parts += "host key: $($hostKeyHosts -join ', ')" }
+    # A marker on VM1 must not hide a live retry on VM2. There is one row for
+    # every tunnel, so the retries have to ride along with the red verdict
+    # rather than living only in the branch where nothing else went wrong.
+    if ($retryHosts.Count -gt 0) { $parts += "retrying now: $(($retryHosts | ForEach-Object { $_.Label }) -join ', ')" }
     $remedy = 'See handoff blocks below.'
     Add-Result 'Tunnel logs' 'red' ($parts -join '; ') $remedy
 
     foreach ($h in $stuckHosts) {
-        $marker = Join-Path $logDir "tunnel-$h.stuck"
+        # The VM agent reading this has no other context, so every line has to
+        # name the port that is actually wedged. vm-free-port.sh defaults to
+        # the bridge's port, which is the wrong port whenever the marker was
+        # the opener's, and a bare call would send it to free the wrong socket.
+        $hn = $h.Name
+        $hp = $h.Port
         $tail = ''
-        if (Test-Path $marker) { $tail = (Get-Content $marker -Raw).Trim() }
+        if (Test-Path $h.Marker) { $tail = (Get-Content $h.Marker -Raw).Trim() }
         $handoffs += @"
---- BEGIN WINDOWS-SIDE HANDOFF (to VM agent on $h) ---
-Context: the Playwriter bridge tunnel to $h is stuck. tunnel-$h.log shows
-"remote port forwarding failed for listen port 19988", meaning something
-on the VM already holds the port. Marker contents:
+--- BEGIN WINDOWS-SIDE HANDOFF (to VM agent on $hn) ---
+Context: the Playwriter bridge tunnel to $hn is stuck on port $hp. $($h.Log)
+shows "remote port forwarding failed for listen port $hp", meaning something
+on the VM already holds that port. The tunnel task is still retrying, so it
+will bind on its own once the port is free. Marker contents:
 
 $tail
 
-Run on ${h}:
-  bash ~/.claude/spechub/bin/vm-free-port.sh
+Run on ${hn}:
+  bash ~/.claude/spechub/bin/vm-free-port.sh --port $hp
 
 Expected result:
-  ss -lnt 'sport = :19988' is empty, or vm-free-port.sh refuses and tells
+  ss -lnt 'sport = :$hp' is empty, or vm-free-port.sh refuses and tells
   you the port is held by your own interactive session (in which case exit
   that session and retry).
 

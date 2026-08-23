@@ -55,6 +55,49 @@ function Get-FileHashOrNull($path) {
     return (Get-FileHash -Path $path -Algorithm SHA256 -ErrorAction SilentlyContinue).Hash
 }
 
+# Stop-ScheduledTask returns as soon as the stop is queued, and the scheduler
+# force-terminates launcher.exe rather than letting its ProcessExit handler run,
+# so the launcher's WMI descendant kill never fires. The child PowerShell - and
+# the node.exe opener.ps1/relay.ps1 spawned, or the ssh.exe tunnel.ps1 spawned -
+# survives as an orphan still holding its port. The task started next can then
+# never bind, the new script never actually runs, and this script prints
+# "restarted" anyway. Observed on Windows 11 26200: across a changed opener.js,
+# a Stop/Start pair left the same node.exe PID serving 19989.
+#
+# So: request the stop, wait for the instance to really go, then reap what is
+# left. Scoped by the task's own registered argument string so a tunnel task
+# never reaps its sibling on the other port or the other VM. launcher.exe drops
+# the quotes around -File when it builds the child command line, which is why
+# the comparison is de-quoted on both sides.
+function Stop-BridgeTaskTree {
+    param([string]$Name)
+
+    $task = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    $want = if ($task) { ($task.Actions.Arguments -replace '"', '') } else { $null }
+
+    Stop-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+
+    for ($i = 0; $i -lt 20; $i++) {
+        $state = (Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue).State
+        if ($state -ne 'Running') { break }
+        Start-Sleep -Milliseconds 250
+    }
+
+    if (-not $want) { return }
+
+    $survivors = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ProcessId -ne $PID -and $_.CommandLine -and ($_.CommandLine -replace '"', '') -eq $want
+    })
+    foreach ($p in $survivors) {
+        # Children first. Killing the supervisor alone re-orphans the node.exe
+        # or ssh.exe it was holding, which is the whole bug this guards against.
+        Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.ProcessId)" -ErrorAction SilentlyContinue |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "spechub bridge: reaped surviving $Name process (PID $($p.ProcessId))"
+    }
+}
+
 $changed = @()
 foreach ($f in $files) {
     $src = Join-Path $cacheDir $f
@@ -95,7 +138,8 @@ try {
 
 # Restart eligibility, snapshotted BEFORE we stop anything. A Running task is
 # restarted so the fix goes live. A Ready task is restarted only if it ended on
-# a failure (e.g. tunnel.ps1 exit 10) - that both applies the fix and recovers
+# a failure (e.g. tunnel.ps1 exit 11 on a denied key) - that both applies the
+# fix and recovers
 # it. A Ready task that exited cleanly is left alone: the user stopped it on
 # purpose. Benign last-result codes mirror doctor.ps1 - doctor.ps1 holds the
 # canonical copy of this list; keep both in sync if either changes.
@@ -119,7 +163,7 @@ $anyRunning = @($tasks | Where-Object { $_.State -eq 'Running' }).Count -gt 0
 # is keyed off intent ($changed): stopping is always safe, and we must release
 # the binary BEFORE the copy regardless of whether the copy later succeeds.
 if (($changed -contains 'launcher-src.cs') -and $anyRunning) {
-    foreach ($t in $tasks) { Stop-ScheduledTask -TaskName $t.TaskName -ErrorAction SilentlyContinue }
+    foreach ($t in $tasks) { Stop-BridgeTaskTree -Name $t.TaskName }
     Start-Sleep -Milliseconds 500
 }
 
@@ -210,7 +254,7 @@ if (-not $rebuildOk) {
 # Restart the affected, eligible tasks. Stop is a no-op if a task is already
 # stopped (e.g. it was stopped above for the launcher rebuild, or it had failed).
 foreach ($name in $restartList) {
-    Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+    Stop-BridgeTaskTree -Name $name
     Start-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
     Write-Host "spechub bridge: restarted $name"
 }
