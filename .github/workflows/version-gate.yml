@@ -1,0 +1,32 @@
+name: version-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version-gate:
+    name: version-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # fetch-depth 0 on a pull request checks out the merge commit, which does
+      # not give the branch ref a local name. Fetch it so origin/<base> resolves.
+      - name: Fetch the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags origin "${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+      - name: Check the version bump
+        env:
+          NO_BUMP: ${{ contains(github.event.pull_request.labels.*.name, 'no-bump') && '1' || '0' }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/version-gate.sh "origin/${BASE_REF}" "${HEAD_SHA}"

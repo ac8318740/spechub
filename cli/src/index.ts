@@ -50,4 +50,6 @@ if (first && !first.startsWith('-') && !known.has(first)) {
   }
 }
 
-program.parse();
+// parseAsync, not parse: `handoff watch` has an async action handler, and
+// parse() would return before it settled.
+await program.parseAsync();

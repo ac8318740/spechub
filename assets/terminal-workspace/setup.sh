@@ -1244,7 +1244,7 @@ route() {  # the route this machine will take, decided without taking it
   # agent: it attaches per tab, only after someone clicks the extension icon,
   # and it does so in a Chrome profile that is not the default browser. The
   # opener needs no click and reaches the browser the user actually uses. See
-  # docs/adr/0002-document-opener-service.md.
+  # docs/adr/0004-document-opener-service.md.
   opener_ready && { echo "opener"; return; }
   bridge_attached && { echo "bridge"; return; }
   has_tty && { echo "link"; return; }

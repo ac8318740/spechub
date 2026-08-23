@@ -1,5 +1,7 @@
 # Glossary
 
+**acknowledgement** – The receiver's ACCEPT or DECLINE, with a one-line reason, recorded by running `spechub handoff ack`. It is what lets the sender report the work as the receiver's.
+
 **arming** – clicking the Playwriter extension's icon on a browser tab to
 attach it to the relay – third-party extension behaviour that nothing can
 automate. A bridge that is otherwise completely healthy stays unusable until
@@ -16,6 +18,8 @@ records, glossary entries, living specs and their functional requirements,
 map nodes, handoff files, READMEs and docs, and pull request bodies. Chat
 replies and commit subject lines are not durable artifacts.
 
+**engaged** – A handoff watcher outcome: the receiving agent has not acknowledged, but has read the handoff file or started using work tools. The work is underway. Never relaunch it elsewhere.
+
 **opener** – a small HTTP service on the user's laptop that stores a page
 from a development virtual machine and serves it on the loopback interface.
 It hands the address to the user's default browser, so a person sees the
@@ -28,3 +32,5 @@ tunnel. It is the laptop-side half of the **bridge**.
 **route** – the single named answer to "how does this machine reach a
 browser", decided in one place and printed by `spechub-open --why`. Callers
 ask for the route rather than each working it out again.
+
+**shipped path** – A file that an installed copy of the plugin loads or runs, so a change to it must roll out to every machine. Everything not on the inert list in CONTRIBUTING.md is shipped.

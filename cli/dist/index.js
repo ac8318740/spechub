@@ -16327,10 +16327,112 @@ var init_feedback = __esm({
   }
 });
 
+// src/lib/ackfile.ts
+import { existsSync as existsSync9, readFileSync as readFileSync7, renameSync, rmSync as rmSync2, writeFileSync as writeFileSync4 } from "node:fs";
+function isAckDecision(value) {
+  return typeof value === "string" && ACK_DECISIONS.includes(value);
+}
+function ackPath(file) {
+  return `${file}${ACK_SUFFIX}`;
+}
+function normaliseDecision(value) {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!isAckDecision(text)) {
+    throw new Error(
+      `Invalid decision ${describeValue(value)}. Expected one of: ${ACK_DECISIONS.join(", ")}.`
+    );
+  }
+  return text;
+}
+function describeValue(value) {
+  if (typeof value === "string") return `'${value}'`;
+  try {
+    return JSON.stringify(value) ?? "nothing";
+  } catch {
+    return "a non-serialisable value";
+  }
+}
+function resolveSessionId(explicit) {
+  const candidate = (explicit ?? process.env.CLAUDE_SESSION_ID ?? "").trim();
+  return candidate.length > 0 ? candidate : null;
+}
+function normaliseReason(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim();
+}
+function writeAtomically(path, body) {
+  const temp = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync4(temp, body, "utf-8");
+    renameSync(temp, path);
+  } catch (err) {
+    rmSync2(temp, { force: true });
+    throw new Error(
+      `Could not write the ack sidecar at ${path}: ${err.message}. Reply with a message beginning ACCEPT or DECLINE instead, so the sender still hears back.`
+    );
+  }
+}
+function writeAck(args) {
+  const file = typeof args?.file === "string" ? args.file : "";
+  if (file.length === 0) {
+    throw new Error("A handoff file path is required.");
+  }
+  const decision = normaliseDecision(args?.decision);
+  if (file.endsWith(ACK_SUFFIX)) {
+    throw new Error(
+      `That is a sidecar path, not a handoff file. Pass ${file.slice(0, -ACK_SUFFIX.length)} instead.`
+    );
+  }
+  if (!existsSync9(file)) {
+    throw new Error(`No handoff file at ${file}. Check the path the handoff gave you.`);
+  }
+  const record = {
+    decision,
+    reason: normaliseReason(args.reason),
+    sessionId: resolveSessionId(args.sessionId),
+    at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  writeAtomically(ackPath(file), `${JSON.stringify(record, null, 2)}
+`);
+  return record;
+}
+function readAck(file) {
+  let raw;
+  try {
+    raw = readFileSync7(ackPath(file), "utf-8");
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const { decision, reason, sessionId, at } = parsed;
+  if (!isAckDecision(decision)) return null;
+  return {
+    decision,
+    reason: typeof reason === "string" ? reason : "",
+    sessionId: typeof sessionId === "string" && sessionId.length > 0 ? sessionId : null,
+    at: typeof at === "string" ? at : ""
+  };
+}
+var ACK_DECISIONS, ACK_SUFFIX;
+var init_ackfile = __esm({
+  "src/lib/ackfile.ts"() {
+    "use strict";
+    ACK_DECISIONS = ["accept", "decline"];
+    ACK_SUFFIX = ".ack";
+  }
+});
+
 // src/lib/ackwatch.ts
-import { readFileSync as readFileSync7 } from "node:fs";
+import { readFileSync as readFileSync8, statSync as statSync2 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { join as join11 } from "node:path";
+import { basename, join as join11 } from "node:path";
 function transcriptPath(cwd, sessionId, projectsDir) {
   const base = projectsDir ?? join11(homedir2(), ".claude", "projects");
   return join11(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
@@ -16379,7 +16481,7 @@ function findSendMessage(record) {
     if (type !== "tool_use" || name !== "SendMessage") continue;
     const to = typeof input?.to === "string" ? input.to : "";
     const message = typeof input?.message === "string" ? input.message : "";
-    return { to, message, ...parseAck(message) };
+    return { to, message, via: "text", ...parseAck(message) };
   }
   return void 0;
 }
@@ -16393,9 +16495,71 @@ function findTextAck(record) {
     if (type !== "text" || typeof text !== "string") continue;
     const parsed = parseAck(text);
     if (parsed.decision === null) continue;
-    return { to: null, message: text, ...parsed };
+    return { to: null, message: text, via: "text", ...parsed };
   }
   return void 0;
+}
+function findTranscriptAck(record, options) {
+  const sent = findSendMessage(record);
+  if (sent && (!sidecarIsAuthoritative(options) || sent.decision !== null)) return sent;
+  return options.fresh ? findTextAck(record) : void 0;
+}
+function sidecarIsAuthoritative(options) {
+  return options.file !== void 0;
+}
+function findSidecarAck(file, ackAfter) {
+  const record = readAck(file);
+  if (record === null) return void 0;
+  if (ackAfter !== void 0 && !(Date.parse(record.at) >= ackAfter)) return void 0;
+  return {
+    to: null,
+    message: record.reason,
+    via: "cli",
+    decision: record.decision,
+    reason: record.reason.length > 0 ? record.reason : null
+  };
+}
+function mentionsFile(input, file) {
+  if (file === void 0 || file.length === 0 || input === void 0) return false;
+  let serialized;
+  try {
+    serialized = JSON.stringify(input) ?? "";
+  } catch {
+    return false;
+  }
+  const name = basename(file);
+  return serialized.includes(file) || name.length > 0 && serialized.includes(name);
+}
+function isEngagement(record, file) {
+  if (record.type !== "assistant") return false;
+  const content = record.message?.content;
+  if (!Array.isArray(content)) return false;
+  for (const block of content) {
+    if (block === null || typeof block !== "object") continue;
+    const { type, name, input } = block;
+    if (type !== "tool_use") continue;
+    if (typeof name === "string" && ENGAGEMENT_TOOLS.has(name)) return true;
+    if (mentionsFile(input, file)) return true;
+  }
+  return false;
+}
+function scanFromAnchor(records, anchor, options) {
+  const scan = { boundaries: 0, engaged: false };
+  if (anchor < 0) return scan;
+  for (let i = anchor; i < records.length; i += 1) {
+    const record = records[i];
+    if (isSidechain(record)) continue;
+    if (!scan.engaged) scan.engaged = isEngagement(record, options.file);
+    if (scan.ack !== void 0) continue;
+    scan.ack = findTranscriptAck(record, options);
+    if (scan.ack === void 0 && isTurnBoundary(record)) scan.boundaries += 1;
+  }
+  return scan;
+}
+function withSidecar(result, options) {
+  const sidecarAck = options.file === void 0 ? void 0 : findSidecarAck(options.file, options.ackAfter);
+  if (sidecarAck === void 0) return result;
+  return { ...result, outcome: "acknowledged", ack: sidecarAck };
 }
 function resolveAnchor(records, options) {
   if (options.fresh) return records.length > 0 ? 0 : -1;
@@ -16417,71 +16581,83 @@ function analyze(lines, options) {
   const turns = options.turns ?? DEFAULT_TURNS;
   const records = parseLines(lines);
   const anchor = resolveAnchor(records, options);
-  if (anchor < 0) {
-    return { outcome: "pending", anchored: false, turnsElapsed: 0 };
-  }
-  let boundaries = 0;
-  for (let i = anchor; i < records.length; i += 1) {
-    const record = records[i];
-    if (isSidechain(record)) continue;
-    const ack = findSendMessage(record) ?? (options.fresh ? findTextAck(record) : void 0);
-    if (ack) {
-      return {
-        outcome: "acknowledged",
-        anchored: true,
-        turnsElapsed: Math.min(boundaries, turns),
-        ack
-      };
-    }
-    if (isTurnBoundary(record)) boundaries += 1;
-  }
-  const turnsElapsed = Math.min(boundaries, turns);
-  return {
-    outcome: turnsElapsed >= turns ? "silence" : "pending",
-    anchored: true,
-    turnsElapsed
+  const scan = scanFromAnchor(records, anchor, options);
+  const turnsElapsed = Math.min(scan.boundaries, turns);
+  const base = {
+    anchored: anchor >= 0,
+    turnsElapsed,
+    engaged: scan.engaged,
+    nudged: options.nudged === true
   };
+  const quiet = scan.engaged ? "engaged" : "silence";
+  const verdict = anchor < 0 ? { ...base, outcome: "pending" } : scan.ack !== void 0 ? { ...base, outcome: "acknowledged", ack: scan.ack } : { ...base, outcome: turnsElapsed >= turns ? quiet : "pending" };
+  return withSidecar(verdict, options);
 }
 function readLines(path) {
   try {
-    return readFileSync7(path, "utf-8").split("\n");
+    return readFileSync8(path, "utf-8").split("\n");
   } catch (err) {
     if (err.code === "ENOENT") return [];
     throw err;
   }
 }
+function stampTranscript(path) {
+  try {
+    const stats = statSync2(path);
+    return `${stats.size}:${stats.mtimeMs}`;
+  } catch {
+    return null;
+  }
+}
 function sleep(ms) {
-  return new Promise((resolve5) => {
-    setTimeout(resolve5, ms);
+  return new Promise((resolve6) => {
+    setTimeout(resolve6, ms);
   });
 }
 async function watch(path, options = {}) {
   requireOneMode(options);
-  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const pollIntervalMs = Math.max(options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS, MIN_POLL_INTERVAL_MS);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const deadline = Date.now() + timeoutMs;
-  let last = { outcome: "pending", anchored: false, turnsElapsed: 0 };
+  const started = Date.now();
+  const deadline = started + timeoutMs;
+  const watched = { ...options, ackAfter: options.ackAfter ?? started };
+  let cached = null;
+  let cachedStamp = null;
   for (; ; ) {
-    last = analyze(readLines(path), options);
-    if (last.outcome === "acknowledged" || last.outcome === "silence") {
-      return { ...last, outcome: last.outcome };
+    const stamp = stampTranscript(path);
+    let result;
+    if (cached === null || stamp === null || stamp !== cachedStamp) {
+      cached = analyze(readLines(path), watched);
+      cachedStamp = stamp;
+      result = cached;
+    } else {
+      result = withSidecar(cached, watched);
+    }
+    if (result.outcome !== "pending") {
+      return { ...result, outcome: result.outcome, startedAt: started };
     }
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      return { outcome: "timeout", anchored: last.anchored, turnsElapsed: last.turnsElapsed };
+      return { ...result, outcome: "timeout", startedAt: started };
     }
     await sleep(Math.min(pollIntervalMs, remaining));
   }
 }
-var DEFAULT_TURNS, DEFAULT_POLL_INTERVAL_MS, DEFAULT_TIMEOUT_MS, CROSS_SESSION_PREFIX, ACK_PATTERN;
+var DEFAULT_TURNS, DEFAULT_POLL_INTERVAL_MS, MIN_POLL_INTERVAL_MS, DEFAULT_TIMEOUT_MS, CROSS_SESSION_PREFIX, ACK_PATTERN, ENGAGEMENT_TOOLS;
 var init_ackwatch = __esm({
   "src/lib/ackwatch.ts"() {
     "use strict";
+    init_ackfile();
     DEFAULT_TURNS = 5;
     DEFAULT_POLL_INTERVAL_MS = 1e3;
+    MIN_POLL_INTERVAL_MS = 10;
     DEFAULT_TIMEOUT_MS = 30 * 60 * 1e3;
     CROSS_SESSION_PREFIX = "<cross-session-message";
-    ACK_PATTERN = /^\s*(accept|decline)\b[\s]*[:,;.\-–—!]*\s*([\s\S]*)$/i;
+    ACK_PATTERN = new RegExp(
+      `^\\s*(${ACK_DECISIONS.join("|")})\\b\\s*[:,;.\\-\u2013\u2014!]*\\s*([\\s\\S]*)$`,
+      "i"
+    );
+    ENGAGEMENT_TOOLS = /* @__PURE__ */ new Set(["Agent", "Edit", "Write", "Bash"]);
   }
 });
 
@@ -16490,7 +16666,7 @@ var handoff_exports = {};
 __export(handoff_exports, {
   register: () => register8
 });
-import { isAbsolute } from "node:path";
+import { isAbsolute, resolve as resolve3 } from "node:path";
 function parseIntAtLeast(name, min) {
   return (value) => {
     const parsed = value.trim() === "" ? NaN : Number(value);
@@ -16526,6 +16702,13 @@ function register8(program3) {
   handoffCmd.command("watch").description(
     "Watch a handoff target's transcript and report whether it acknowledged the handoff, went silent for N turns, or timed out"
   ).option("--transcript <path>", "path to the target session transcript (.jsonl)").option("--session-id <id>", "target session id, to derive the transcript path (needs --cwd)").option("--cwd <dir>", "absolute working directory of the target session (needs --session-id)").option("--token <token>", "correlation token in the delivered message; anchors on its delivery").option("--fresh", "target was launched for this handoff; anchor at the transcript start").option(
+    "--file <path>",
+    "path to the handoff file; its .ack sidecar counts as an acknowledgement, and tool calls naming it count as engagement"
+  ).option("--nudged", "this target has already been nudged once; echoed back on the result").option(
+    "--ack-after <ms>",
+    "epoch milliseconds before which a sidecar ack does not count; pass the previous watch's startedAt to cover a nudge gap, or 0 to accept any ack. Defaults to the moment this watch begins",
+    parseIntAtLeast("ack-after", 0)
+  ).option(
     "--turns <n>",
     "turn boundaries to allow before reporting silence",
     parseIntAtLeast("turns", 1),
@@ -16545,11 +16728,17 @@ function register8(program3) {
     if (hasToken === Boolean(opts.fresh)) {
       fail("Pass exactly one of --token or --fresh.");
     }
+    if (typeof opts.file === "string" && !isAbsolute(opts.file)) {
+      fail(`--file must be an absolute path, got '${opts.file}'.`);
+    }
     const path = resolveTranscript(opts);
     try {
       const result = await watch(path, {
         token: opts.token,
         fresh: opts.fresh,
+        file: opts.file,
+        nudged: opts.nudged,
+        ackAfter: opts.ackAfter,
         turns: opts.turns,
         pollIntervalMs: opts.pollInterval,
         timeoutMs: opts.timeout
@@ -16559,11 +16748,29 @@ function register8(program3) {
       fail(err.message);
     }
   });
+  handoffCmd.command("ack").description(
+    "Acknowledge a handoff: write accept or decline, with a reason, to the sidecar beside the handoff file. Run this before any other work."
+  ).argument("<decision>", "accept or decline").argument("[reason...]", "why \u2013 free text, joined into one line").requiredOption("--file <path>", "path to the handoff file being acknowledged").action((decision, reason, opts) => {
+    try {
+      const record = writeAck({
+        // The receiver types this in the directory it is working in, so a
+        // relative path is the natural thing to write. Resolving it here is
+        // what puts the sidecar beside the real handoff file.
+        file: resolve3(opts.file),
+        decision,
+        reason: reason.join(" ")
+      });
+      console.log(JSON.stringify(record, null, 2));
+    } catch (err) {
+      fail(err.message);
+    }
+  });
 }
 var init_handoff = __esm({
   "src/commands/handoff.ts"() {
     "use strict";
     init_ackwatch();
+    init_ackfile();
     init_utils();
   }
 });
@@ -19717,8 +19924,8 @@ var require_pattern = __commonJS({
     }
     exports.endsWithSlashGlobStar = endsWithSlashGlobStar;
     function isAffectDepthOfReadingPattern(pattern) {
-      const basename = path.basename(pattern);
-      return endsWithSlashGlobStar(pattern) || isStaticPattern(basename);
+      const basename2 = path.basename(pattern);
+      return endsWithSlashGlobStar(pattern) || isStaticPattern(basename2);
     }
     exports.isAffectDepthOfReadingPattern = isAffectDepthOfReadingPattern;
     function expandPatternsWithBraceExpansion(patterns) {
@@ -20192,11 +20399,11 @@ var require_out = __commonJS({
       async.read(path, getSettings(optionsOrSettingsOrCallback), callback);
     }
     exports.stat = stat;
-    function statSync3(path, optionsOrSettings) {
+    function statSync4(path, optionsOrSettings) {
       const settings = getSettings(optionsOrSettings);
       return sync.read(path, settings);
     }
-    exports.statSync = statSync3;
+    exports.statSync = statSync4;
     function getSettings(settingsOrOptions = {}) {
       if (settingsOrOptions instanceof settings_1.default) {
         return settingsOrOptions;
@@ -20861,41 +21068,41 @@ var require_queue = __commonJS({
       queue.drained = drained;
       return queue;
       function push(value) {
-        var p = new Promise(function(resolve5, reject) {
+        var p = new Promise(function(resolve6, reject) {
           pushCb(value, function(err, result) {
             if (err) {
               reject(err);
               return;
             }
-            resolve5(result);
+            resolve6(result);
           });
         });
         p.catch(noop);
         return p;
       }
       function unshift(value) {
-        var p = new Promise(function(resolve5, reject) {
+        var p = new Promise(function(resolve6, reject) {
           unshiftCb(value, function(err, result) {
             if (err) {
               reject(err);
               return;
             }
-            resolve5(result);
+            resolve6(result);
           });
         });
         p.catch(noop);
         return p;
       }
       function drained() {
-        var p = new Promise(function(resolve5) {
+        var p = new Promise(function(resolve6) {
           process.nextTick(function() {
             if (queue.idle()) {
-              resolve5();
+              resolve6();
             } else {
               var previousDrain = queue.drain;
               queue.drain = function() {
                 if (typeof previousDrain === "function") previousDrain();
-                resolve5();
+                resolve6();
                 queue.drain = previousDrain;
               };
             }
@@ -21381,9 +21588,9 @@ var require_stream3 = __commonJS({
         });
       }
       _getStat(filepath) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           this._stat(filepath, this._fsStatSettings, (error, stats) => {
-            return error === null ? resolve5(stats) : reject(error);
+            return error === null ? resolve6(stats) : reject(error);
           });
         });
       }
@@ -21407,10 +21614,10 @@ var require_async5 = __commonJS({
         this._readerStream = new stream_1.default(this._settings);
       }
       dynamic(root, options) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           this._walkAsync(root, options, (error, entries) => {
             if (error === null) {
-              resolve5(entries);
+              resolve6(entries);
             } else {
               reject(error);
             }
@@ -21420,10 +21627,10 @@ var require_async5 = __commonJS({
       async static(patterns, options) {
         const entries = [];
         const stream = this._readerStream.static(patterns, options);
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           stream.once("error", reject);
           stream.on("data", (entry) => entries.push(entry));
-          stream.once("end", () => resolve5(entries));
+          stream.once("end", () => resolve6(entries));
         });
       }
     };
@@ -22081,7 +22288,7 @@ var require_out4 = __commonJS({
 });
 
 // src/lib/prose.ts
-import { resolve as resolve3 } from "node:path";
+import { resolve as resolve4 } from "node:path";
 function splitCells(body) {
   const cells = [];
   let current = "";
@@ -22555,7 +22762,7 @@ function lintProse(text, vocabulary) {
   return findings.sort((a, b) => a.line - b.line || a.column - b.column);
 }
 function isVocabularyFile(filePath, vocabularyPath) {
-  return resolve3(filePath) === resolve3(vocabularyPath);
+  return resolve4(filePath) === resolve4(vocabularyPath);
 }
 var RULES, SENTENCE_LIMIT_PROSE, SENTENCE_LIMIT_INSTRUCTION, PARAGRAPH_LIMIT, VOCABULARY_COLUMNS, DELETE_SENTINEL, BLOCKQUOTE_PREFIX, LIST_MARKER, ORDERED_MARKER, HEADING, FENCE_OPEN, FENCE_CLOSE, EMOJI_PART, EMOJI, LEGAL_MARKS, BE_FORMS, IRREGULAR_PARTICIPLES, NOT_PARTICIPLES, PASSIVE_MODIFIER, PASSIVE, ABBREVIATIONS;
 var init_prose = __esm({
@@ -22739,8 +22946,8 @@ __export(lint_prose_exports, {
   reportFile: () => reportFile,
   summarize: () => summarize
 });
-import { existsSync as existsSync9, readFileSync as readFileSync8, statSync as statSync2 } from "node:fs";
-import { join as join12, relative, resolve as resolve4 } from "node:path";
+import { existsSync as existsSync10, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
+import { join as join12, relative, resolve as resolve5 } from "node:path";
 function loadVocabulary() {
   const pluginRoot = findPluginRoot();
   if (!pluginRoot) {
@@ -22776,12 +22983,12 @@ function collectFiles(paths, opts) {
   const missing = [];
   if (opts.all) files.push(...markdownIn(opts.root));
   for (const path of paths) {
-    const full = resolve4(path);
-    if (!existsSync9(full)) {
+    const full = resolve5(path);
+    if (!existsSync10(full)) {
       missing.push(path);
       continue;
     }
-    if (statSync2(full).isDirectory()) {
+    if (statSync3(full).isDirectory()) {
       files.push(...markdownIn(full));
     } else {
       files.push(full);
@@ -22819,7 +23026,7 @@ function displayPath(root, file) {
 function reportFile(file, display, vocabulary) {
   let text;
   try {
-    text = readFileSync8(file, "utf-8");
+    text = readFileSync9(file, "utf-8");
   } catch {
     console.error(source_default.yellow(`Cannot read, skipping: ${display}`));
     return { path: display, findings: [], unreadable: true };
@@ -22986,7 +23193,7 @@ if (first && !first.startsWith("-") && !known.has(first)) {
     process.exit(result.status ?? 0);
   }
 }
-program2.parse();
+await program2.parseAsync();
 /*! Bundled license information:
 
 is-extglob/index.js:
