@@ -5,13 +5,13 @@ disable-model-invocation: true
 allowed-tools: AskUserQuestion, Read, Write, Edit, Bash, Glob, Grep
 ---
 
-## User Input
+## User input
 
 ```text
 $ARGUMENTS
 ```
 
-## Step 1: Detect and Propose Defaults
+## Step 1: detect and propose defaults
 
 Scan the project root for `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`, etc. If empty, infer from `$ARGUMENTS`. Read the matching profile from the plugin's `profiles/` directory.
 
@@ -25,7 +25,7 @@ Frontend:     [if applicable]
 Workflow:     strict TDD, strict orchestrator, spec sync on, grilling via question tool
 ```
 
-## Step 2: Ask What to Customize
+## Step 2: ask what to customize
 
 Call AskUserQuestion with EXACTLY this JSON (two questions in one call):
 
@@ -59,7 +59,7 @@ Call AskUserQuestion with EXACTLY this JSON (two questions in one call):
 
 Parse answers: answers["0"] = Setup selections, answers["1"] = Workflow selections. If nothing selected, use all defaults.
 
-## Step 3: Customize Selected Sections
+## Step 3: customize selected sections
 
 For each selected item, ask one follow-up question at a time via AskUserQuestion. Skip unselected items.
 
@@ -72,14 +72,14 @@ For each selected item, ask one follow-up question at a time via AskUserQuestion
 - **Spec sync**: Ask enabled vs disabled
 - **Python venv** (auto for Python): Ask activation command
 
-## Step 4: Write Config
+## Step 4: write config
 
 1. Create `spechub/` directory
 2. Write `spechub/project.yaml` from defaults + customizations
 3. Leave project CLAUDE.md alone – orchestrator instructions load automatically via the SessionStart hook
 4. If a project CLAUDE.md contains a legacy `@import .../plugins/cache/ac8318740-plugins/spechub/<version>/CLAUDE.md` line, remove it (stale reference from older SpecHub versions)
 
-## Step 5: Generate the Domain Map
+## Step 5: generate the domain map
 
 `spechub/domain-map.yaml` maps source paths to spec domains. Spec sync, `/spechub:archive`, `/spechub:bootstrap` and `/spechub:pre-commit-review` all read it. Without it, every spec-sync path skips silently and living specs never update – so init must always produce one.
 
@@ -90,7 +90,7 @@ Launch an **Explore subagent** over `directories.source` to propose domains. Ask
 Guidance for the subagent:
 
 - Group by responsibility, not by layer. `auth`, `billing`, `search` – not `models`, `controllers`, `utils`.
-- Prefer directory prefixes over file lists. Paths are matched as prefixes.
+- Prefer directory prefixes over file lists. Consumers match paths as prefixes.
 - Aim for 3 to 10 domains. Fewer means spec sync can't tell changes apart; more means every commit touches several.
 - Leave tests, config, build files and docs unmapped. Consumers skip anything outside all domains.
 
@@ -117,9 +117,9 @@ domains:
     description: <what this domain owns>
 ```
 
-For a greenfield project, write the header plus a single commented example under `domains:` and tell the user to fill it in, or to run `/spechub:init` again once there is code to map.
+For a greenfield project, write the header plus a single commented example under `domains:`. Tell the user to fill it in, or to run `/spechub:init` again once there is code to map.
 
-## Step 6: Set Up Browser Verification
+## Step 6: set up browser verification
 
 If the project has a frontend configured:
 
@@ -182,7 +182,7 @@ Ask the user which browser environment they'll use via AskUserQuestion:
 
 Store the choice in `project.yaml` under `frontend.browser.mode` (`remote`, `headless`, or `local`). Also store `frontend.browser.cdp_port`: `19988` for `remote`, `9555` for `headless`/`local`.
 
-After the mode is chosen, write `agent-browser.json` in the project root with the matching port:
+After the user chooses the mode, write `agent-browser.json` in the project root with the matching port:
 
 ```json
 {
@@ -204,7 +204,7 @@ After the mode is chosen, write `agent-browser.json` in the project root with th
 
 If "Fall back to headless", set `frontend.browser.fallback: headless`. If "Fail", set `frontend.browser.fallback: none`.
 
-Then walk through remote setup. Remote mode uses the Playwriter bridge – Chrome on the browser machine is driven via the Playwriter extension's `chrome.debugger` API. No CDP listener is opened on Chrome itself.
+Then walk through remote setup. Remote mode uses the Playwriter bridge – the Playwriter extension drives Chrome on the browser machine via its `chrome.debugger` API. Chrome itself opens no CDP listener.
 
 ```
 To connect your browser via the Playwriter bridge:
@@ -231,9 +231,9 @@ To connect your browser via the Playwriter bridge:
 
 Show these gotchas after the steps:
 
-- Port `19988` is hardcoded by Playwriter – it is not configurable.
+- Playwriter hardcodes port `19988` – it is not configurable.
 - The relay must run on the same host as Chrome. The Playwriter extension hard-rejects any `/extension` client that is not `127.0.0.1`.
-- Each tab needs the extension icon clicked once. `chrome://` and `about:` pages cannot be attached.
+- Each tab needs the extension icon clicked once. Playwriter cannot attach to `chrome://` and `about:` pages.
 - If port 19988 is busy on the browser machine from a stale relay, run `playwriter serve --host 127.0.0.1 --replace` to kick the previous one.
 
 For a persistent, zero-window Windows laptop setup – auto-reconnecting scheduled tasks, ssh-agent key persistence, one-time admin registration – see `plugins/spechub/docs/playwriter-bridge-windows.md`. It ships the three PowerShell scripts (`relay.ps1`, `tunnel.ps1`, `register-tasks.ps1`) under `plugins/spechub/assets/playwriter-bridge/`.
@@ -253,7 +253,7 @@ curl -s --max-time 3 http://localhost:19988/json/version
 
 **If "Skip"**: Leave `frontend.browser` unset and skip writing `agent-browser.json`. Tell the user to run `/spechub:config set frontend.browser.mode <mode>` later.
 
-## Step 7: Report
+## Step 7: report
 
 ```
 ## SpecHub Initialized
@@ -274,11 +274,11 @@ CLAUDE.md:    untouched (orchestrator loads via SessionStart hook)
 Next: describe what you want to build, or run /spechub:bootstrap for existing code.
 ```
 
-## project.yaml Schema
+## project.yaml schema
 
 Note: `frontend.browser.cdp_port` defaults to `19988` when `mode: remote` (Playwriter bridge) and `9555` otherwise.
 
-Note: the `nudge_*` keys drive the context-pressure nudge, which fires only on the session's own stop – teammates and subagents are never nudged, because neither can hand the user's work over. Its ladder is per session, as is the quiet marker a finished handoff or compaction leaves behind, and both reset when the session compacts: the recorded rung described context the compaction just threw away, so the ladder starts again from its first rung.
+Note: the `nudge_*` keys drive the context-pressure nudge, which fires only on the session's own stop. The nudge never fires for teammates or subagents, because neither can hand the user's work over. Its ladder is per session, as is the quiet marker a finished handoff or compaction leaves behind. Both reset when the session compacts. The recorded rung described context the compaction just threw away. So the ladder starts again from its first rung.
 
 ```yaml
 profile: node-typescript

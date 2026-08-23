@@ -1,11 +1,12 @@
 # Playwriter bridge – Windows runbook
 
 > Stop reading if you are not on Windows. This file is PowerShell-only.
-> Linux / macOS / dev-VM agents: read [`SKILL-VM.md`](SKILL-VM.md) instead.
+> On Linux, macOS or a dev VM, read [`SKILL-VM.md`](SKILL-VM.md) instead.
 
 ## What the Windows side owns
 
-- The Node relay (`relay.ps1`) that speaks CDP on `127.0.0.1:19988`.
+- The Node relay (`relay.ps1`) that speaks the Chrome DevTools Protocol (CDP)
+  on `127.0.0.1:19988`.
 - The Playwriter Chrome extension that attaches to individual tabs.
 - One reverse SSH tunnel per VM (`tunnel.ps1 -TargetHost <host>`).
 - The scheduled tasks that keep those running across logons.
@@ -31,7 +32,7 @@ playwriter serve --host 127.0.0.1  ◄── listens on 127.0.0.1:19988 (Node re
              agent-browser --cdp http://127.0.0.1:19988
 ```
 
-No debug port is opened on Chrome. No inbound listener on the laptop.
+The bridge opens no debug port on Chrome. The laptop runs no inbound listener.
 The only laptop-to-VM connection is outbound SSH.
 
 ## Prerequisites
@@ -63,9 +64,9 @@ playwriter --version
 
 ### 3. Install the Playwriter Chrome extension (dedicated profile)
 
-Create a new Chrome profile – name it something like "Playwriter Dev".
-Do **not** sign in to sensitive accounts on this profile. It exists so
-that a compromised VM can only drive this profile, not your real browser.
+Create a new Chrome profile. Name it something like "Playwriter Dev".
+Do **not** sign in to sensitive accounts on this profile. It exists so a
+compromised VM can only drive this profile, not your real browser.
 
 In that profile, install the extension from the Chrome Web Store:
 
@@ -73,8 +74,8 @@ In that profile, install the extension from the Chrome Web Store:
 https://chromewebstore.google.com/detail/playwriter-mcp/jfeammnjpkecdekppnclgkkffahnhfhe
 ```
 
-Pin the extension to the toolbar. You will click its icon once per tab
-you want the VM to be able to automate.
+Pin the extension to the toolbar. You click its icon once per tab that you
+want the VM to automate.
 
 ### 4. Enable ssh-agent (from elevated PowerShell, once)
 
@@ -86,14 +87,15 @@ Set-Service ssh-agent -StartupType Automatic
 Start-Service ssh-agent
 ```
 
-Add your key once (in any PowerShell, will prompt for the passphrase):
+Add your key once, from any PowerShell. The command prompts for the
+passphrase:
 
 ```powershell
 ssh-add $env:USERPROFILE\.ssh\id_ed25519
 ```
 
-Windows OpenSSH persists the key DPAPI-encrypted in
-`HKLM\SOFTWARE\OpenSSH\Agent\Keys` so it survives reboots.
+Windows OpenSSH keeps the key in `HKLM\SOFTWARE\OpenSSH\Agent\Keys`,
+encrypted with the Data Protection API (DPAPI), so it survives reboots.
 
 ### 5. Drop the bridge files in place
 
@@ -108,8 +110,8 @@ Copy every file from the plugin into `%USERPROFILE%\playwriter-bridge\`:
 - `doctor.ps1`
 
 They live in the plugin at `plugins/spechub/assets/playwriter-bridge/`.
-(`vm-free-port.sh` from the same directory is for the VM; you do not
-need it on Windows.)
+The same directory holds `vm-free-port.sh`, which belongs on the VM. You
+do not need that file on Windows.
 
 ### 6. Build launcher.exe (one-time)
 
@@ -118,12 +120,12 @@ cd $env:USERPROFILE\playwriter-bridge
 .\build-launcher.ps1
 ```
 
-This compiles `launcher-src.cs` to `launcher.exe` in the same directory,
-using PowerShell's built-in `Add-Type`. No SDK install, no admin. The
-output must be a `WindowsApplication` (not a console application) – the
-shipped `build-launcher.ps1` sets that correctly and also references
-`System.Management` (the launcher walks the process tree via WMI on
-shutdown).
+This compiles `launcher-src.cs` to `launcher.exe` in the same directory.
+It uses PowerShell's built-in `Add-Type`. You install no SDK, and you need
+no admin rights. The output must be a `WindowsApplication`, not a console
+application. The shipped `build-launcher.ps1` sets that correctly. It also
+references `System.Management`, because the launcher walks the process tree
+through WMI on shutdown.
 
 ### 7. Pair VM access
 
@@ -134,8 +136,8 @@ Confirm from the laptop:
 ssh -o BatchMode=yes <user>@<vm> true
 ```
 
-If that fails, produce a handoff block (see [`HANDOFF.md`](HANDOFF.md))
-asking the VM-side agent to fix `authorized_keys`.
+If that fails, produce a handoff block per [`HANDOFF.md`](HANDOFF.md). Ask
+the VM-side agent to fix `authorized_keys`.
 
 ### 8. Register the scheduled tasks
 
@@ -148,13 +150,13 @@ username on the VMs is not the same as your Windows username.
 
 The script registers `Playwriter-Relay` plus one `Playwriter-Tunnel-VM<N>`
 per VM under `LogonType Interactive` with `RunLevel Limited`, each action
-invoking `launcher.exe`. Task restart policy is a small backstop only
+invoking `launcher.exe`. The task restart policy is a small backstop only
 (2 retries, 5 min apart) – the scripts themselves own resilience.
 
-Fresh installs work from a regular PowerShell. If you are replacing tasks
-that were previously registered from an elevated shell,
-`Register-ScheduledTask` will fail with "Access is denied" – re-run the
-script from an elevated PowerShell.
+Fresh installs work from a regular PowerShell. `Register-ScheduledTask`
+fails with `Access is denied` when you replace tasks that you registered
+earlier from an elevated shell. Re-run the script from an elevated
+PowerShell in that case.
 
 All tasks run at user logon from now on. Logs land in
 `%LOCALAPPDATA%\playwriter-bridge\`.
@@ -167,8 +169,9 @@ All tasks run at user logon from now on. Logs land in
 .\doctor.ps1
 ```
 
-Reports six checks. Exit 0 = all green, 1 = any red. When a red row
-implies VM-side action, doctor prints a ready-to-paste handoff block.
+`doctor.ps1` reports six checks. It exits 0 when every check is green, and
+1 when any check is red. When a red row implies VM-side action,
+`doctor.ps1` prints a ready-to-paste handoff block.
 
 ### Stop the bridge
 
@@ -176,8 +179,8 @@ implies VM-side action, doctor prints a ready-to-paste handoff block.
 .\stop.ps1
 ```
 
-Stops all `Playwriter-*` tasks, kills lingering bridge processes, and
-verifies port 19988 is free. Prints a verdict line.
+`stop.ps1` stops all `Playwriter-*` tasks, kills lingering bridge
+processes, and checks that port 19988 is free. It prints a verdict line.
 
 ### Restart a single tunnel
 
@@ -190,93 +193,99 @@ Start-ScheduledTask Playwriter-Tunnel-VM1
 ### Updates (automatic)
 
 After initial setup you do not re-copy scripts by hand. The SpecHub
-SessionStart hook runs `sync.ps1` on each Claude Code launch: it diffs the
-deployed scripts in `%USERPROFILE%\playwriter-bridge\` against the plugin
-cache by content hash, copies any that changed, rebuilds `launcher.exe`
-when its source changed, and restarts only the affected tasks. So a plugin
-update reaches the running bridge on the next launch, with at most one
-brief reconnect per changed task.
+SessionStart hook runs `sync.ps1` on each Claude Code launch. `sync.ps1`
+compares the deployed scripts in `%USERPROFILE%\playwriter-bridge\` against
+the plugin cache by content hash. It copies every script that changed. It
+rebuilds `launcher.exe` when the launcher source changed. It restarts only
+the affected tasks.
 
-The whole SessionStart hook is a `bash` script, so `bash` must be on `PATH`
-(Git for Windows provides it) or the hook never runs – and with it, auto-sync
-never fires. If `bash` is not available, fall back to re-copying the changed
-files per the setup step and restarting the tasks.
+A plugin update therefore reaches the running bridge on the next launch.
+Each changed task costs at most one brief reconnect.
+
+The whole SessionStart hook is a `bash` script. Git for Windows provides
+`bash`. Put `bash` on `PATH`, or the hook never runs and auto-sync never
+fires. When `bash` is missing, re-copy the changed files per the setup
+step. Then restart the tasks.
 
 ### Per-tab activation
 
-In Chrome (Playwriter Dev profile), click the Playwriter toolbar icon on
-each tab you want the VM to automate. Playwriter attaches per-tab.
-`chrome://` and `about:` pages cannot be attached.
+In Chrome, open the Playwriter Dev profile. Click the Playwriter toolbar
+icon on each tab you want the VM to automate. Playwriter attaches per tab.
+It cannot attach to `chrome://` and `about:` pages.
 
 ## Resilience behaviour
 
-`tunnel.ps1` classifies ssh failures and reacts:
+`tunnel.ps1` sorts an ssh failure into three kinds and reacts to each:
 
-- **Transient** (connection refused / timed out / unreachable / DNS /
-  TCP reset under a live session / Win32 connect "Unknown error") –
-  exponential backoff 5 → 10 → 20 → 40 → 80 → 120 s cap. Resets when a
-  run lasts at least 30 s. A dropped long-lived session (laptop sleep,
-  wifi roam, VPN flap) lands here, so the tunnel reconnects on its own.
+- **Transient** – connection refused, timed out, unreachable, DNS failure,
+  TCP reset under a live session, or a Win32 connect `Unknown error`. The
+  tunnel backs off exponentially, 5 → 10 → 20 → 40 → 80 → 120 s cap. The
+  backoff resets when a run lasts at least 30 s. A dropped long-lived
+  session lands here, so the tunnel reconnects on its own. Laptop sleep, a
+  wifi roam and a VPN flap all drop a session that way.
 - **Stuck remote port** (`remote port forwarding failed for listen port
-  19988`) – the VM still holds the port via the dropped session's
-  orphaned forward channel. Retried at a 30 s cadence for ~10 min, long
-  enough to outlast the VM's `sshd` reap window, so the bridge self-heals
-  without a restart. Only if the port is still held after that does it
-  write `tunnel-<host>.stuck` and exit – the port is genuinely wedged
-  (a non-sshd holder, or keepalive disabled on the VM).
-- **Auth or host-key failure** – write marker, exit immediately. These
-  need user action; retrying just floods the log.
+  19988`) – the VM still holds the port through the dropped session's
+  orphaned forward channel. For about 10 min, `tunnel.ps1` retries every
+  30 s. That span outlasts the VM's `sshd` reap window, so the bridge heals
+  itself without a restart. If the VM still holds the port after that,
+  `tunnel.ps1` writes `tunnel-<host>.stuck` and exits. The port is then
+  genuinely stuck, either through a holder other than `sshd` or through
+  keepalive turned off on the VM.
+- **Auth or host-key failure** – `tunnel.ps1` writes the marker and exits
+  at once. These failures need user action. Retrying only floods the log.
 
-A genuinely wedged port or an auth/host-key failure exits and lands the
-task in `Ready`; the Scheduler backstop retries twice 5 min apart, and
-`doctor.ps1` reports which host needs attention. Recoverable network
-drops never reach that point now – they self-heal inside the tunnel loop.
+A genuinely stuck port, an auth failure or a host-key failure makes
+`tunnel.ps1` exit and lands the task in `Ready`. The Scheduler backstop then
+retries twice, 5 min apart. `doctor.ps1` reports which host needs attention.
+A recoverable network drop never reaches that point, because the tunnel loop
+heals it.
 
 ## How console windows stay hidden
 
-`LogonType Interactive` allocates a desktop session – so a PowerShell
-task registered directly against `powershell.exe` gets a visible console
-window at logon. Two in-process tricks do not solve this on modern
-Windows:
+`LogonType Interactive` allocates a desktop session. A PowerShell task that
+points directly at `powershell.exe` therefore gets a visible console window
+at logon. Two in-process tricks do not solve this on modern Windows:
 
-- `-WindowStyle Hidden` – unreliable; the window still appears on the
+- `-WindowStyle Hidden` – unreliable. The window still appears on the
   taskbar before it hides.
-- `Add-Type` + `ShowWindow(GetConsoleWindow(), SW_HIDE)` – works on
-  classic `conhost` but not on Windows 11 22H2+ where Windows Terminal
-  is the default terminal host. `GetConsoleWindow()` returns a ConPTY
-  proxy handle; `ShowWindow` on it does nothing to the WT window.
+- `Add-Type` with `ShowWindow(GetConsoleWindow(), SW_HIDE)` – this works on
+  classic `conhost`. It fails on Windows 11 22H2+, where Windows Terminal is
+  the default terminal host. There, `GetConsoleWindow()` returns a ConPTY
+  proxy handle, and `ShowWindow` on that handle does nothing to the Windows
+  Terminal window.
 
-The fix is `launcher.exe`: a small C# `WindowsApplication` that starts
-the child with `CreateNoWindow = true` so `CREATE_NO_WINDOW` propagates
-and no console is ever attached. The launcher also waits for the child,
-propagates its exit code, and kills the descendant process tree on
-shutdown via WMI. That last part is why `Stop-ScheduledTask` now takes
+The fix is `launcher.exe`, a small C# `WindowsApplication`. It starts the
+child with `CreateNoWindow = true`, so `CREATE_NO_WINDOW` propagates and
+Windows attaches no console. The launcher also waits for the child. It
+propagates the child's exit code. It kills the descendant process tree on
+shutdown through WMI. That last part is why `Stop-ScheduledTask` now takes
 the whole bridge down cleanly.
 
-The launcher is intentionally shipped as source, not a prebuilt binary –
-each user compiles their own so no unsigned third-party `.exe` is
-introduced onto the machine.
+The plugin ships the launcher as source on purpose, not as a prebuilt
+binary. Each user compiles their own, so no unsigned third-party `.exe`
+reaches the machine.
 
-No password is stored anywhere. The tasks run as your user's SID, which
-keeps the ssh-agent named pipe (ACL'd to that SID) reachable.
+The bridge stores no password anywhere. The tasks run as your user's SID.
+Windows puts the ssh-agent named pipe behind an access control list for that
+SID, so the tasks can reach it.
 
 ## Troubleshooting
 
-Most issues are covered by `doctor.ps1`. The items below cover cases
-that do not come up automatically.
+`doctor.ps1` covers most issues. The items below cover the cases it does not
+report.
 
 - **`Empty reply from server`** on `curl /json/version` – the relay is up
-  but the extension is not attached to any tab yet. Click the Playwriter
-  icon on a normal web page. Benign; `doctor.ps1` reports this as amber,
-  not red.
+  but the extension has not attached to any tab yet. Click the Playwriter
+  icon on a normal web page. This is harmless, and `doctor.ps1` reports it
+  as amber, not red.
 
 - **`Register-ScheduledTask : Access is denied`** – the tasks already
-  exist and were registered from an elevated PowerShell. A non-admin
-  shell cannot replace them. Right-click PowerShell → Run as
-  Administrator, then retry. Fresh installs do not need admin.
+  exist, and you registered them from an elevated PowerShell. A non-admin
+  shell cannot replace them. Right-click PowerShell and choose Run as
+  Administrator. Then retry. Fresh installs do not need admin.
 
 - **Console windows appear at logon and stay visible** – the scheduled
-  task action is pointing at `powershell.exe` directly instead of at
+  task action points at `powershell.exe` directly instead of at
   `launcher.exe`. Inspect one task:
 
   ```powershell
@@ -284,85 +293,84 @@ that do not come up automatically.
   ```
 
   `Execute` should end in `launcher.exe`. If it ends in `powershell.exe`,
-  the tasks were registered before `launcher.exe` was in place – re-run
-  `build-launcher.ps1` then `register-tasks.ps1` (elevated if the tasks
-  already exist).
+  someone registered the tasks before `launcher.exe` was in place. Re-run
+  `build-launcher.ps1`, then `register-tasks.ps1`. Use an elevated
+  PowerShell if the tasks already exist.
 
 - **Tasks show `LastTaskResult: 267011` and `LastRunTime: 1999`** (epoch) –
-  the task is ready but never actually launched. Most common cause on a
-  domain-joined laptop is a task registered under `LogonType S4U`
-  without reachable Kerberos infrastructure at logon. The shipped
-  `register-tasks.ps1` uses `LogonType Interactive` specifically to
-  avoid this; if you see it, confirm the registered tasks are
-  Interactive and re-register if not:
+  the task is ready, but Windows never launched it. The most common cause
+  on a domain-joined laptop is a task under `LogonType S4U` without
+  reachable Kerberos infrastructure at logon. The shipped
+  `register-tasks.ps1` uses `LogonType Interactive` to avoid this. When you
+  see this result, check that the registered tasks are Interactive.
+  Re-register them if they are not:
 
   ```powershell
   Get-ScheduledTask Playwriter-* |
     Select-Object TaskName, @{n='LogonType';e={$_.Principal.LogonType}}
   ```
 
-- **Passphrase prompted at every boot** – the ssh-agent service is not
-  set to start automatically. Check `Get-Service ssh-agent`; if
-  `StartType` is not `Automatic`, re-run step 4 from an elevated shell.
+- **Passphrase prompted at every boot** – the ssh-agent service does not
+  start automatically. Check `Get-Service ssh-agent`. If `StartType` is not
+  `Automatic`, re-run step 4 from an elevated shell.
 
-- **Scheduled task flagged on first run by endpoint security** – can
-  happen once on some endpoints. Confirm it is one of the
-  `Playwriter-*` tasks you just registered and allowlist it per your
-  local procedure.
+- **Endpoint security flags a scheduled task on first run** – this happens
+  once on some endpoints. Confirm the task is one of the `Playwriter-*`
+  tasks you just registered. Then allowlist it per your local procedure.
 
-- **Endpoint security logs per-reconnect on public-IP tunnels** – some
-  endpoint products will log (not block) an event each time `ssh.exe`
-  is spawned with a reverse forward to a public IP, while behaving
-  quietly for RFC1918 targets. This is a detection log, not a
-  mitigation; steady-state bridges produce zero further events. If
-  your endpoint product begins *blocking* the ssh spawn (not just
-  logging), escalate to whoever owns endpoint policy at your site and
-  ask for a behavioral or process-argument exclusion scoped to
+- **Endpoint security logs each reconnect on a public-IP tunnel** – some
+  endpoint products log an event each time you spawn `ssh.exe` with a
+  reverse forward. They log the event and never block it, and they stay
+  quiet for RFC1918 targets. That log is a detection record, not a
+  mitigation. A steady-state bridge produces no further events. If your
+  endpoint product starts *blocking* the ssh spawn rather than logging it,
+  escalate to whoever owns endpoint policy at your site. Ask them for a
+  behavioural exclusion, or one scoped to the process arguments
   `ssh.exe -R 19988:127.0.0.1:19988`.
 
-- **Endpoint security logs on `build-launcher.ps1`** – running
-  `Add-Type -OutputAssembly` invokes `csc.exe` from the .NET Framework
-  to compile `launcher-src.cs`. Some endpoint products heuristically
-  flag any `csc.exe` spawned by PowerShell, because malicious
-  PowerShell frequently compiles payloads at runtime. One alert per
-  build is normal in that environment; the built `launcher.exe` runs
-  clean from then on. If this is disruptive at your site, the
-  architectural alternative is to ship a prebuilt `launcher.exe` with
-  a checksum and skip `csc.exe` entirely – raise it with the plugin
-  maintainer rather than patching locally.
+- **Endpoint security logs on `build-launcher.ps1`** – the
+  `Add-Type -OutputAssembly` call invokes `csc.exe` from the .NET Framework
+  to compile `launcher-src.cs`. Some endpoint products flag any `csc.exe`
+  that PowerShell spawns, because malicious PowerShell often compiles
+  payloads at runtime. One alert per build is normal in that environment.
+  The built `launcher.exe` runs clean from then on. If that alert disrupts
+  your site, the alternative is to ship a prebuilt `launcher.exe` with a
+  checksum and skip `csc.exe`. Raise that change with the plugin maintainer
+  rather than patching locally.
 
 - **`tunnel-<host>.stuck` marker present** – `tunnel.ps1` saw a fatal
-  classification and exited. Read the marker file for the reason and
-  remediation; `doctor.ps1` also prints this verbatim and emits the
-  right handoff block.
+  classification and exited. Read the marker file for the reason and the
+  fix. Running `doctor.ps1` also prints this verbatim, and emits the right
+  handoff block.
 
 ## Cross-device handoffs
 
-Whenever a step needs VM-side action (fix `authorized_keys`, free a
-stuck port, check host keys), format the request using
-[`HANDOFF.md`](HANDOFF.md). `doctor.ps1` does this automatically for its
-own red rows. When you need one by hand, copy the shape verbatim.
+Some steps need VM-side action – fix `authorized_keys`, free a stuck port,
+or check host keys. Format any such request using
+[`HANDOFF.md`](HANDOFF.md). The `doctor.ps1` script does this automatically
+for its own red rows. When you need a handoff block by hand, copy the shape
+verbatim.
 
 ## Security notes
 
-- **Dedicated Chrome profile** with no sensitive logins. VM compromise
-  means an attacker on the VM can drive the attached profile through the
-  bridge – limit the blast radius by making that profile disposable.
+- **Dedicated Chrome profile** with no sensitive logins. VM compromise means
+  an attacker on the VM can drive the attached profile through the bridge.
+  Limit the damage by keeping that profile disposable.
 - **Scheduled tasks run with `RunLevel Limited`.** They cannot elevate,
   so a compromised relay or tunnel process has only the normal user's
   rights.
-- **Optional token auth.** Playwriter supports `--token <secret>` on
-  `serve` and a matching header on CDP clients. If you want
-  belt-and-braces on top of localhost-only binding, enable it.
+- **Optional token authentication.** Playwriter supports `--token <secret>`
+  on `serve` and a matching header on CDP clients. Enable it if you want a
+  second control on top of the localhost-only binding.
 
-## What this intentionally does NOT do
+## What the bridge deliberately does not do
 
-- **No `--remote-debugging-port` on your real Chrome.** The bridge
-  exists precisely so Chrome is driven via the extension API. Do not
-  "simplify" the design by opening a debug port.
-- **No piggybacking on an editor's SSH session.** Win32-OpenSSH does
-  not implement `ControlMaster`; the Git-for-Windows `ssh` that does
-  breaks when invoked through editors that pipe `cmd.exe`. Dedicated
+- **No `--remote-debugging-port` on your real Chrome.** The bridge exists
+  so that the extension API drives Chrome instead. Do not "simplify" the
+  design by opening a debug port.
+- **No piggybacking on an editor's SSH session.** Win32-OpenSSH does not
+  implement `ControlMaster`. The Git-for-Windows `ssh` implements it, but
+  breaks when an editor pipes `cmd.exe` around it. Dedicated
   scheduled-task tunnels stay independent.
 - **No relay on the VM.** The Playwriter extension hard-codes
   `localhost`. The relay must run next to Chrome.

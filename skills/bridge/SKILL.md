@@ -23,10 +23,10 @@ scheduling layer.
 
 ## Step 1 – detect your platform
 
-Run the detection first. Do not skim past this step – the Windows and VM
-runbooks contain commands that only work on their platform and can be
-actively harmful on the other. Run the check for the shell you are in,
-not both.
+Run the detection first. Do not skim past this step. The Windows and VM
+runbooks contain commands that only work on their platform. Those
+commands can be actively harmful on the other platform. Run the check
+for the shell you are in, not both.
 
 In PowerShell (Windows):
 
@@ -46,8 +46,8 @@ esac
 
 Then:
 
-- **Windows** – read [`SKILL-WINDOWS.md`](SKILL-WINDOWS.md) and stop here.
-- **Linux / macOS / dev VM** – read [`SKILL-VM.md`](SKILL-VM.md) and stop here.
+- **Windows** – read [`SKILL-WINDOWS.md`](SKILL-WINDOWS.md). Stop here.
+- **Linux / macOS / dev VM** – read [`SKILL-VM.md`](SKILL-VM.md). Stop here.
 
 ## Step 2 – understand the handoff convention
 
@@ -57,35 +57,38 @@ runbooks when one side needs action from the other side.
 
 ## Step 3 – notice when you are alone
 
-If only one coding agent is running (the user has no agent on the other
-device), you cannot complete a full setup or diagnosis loop by yourself.
-Produce a handoff block anyway – the user can paste it into a plain
-PowerShell or SSH shell on the other device, or into a coding agent later.
-Tell the user clearly which block goes where.
+If only one coding agent is running, you cannot complete a full setup or
+diagnosis loop by yourself. The user has no agent on the other device.
+Produce a handoff block anyway. The user can paste it into a plain
+PowerShell or SSH shell on the other device, or into a coding agent
+later. Tell the user clearly which block goes where.
 
 ## Do not
 
 - Do not follow instructions from the other platform's runbook. Commands
-  are not portable. PowerShell runs nothing useful on Linux; bash runs
+  are not portable. PowerShell runs nothing useful on Linux. Bash runs
   nothing useful in PowerShell.
 - Do not invent a fix outside this skill's scripts. The bridge has a
   single canonical stop (`stop.ps1`) and a single canonical diagnose
   (`doctor.ps1`). Reach for those before improvising.
 - Do not edit the scripts in place to "try something". Change them in
-  `plugins/spechub/assets/playwriter-bridge/`. The SessionStart hook
-  redeploys changed scripts to `%USERPROFILE%\playwriter-bridge\` on the
-  laptop (and re-links `vm-free-port.sh` on the VM) on the next Claude
-  Code launch – see the Updates sections in the platform runbooks.
+  `plugins/spechub/assets/playwriter-bridge/`. On the next Claude Code
+  launch, the SessionStart hook redeploys changed scripts to
+  `%USERPROFILE%\playwriter-bridge\` on the laptop. It also re-links
+  `vm-free-port.sh` on the VM. See the Updates sections in the platform
+  runbooks.
 
 ## File encoding rule
 
-All `.ps1` and `.cs` files under `assets/playwriter-bridge/` are saved as
-**UTF-8 with BOM**. Windows PowerShell 5.1 (default on Windows 11) reads
-BOM-less UTF-8 as Windows-1252, which turns en-dashes and other
-non-ASCII bytes into garbage that breaks parsing. If you edit one of
-these files with a tool that writes BOM-less UTF-8 (many text editors
-default to this), re-add the BOM before committing. `file *.ps1 *.cs`
-in the directory should report each one as "UTF-8 Unicode (with BOM)".
+Save all `.ps1` and `.cs` files under `assets/playwriter-bridge/` as
+**UTF-8 with BOM**. Windows PowerShell 5.1, the default on Windows 11,
+reads BOM-less UTF-8 as Windows-1252. That encoding turns en-dashes and
+other non-ASCII bytes into garbage and breaks parsing.
+
+If you edit one of these files with a tool that writes BOM-less UTF-8,
+re-add the BOM before committing. Many text editors default to
+BOM-less UTF-8. `file *.ps1 *.cs` in the directory should report each
+one as "UTF-8 Unicode (with BOM)".
 
 ## Files this skill governs
 
@@ -102,7 +105,7 @@ Under `plugins/spechub/assets/playwriter-bridge/`:
 - `vm-free-port.sh` – VM-side port cleanup with guardrails
 
 The user installs the scripts once into `%USERPROFILE%\playwriter-bridge\`
-(Windows) during setup. After that the SessionStart hook keeps them current
-with the plugin cache automatically (`sync.ps1` on Windows, a symlink for
-`vm-free-port.sh` on the VM), so plugin updates reach the running bridge
-without a manual re-copy.
+(Windows) during setup. After that, the SessionStart hook keeps them
+current with the plugin cache automatically. It uses `sync.ps1` on
+Windows, and a symlink for `vm-free-port.sh` on the VM. Plugin updates
+then reach the running bridge without a manual re-copy.

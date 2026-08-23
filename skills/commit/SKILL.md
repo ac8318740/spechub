@@ -4,7 +4,7 @@ description: Create git commit(s) with proper pre-commit hook handling, MECE com
 argument-hint: "[scope: 'all', or describe which changes]"
 ---
 
-## User Input
+## User input
 
 ```text
 $ARGUMENTS

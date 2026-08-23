@@ -4,37 +4,38 @@ description: "Deep code quality review of all changes since last commit. Checks 
 argument-hint: "[--auto-fix] [scope description]"
 ---
 
-# Pre-Commit Review
+# Pre-commit review
 
-Deep, project-aware code quality review of uncommitted changes. Finds issues that linters miss:
-hardcodes, duplicated logic, missing edge cases, convention drift, and adjacent rot.
+This skill runs a deep review of code quality in uncommitted changes, using dynamic
+project awareness. It finds issues that linters miss: hardcodes, duplicated logic, missing
+edge cases, convention drift, and adjacent rot.
 
-## User Input
+## User input
 
 ```text
 $ARGUMENTS
 ```
 
-## Mode Detection
+## Mode detection
 
 Parse `$ARGUMENTS` and invocation context to determine mode:
 
 - **Auto-fix mode**: Use when ANY of these are true:
   - Arguments contain `--auto-fix`, `fix everything`, `auto fix`, or `fix automatically`
-  - The LLM is working autonomously (user asked to implement + commit + push, work through
-    a task list, "handle everything", etc.) and the LLM itself decided to commit – the user
-    is likely not present, so don't block on questions.
+  - The LLM works autonomously. The user asked it to implement, commit, and push, or work
+    through a task list, or said "handle everything". The LLM itself decided to commit.
+    The user is likely not present, so don't block on questions.
 
 - **Interactive mode** (default): Use when ANY of these are true:
-  - No `--auto-fix` argument and skill was invoked manually via `/pre-commit-review`
-  - Skill was auto-invoked because the user typed `/commit` – the user is clearly present
-    and should be consulted via AskUserQuestion waves.
+  - No `--auto-fix` argument, and the user invoked the skill manually via `/pre-commit-review`
+  - The user typed `/commit`, which auto-invokes the skill. The user is clearly present,
+    so consult them via AskUserQuestion waves.
   - When in doubt, use interactive – it's always safe to ask.
 
 **Rule of thumb**: Who initiated the commit? User typed `/commit` -> interactive.
 LLM decided to commit during autonomous work -> auto-fix.
 
-## Workflow Overview
+## Workflow overview
 
 ```
 1. SNAPSHOT  – collect the diff and understand what changed
@@ -69,7 +70,7 @@ Categorize changed files into scopes using the project configuration:
 
 If no meaningful code changes exist (only docs, config, assets), report "No code changes to review" and exit. Run the prose lint from Step 3 before you exit, when Markdown files changed.
 
-## Step 2: DISCOVER – Learn Project Conventions (Parallel)
+## Step 2: DISCOVER – Learn project conventions (parallel)
 
 Launch **3 parallel Explore subagents** to build a dynamic understanding of the project's current conventions.
 Do NOT hardcode conventions – discover them fresh each time.
@@ -107,9 +108,9 @@ Report: local conventions, related code patterns, existing abstractions nearby.
 ```
 
 Synthesize the three reports into a **convention profile** – the set of expectations
-changes will be measured against.
+review subagents measure changes against.
 
-## Step 3: REVIEW – Analyze Changes (Parallel)
+## Step 3: REVIEW – Analyze changes (parallel)
 
 Launch **3 parallel review subagents**, each examining a different quality dimension.
 Every subagent receives the diff AND the convention profile from Step 2.
@@ -171,10 +172,10 @@ Run the lint on the changed Markdown files, and on nothing else. Skip the comman
 
 Add each finding to the review as `SHOULD | PROSE`, at the `file:line` it names. The writing standard is a project convention, so it sits at the same severity as other convention drift.
 
-## Step 4: ADJACENT – Check Surrounding Code for Rot
+## Step 4: ADJACENT – Check surrounding code for rot
 
-For each file that has findings from Step 3, launch an **Explore subagent** (up to 3 in parallel)
-to examine the rest of that file and its immediate imports for the SAME categories of issue.
+For each file with findings from Step 3, launch an **Explore subagent** (up to 3 in parallel).
+Each subagent examines the rest of that file and its immediate imports for the same categories of issue.
 
 ```
 File [path] has these issues in the changed code: [summary].
@@ -187,9 +188,9 @@ Report as: ADJACENT | FILE:LINE | WHAT | WHY | SUGGESTED FIX
 ```
 
 Only flag adjacent issues that are **closely related** to the current changes (same file,
-same module, or same pattern). Don't boil the ocean.
+same module, or same pattern). Stay narrowly scoped.
 
-## Step 5: REPORT – Synthesize Findings
+## Step 5: REPORT – Synthesize findings
 
 Merge all subagent findings. Deduplicate. Sort by:
 
@@ -197,7 +198,7 @@ Merge all subagent findings. Deduplicate. Sort by:
 2. SHOULD FIX (convention violations, readability, maintainability)
 3. CONSIDER (style preferences, minor improvements, adjacent rot)
 
-For each finding, ensure it has:
+For each finding, make sure it has:
 
 - `file:line` reference
 - Category tag (HARDCODE, SSOT, SCALABILITY, READABILITY, EDGE-CASE, PROSE, ADJACENT)
@@ -214,9 +215,9 @@ Think through 2-3 possible fixes, evaluate trade-offs, and recommend the best ap
 Consider: does a fix here require changes in other files? What's the minimal change?
 ```
 
-## Step 6: FIX – Auto-Fix or Interactive Waves
+## Step 6: FIX – Auto-fix or interactive waves
 
-### Auto-Fix Mode
+### Auto-fix mode
 
 For each finding (MUST first, then SHOULD, then CONSIDER):
 
@@ -232,9 +233,9 @@ After all fixes, run full verification using commands from `spechub/project.yaml
 # Read these from project.yaml – do not hardcode
 ```
 
-Report summary of what was fixed.
+Report a summary of the fixes.
 
-### Interactive Mode (Default)
+### Interactive mode (default)
 
 Present findings in **waves of up to 4** using AskUserQuestion. Group related findings together.
 
@@ -268,7 +269,7 @@ After user responds:
 - Present next wave if more findings remain
 - Continue until all findings addressed or user says "done" / "skip the rest"
 
-## Severity Guide
+## Severity guide
 
 | Severity | Meaning                                                | Examples                                                           |
 | -------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
@@ -276,7 +277,7 @@ After user responds:
 | SHOULD   | Violates conventions, hurts maintainability, tech debt | SSOT violations, unclear naming, missing error handling on I/O     |
 | CONSIDER | Improvement opportunity, not urgent                    | Adjacent rot, minor style, could-be-cleaner patterns               |
 
-## What This Skill Does NOT Check
+## What this skill does not check
 
 - **Formatting/style** – linters and formatters handle this
 - **Type errors** – typecheckers handle this

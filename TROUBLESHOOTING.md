@@ -1,11 +1,11 @@
-# SpecHub Troubleshooting
+# SpecHub troubleshooting
 
-This file is written for **Claude Code instances** to act on. Each section follows the same format: symptom -> diagnostic command -> fix command. If you are a Claude Code session and the user reports any of these symptoms, run the diagnostic, then apply the fix.
+**Claude Code instances** act on this file. Each section follows the same format: symptom -> diagnostic command -> fix command. If you are a Claude Code session and the user reports any of these symptoms, run the diagnostic, then apply the fix.
 
-The plugin lives at `${CLAUDE_PLUGIN_ROOT}` once installed via the marketplace. On most installs that resolves to:
+The plugin lives at `${CLAUDE_PLUGIN_ROOT}` once the user installs it via the marketplace. On most installs that resolves to:
 
 ```
-~/.claude/plugins/cache/ac8318740-plugins/spechub/<version>/
+~/.claude/plugins/cache/ac-agentic-coding/spechub/<version>/
 ```
 
 The plugin's SessionStart hook maintains two symlinks to the bundled CLI:
@@ -25,22 +25,22 @@ Both refresh on every SessionStart and point at the current plugin cache version
 
 ```bash
 ls -l ~/.claude/spechub/bin/spechub 2>&1
-ls -d ~/.claude/plugins/cache/ac8318740-plugins/spechub/*/ 2>&1
+ls -d ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/ 2>&1
 ```
 
 **Possible causes and fixes**:
 
-- **Symlink missing** (`No such file or directory`): The SessionStart hook never ran. The user has not started Claude Code on this device since the plugin was installed, OR the hook silently failed.
-  - Fix: ask the user to restart Claude Code so the SessionStart hook fires. The hook will create the symlink and print `spechub: linked agent CLI at …`.
+- **Symlink missing** (`No such file or directory`): The SessionStart hook never ran. The user has not started Claude Code on this device since they installed the plugin, OR the hook silently failed.
+  - Fix: ask the user to restart Claude Code so the SessionStart hook fires. The hook creates the symlink and prints `spechub: linked agent CLI at …`.
   - If that doesn't work, create it manually:
     ```bash
-    SPECHUB_VERSION=$(ls ~/.claude/plugins/cache/ac8318740-plugins/spechub/ | sort -V | tail -1)
+    SPECHUB_VERSION=$(ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/ | sort -V | tail -1)
     mkdir -p ~/.claude/spechub/bin
-    ln -sfn ~/.claude/plugins/cache/ac8318740-plugins/spechub/$SPECHUB_VERSION/cli/bin/spechub.js ~/.claude/spechub/bin/spechub
+    ln -sfn ~/.claude/plugins/cache/ac-agentic-coding/spechub/$SPECHUB_VERSION/cli/bin/spechub.js ~/.claude/spechub/bin/spechub
     ```
 
 - **Plugin cache missing entirely**: the second `ls` returned nothing.
-  - Fix: the plugin is not installed. Run `/plugin install` for `ac8318740/spechub` in Claude Code.
+  - Fix: the user has not installed the plugin. Run `/plugin install` for `ac8318740/spechub` in Claude Code.
 
 ---
 
@@ -48,7 +48,7 @@ ls -d ~/.claude/plugins/cache/ac8318740-plugins/spechub/*/ 2>&1
 
 **Symptom**: User runs `spechub --help` at the terminal and the shell reports `command not found`. Agents continue to work fine.
 
-This is a **human-ergonomics issue, not a plugin issue.** Agents use `~/.claude/spechub/bin/spechub` directly and are unaffected. Skip to fixing only if the user types `spechub` at terminals.
+This is a **human-ergonomics issue, not a plugin issue.** Agents use `~/.claude/spechub/bin/spechub` directly, so this issue does not affect them. Skip to fixing only if the user types `spechub` at terminals.
 
 **Diagnose**:
 
@@ -80,27 +80,27 @@ echo "PATH=$PATH" | tr ':' '\n' | grep -F "$HOME/.local/bin" || echo "MISSING"
 **Diagnose**:
 
 ```bash
-SPECHUB_VERSION=$(ls ~/.claude/plugins/cache/ac8318740-plugins/spechub/ | sort -V | tail -1)
-ls ~/.claude/plugins/cache/ac8318740-plugins/spechub/$SPECHUB_VERSION/cli/dist/index.js 2>&1
+SPECHUB_VERSION=$(ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/ | sort -V | tail -1)
+ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/$SPECHUB_VERSION/cli/dist/index.js 2>&1
 ```
 
-**Cause**: The plugin cache contains a version that was published *before* the built CLI was bundled into the repo (pre-0.9.2). This should not happen on 0.9.2 or later.
+**Cause**: The plugin cache holds a version from before the CLI shipped bundled in the repo (pre-0.9.2). This should not happen on 0.9.2 or later.
 
 **Fix**:
 
 - Bump or refresh the plugin cache: in Claude Code, run `/plugin` and reinstall the plugin, or delete the cache directory and let Claude Code repull:
   ```bash
-  rm -rf ~/.claude/plugins/cache/ac8318740-plugins/spechub/<old-version>
+  rm -rf ~/.claude/plugins/cache/ac-agentic-coding/spechub/<old-version>
   ```
 - Confirm the user is on plugin version 0.9.2 or later:
   ```bash
-  cat ~/.claude/plugins/cache/ac8318740-plugins/spechub/*/.claude-plugin/plugin.json | grep version
+  cat ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/.claude-plugin/plugin.json | grep version
   ```
 
 If the user is offline or cannot repull, build the CLI in place as a one-shot:
 
 ```bash
-cd ~/.claude/plugins/cache/ac8318740-plugins/spechub/<version>/cli
+cd ~/.claude/plugins/cache/ac-agentic-coding/spechub/<version>/cli
 npm install
 npm run build
 ```
@@ -115,19 +115,19 @@ npm run build
 
 ```bash
 readlink ~/.claude/spechub/bin/spechub
-ls ~/.claude/plugins/cache/ac8318740-plugins/spechub/
+ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/
 ```
 
-**Cause**: The symlink target was set during an older session and the plugin cache now has a newer version that the SessionStart hook hasn't relinked yet.
+**Cause**: An older session set the symlink target. The plugin cache now holds a newer version, and the SessionStart hook has not relinked it yet.
 
 **Fix**:
 
 - Start a new Claude Code session – the SessionStart hook detects stale symlinks and relinks them, printing `spechub: updated agent CLI at …`.
 - Or relink manually:
   ```bash
-  NEW=$(ls ~/.claude/plugins/cache/ac8318740-plugins/spechub/ | sort -V | tail -1)
-  ln -sfn ~/.claude/plugins/cache/ac8318740-plugins/spechub/$NEW/cli/bin/spechub.js ~/.claude/spechub/bin/spechub
-  ln -sfn ~/.claude/plugins/cache/ac8318740-plugins/spechub/$NEW/cli/bin/spechub.js ~/.local/bin/spechub
+  NEW=$(ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/ | sort -V | tail -1)
+  ln -sfn ~/.claude/plugins/cache/ac-agentic-coding/spechub/$NEW/cli/bin/spechub.js ~/.claude/spechub/bin/spechub
+  ln -sfn ~/.claude/plugins/cache/ac-agentic-coding/spechub/$NEW/cli/bin/spechub.js ~/.local/bin/spechub
   ```
 
 ---
@@ -139,15 +139,15 @@ ls ~/.claude/plugins/cache/ac8318740-plugins/spechub/
 **Diagnose**:
 
 ```bash
-cat ~/.claude/plugins/cache/ac8318740-plugins/spechub/*/hooks/hooks.json
+cat ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/hooks/hooks.json
 ```
 
-**Cause**: Either the user has not yet enabled the plugin, or hook execution is disabled in their Claude Code settings.
+**Cause**: Either the user has not yet enabled the plugin, or they have disabled hook execution in their Claude Code settings.
 
 **Fix**:
 
-- Confirm the plugin is enabled: `/plugin list`.
-- Check that hooks are not disabled in `~/.claude/settings.json` (no `"hooks": false` or per-event suppression).
+- Confirm the user has enabled the plugin: `/plugin list`.
+- Check that the user has not disabled hooks in `~/.claude/settings.json` (no `"hooks": false` or per-event suppression).
 - As a fallback, install the symlinks manually using the commands in section 1 and section 4.
 
 ---
@@ -156,7 +156,7 @@ cat ~/.claude/plugins/cache/ac8318740-plugins/spechub/*/hooks/hooks.json
 
 **Symptom**: Hook prints `spechub: python3 not found; skipping orchestrator injection`.
 
-**Cause**: The hook uses `python3` to emit the orchestrator CLAUDE.md as JSON for `additionalContext` injection. Without it, the orchestrator instructions still load – but only when Claude Code itself reads `CLAUDE.md` from the plugin root, which it does anyway. The CLI symlinks are unaffected.
+**Cause**: The hook uses `python3` to emit the orchestrator CLAUDE.md as JSON for `additionalContext` injection. Without it, the orchestrator instructions still load – but only when Claude Code itself reads `CLAUDE.md` from the plugin root, which it does anyway. This does not affect the CLI symlinks.
 
 **Fix**: Install Python 3 if you want the explicit injection (rare – most systems have it):
 
@@ -176,8 +176,8 @@ Otherwise, ignore the warning.
 The CLI is a normal Node.js ESM package. To validate the install end-to-end:
 
 ```bash
-SPECHUB_VERSION=$(ls ~/.claude/plugins/cache/ac8318740-plugins/spechub/ | sort -V | tail -1)
-node ~/.claude/plugins/cache/ac8318740-plugins/spechub/$SPECHUB_VERSION/cli/bin/spechub.js --help
+SPECHUB_VERSION=$(ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/ | sort -V | tail -1)
+node ~/.claude/plugins/cache/ac-agentic-coding/spechub/$SPECHUB_VERSION/cli/bin/spechub.js --help
 ```
 
 If that prints help, the CLI is fine and the issue is the symlink. If it errors, the issue is the cache contents – jump to section 3.

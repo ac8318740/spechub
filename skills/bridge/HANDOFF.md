@@ -19,14 +19,14 @@ The `WINDOWS-SIDE` or `VM-SIDE` tag names the side that **produced** the
 block, so the other side knows who asked. `Run on <device>` names who
 **executes** it.
 
-The block is designed to paste verbatim into another coding agent, or –
-when the user has no coding agent on the other device – into a plain
-PowerShell or SSH shell.
+The other side pastes the block verbatim into another coding agent. If
+the user on that side has no coding agent, they paste it into a plain
+PowerShell or SSH shell instead.
 
 ## Worked example 1 – Windows → VM, free a stuck port
 
-Produced by `doctor.ps1` on the Windows laptop when tunnel-<host>.log
-shows the stuck-port signature:
+`doctor.ps1` produces this block on the Windows laptop when
+tunnel-<host>.log shows the stuck-port signature:
 
 ```
 --- BEGIN WINDOWS-SIDE HANDOFF (to VM agent on vm1.example.com) ---
@@ -58,7 +58,7 @@ Success criterion: all rows green.
 
 ## Worked example 2 – VM → Windows, restart a tunnel task
 
-Produced by a VM-side agent when `agent-browser` cannot reach
+A VM-side agent produces this block when `agent-browser` cannot reach
 `http://127.0.0.1:19988/json/version`:
 
 ```
@@ -82,10 +82,10 @@ Report back:
 
 ## Rules for writing a handoff
 
-- **Exact commands.** No "figure out the right flag" – the receiving side
+- **Exact commands.** No "figure out the right flag" – the other side
   may be a human at a shell, not a coding agent.
 - **One verifiable success criterion.** Not "looks ok".
-- **Small.** One problem per block. If two things are broken, emit two
+- **Small.** One problem per block. If two things break, emit two
   blocks.
 - **Scrub internal names.** No employer names, people names, internal IP
   ranges, ticket IDs. Use placeholders like `<host>`, `vm1.example.com`.
