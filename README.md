@@ -136,7 +136,9 @@ For work with open decisions, chart it with `/spechub:map` first.
 
 ## Output style
 
-The plugin ships one output style, `ac-writing-style`. It applies the `writing` skill's plain-language rules and the `visual-docs` skill's Minto pyramid to every chat reply. A reply leads with the answer, keeps one idea per sentence, names the actor, and uses no em dash or emoji. Select it with `/output-style` once per project, or set `outputStyle` in `~/.claude/settings.json` for every project. The plugin never forces it on.
+The plugin ships one output style, shown to Claude Code as `spechub:ac-writing-style`. It applies the `writing` skill's plain-language rules and the `visual-docs` skill's Minto pyramid to every chat reply. A reply leads with the answer, keeps one idea per sentence, names the actor, and uses no em dash or emoji.
+
+`/spechub:init` offers the style as a late optional step, and `/spechub:config check` offers it on a project you already set up. Both write `outputStyle` for you: `~/.claude/settings.json` for every project, or `.claude/settings.local.json` for this one. A project value overrides the global one. The style applies after `/clear`, or in a new session. The plugin never forces it on.
 
 ## Language profiles
 

@@ -230,7 +230,30 @@ which chromium || which chromium-browser || which google-chrome || which google-
 
 If none found: "No Chromium/Chrome binary found. The frontend-verifier needs one to run headless. Install with: `sudo apt install chromium-browser` (Ubuntu/Debian) or `sudo dnf install chromium` (Fedora)."
 
-#### 8. Summary
+#### 8. Output style (every project)
+
+Read `outputStyle` from `~/.claude/settings.json`, `.claude/settings.local.json` and `.claude/settings.json`. Report which of the three sets it, and to what. `.claude/settings.local.json` wins over `.claude/settings.json`, which wins over `~/.claude/settings.json`.
+
+If none of them selects `spechub:ac-writing-style`, offer it:
+
+```json
+{
+  "question": "Apply the spechub:ac-writing-style output style?",
+  "options": [
+    {"label": "Global (recommended)", "description": "Write outputStyle into ~/.claude/settings.json, so it applies in every project"},
+    {"label": "This project only", "description": "Write outputStyle into .claude/settings.local.json, which overrides the global value here"},
+    {"label": "Skip", "description": "Leave the output style as it is"}
+  ]
+}
+```
+
+Write the key as Step 7 of the `init` skill shows. Load the file as JSON, set the one key, dump it back, with `python3` or `jq`. Never edit the file with a regular expression.
+
+If the user chose global and a project file also sets `outputStyle`, say so. Offer to remove that key, because it overrides the global value.
+
+Tell the user the style applies after `/clear`, or in a new session. `/config` -> Output style writes project scope only, which is why this check offers the global path. Source: https://code.claude.com/docs/en/output-styles.md. Claude Code has no command-line flag for this: `claude config` does not exist, and Claude Code dropped `/output-style`.
+
+#### 9. Summary
 
 ```
 ## Config Health Check
@@ -242,6 +265,7 @@ If none found: "No Chromium/Chrome binary found. The frontend-verifier needs one
 ✓ Browser: connected (remote) | available (headless) | available (local) | not configured
 ✓ Verification knowledge base exists
 ✓ Chromium binary available
+✓ Output style: spechub:ac-writing-style (global) | (project) | not set
 
 [Any items that need attention]
 ```
@@ -328,3 +352,4 @@ After any modification:
 - Browser fallback must be one of: `headless`, `none`
 - If the `workflow` section doesn't exist in project.yaml, create it with defaults before applying changes
 - The `set` command only modifies the workflow and frontend.browser sections. For other sections, use init
+- `outputStyle` is not a project.yaml key. It lives in Claude Code settings, so `check` sets it, not `set`.
