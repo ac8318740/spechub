@@ -169,7 +169,7 @@ function orcaStatusJson(reachable: boolean, state: string): string {
 const ORCA_READY_JSON = orcaStatusJson(true, 'ready');
 
 /** The docs URL a failing Orca probe must point the user at. */
-const ORCA_DOCS_URL = 'https://docs.orca.dev/headless-linux';
+const ORCA_DOCS_URL = 'https://github.com/stablyai/orca/blob/main/docs/reference/headless-linux-server.md';
 
 /** Create a temp project root containing spechub/project.yaml with `yaml` as its body. */
 function makeProject(yaml: string): string {

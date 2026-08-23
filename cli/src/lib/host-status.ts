@@ -164,7 +164,7 @@ export const ORCHESTRATOR_PROBES: Readonly<Record<Orchestrator, OrchestratorProb
     binaries: ['orca-ide', 'orca'],
     args: ['status', '--json'],
     answered: orcaRuntimeIsReady,
-    docs: 'https://docs.orca.dev/headless-linux',
+    docs: 'https://github.com/stablyai/orca/blob/main/docs/reference/headless-linux-server.md',
   },
 };
 
