@@ -192,10 +192,10 @@ if [ -n "${HOME:-}" ]; then
   orca_root="${HOME}/orca/workspaces"
 
   herdr_root="$(herdr_root_configured "${HOME}/.config/herdr/config.toml")"
+  # shellcheck disable=SC2088  # the case below matches a literal "~/" prefix read from config.toml, then expands it
   case "$herdr_root" in
     "") herdr_root="${HOME}/.herdr/worktrees" ;;
     "~") herdr_root="$HOME" ;;
-    # shellcheck disable=SC2088  # matching a literal "~/" prefix read from config.toml, then expanding it
     "~/"*) herdr_root="${HOME}/${herdr_root#\~/}" ;;
   esac
 
