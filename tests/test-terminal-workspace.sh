@@ -2674,6 +2674,226 @@ wait "$NODE_PID" 2>/dev/null
 fi
 
 
+echo "disable answers for every component"
+# The config names eight components. `disable` has a branch for five of them,
+# and the other three - yazi, markdown, remote - fall through a case with no
+# default arm, so the script exits 0 having done nothing and said nothing. A
+# silent success on a request that was never carried out is the one outcome a
+# user cannot recover from: they believe the component is off.
+#
+# Everything below runs setup.sh for real, so HOME, $BIN, the config path and
+# git's global config all have to point inside $WORK. uninstall deletes files
+# and unsets git settings, and a leak here would edit the machine running the
+# suite.
+UWORK="$WORK/tw-run"
+mkdir -p "$UWORK/home/.local/bin" "$UWORK/home/.config/spechub"
+tw() {
+  env HOME="$UWORK/home" \
+      SPECHUB_TW_BIN="$UWORK/home/.local/bin" \
+      SPECHUB_TW_CONFIG="$UWORK/home/.config/spechub/terminal-workspace.yaml" \
+      GIT_CONFIG_GLOBAL="$UWORK/gitconfig" \
+      bash "$SETUP" "$@" 2>&1
+}
+flat() { printf '%s' "$1" | tr '\n' '|'; }
+
+cp "$ROOT/assets/terminal-workspace/config.example.yaml" \
+   "$UWORK/home/.config/spechub/terminal-workspace.yaml"
+
+# The three components with no branch. Turning one of these off is a config
+# edit, so the only useful answer is to refuse and say which edit to make.
+for comp in yazi markdown remote; do
+  out=$(tw disable "$comp"); rc=$?
+  if [ "$rc" != "0" ] \
+     && printf '%s' "$out" | grep -qF "$comp.enabled: false" \
+     && printf '%s' "$out" | grep -q 'apply'; then
+    ok "disable $comp refuses and names the config edit that turns it off"
+  else
+    no "disable $comp refuses and names the config edit that turns it off (rc=$rc, said: $(flat "$out"))"
+  fi
+done
+
+# A name that is not a component at all takes the same silent path today.
+out=$(tw disable bogus); rc=$?
+missing=""
+for c in herdr delta diffnav gh_dash tuicr; do
+  printf '%s' "$out" | grep -qF "$c" || missing="$missing $c"
+done
+if [ "$rc" != "0" ] && [ -z "$missing" ]; then
+  ok "disable rejects an unknown component and lists the five it supports"
+else
+  no "disable rejects an unknown component and lists the five it supports (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
+fi
+
+# tuicr gained a disable branch without reaching the usage line, so the one
+# place a user goes to find out what they may type still omits it.
+out=$(tw disable); rc=$?
+missing=""
+for c in herdr delta diffnav gh_dash tuicr; do
+  printf '%s' "$out" | grep -qF "$c" || missing="$missing $c"
+done
+if [ "$rc" != "0" ] && [ -z "$missing" ]; then
+  ok "the usage line for disable lists all five supported components"
+else
+  no "the usage line for disable lists all five supported components (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
+fi
+
+
+echo "uninstall clears every managed region"
+# uninstall strips the herdr and tuicr managed regions and leaves the two it
+# wrote into the yazi config, plus the keybindings it wrote into gh-dash. What
+# is left keeps firing: yazi still routes markdown at spechub-md and gh-dash
+# still binds keys to tuicr and spechub-open, all of them binaries uninstall
+# has just deleted. The regions are marked, so removing them is the same edit
+# already made to herdr's config, and the user's own settings around them must
+# come through untouched.
+mkdir -p "$UWORK/home/.config/yazi" "$UWORK/home/.config/gh-dash"
+
+# Seeded through the writers themselves, so the region under test is exactly
+# the one apply leaves behind. Neither fixture claims a namespace the yazi
+# writer wants, so both get the full managed region.
+cat > "$UWORK/home/.config/yazi/yazi.toml" <<'YUSER'
+[log]
+enabled = true
+
+[input]
+cursor_blink = true
+YUSER
+run_yazi true "$UWORK/home/.config/yazi/yazi.toml"
+
+cat > "$UWORK/home/.config/yazi/keymap.toml" <<'KMUSER'
+[[mgr.append_keymap]]
+on = "T"
+run = "plugin toggle-pane"
+desc = "Toggle the preview pane"
+KMUSER
+# run_keymap is the yazi keymap writer extracted in the section above, not the
+# herdr one from the top of this file.
+run_keymap b "#" "$UWORK/home/.config/yazi/keymap.toml"
+
+# gh-dash reads YAML that python rewrites wholesale, so a comment marker never
+# survives a round trip. What identifies spechub's work there is the name on
+# each keybinding, which apply already uses to replace its own entries.
+cat > "$UWORK/home/.config/gh-dash/config.yml" <<'GHUSER'
+prSections:
+  - title: Mine
+    filters: "is:open author:@me"
+keybindings:
+  prs:
+    - key: X
+      name: my own thing
+      command: "echo mine"
+    - key: D
+      name: review (tuicr)
+      command: "cd {{.RepoPath}} && tuicr pr {{.PrNumber}}\n"
+    - key: o
+      name: open in browser
+      command: "spechub-open \"https://github.com/{{.RepoName}}/pull/{{.PrNumber}}\"\n"
+  universal:
+    - key: ctrl+q
+      builtin: quit
+    - key: pgup
+      builtin: pageUp
+    - key: pgdown
+      builtin: pageDown
+GHUSER
+
+if grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/yazi.toml" \
+   && grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/keymap.toml"; then
+  ok "the yazi fixtures carry a managed region before uninstall runs"
+else
+  no "the yazi fixtures carry a managed region before uninstall runs"
+fi
+
+uninstall_out=$(tw uninstall); uninstall_rc=$?
+
+if ! grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/yazi.toml" \
+   && ! grep -qF "$END_MARK" "$UWORK/home/.config/yazi/yazi.toml" \
+   && ! grep -qF 'spechub-md' "$UWORK/home/.config/yazi/yazi.toml"; then
+  ok "uninstall removes the managed region from yazi.toml"
+else
+  no "uninstall removes the managed region from yazi.toml (rc=$uninstall_rc, said: $(flat "$uninstall_out"))"
+fi
+
+if parses "$UWORK/home/.config/yazi/yazi.toml" \
+   && grep -q 'cursor_blink' "$UWORK/home/.config/yazi/yazi.toml" \
+   && grep -q '\[log\]' "$UWORK/home/.config/yazi/yazi.toml"; then
+  ok "the user's own yazi.toml settings survive uninstall"
+else
+  no "the user's own yazi.toml settings survive uninstall"
+fi
+
+if ! grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/keymap.toml" \
+   && ! grep -qF "$END_MARK" "$UWORK/home/.config/yazi/keymap.toml" \
+   && ! grep -qF 'spechub-md' "$UWORK/home/.config/yazi/keymap.toml"; then
+  ok "uninstall removes the managed region from the yazi keymap"
+else
+  no "uninstall removes the managed region from the yazi keymap"
+fi
+
+if parses "$UWORK/home/.config/yazi/keymap.toml" \
+   && grep -q 'toggle-pane' "$UWORK/home/.config/yazi/keymap.toml"; then
+  ok "the user's own yazi keymap bindings survive uninstall"
+else
+  no "the user's own yazi keymap bindings survive uninstall"
+fi
+
+ghq() {  # ghq <python expression over the parsed config, printing PASS or FAIL>
+  python3 - "$UWORK/home/.config/gh-dash/config.yml" <<PYGH
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1])) or {}
+kb = cfg.get("keybindings", {}) or {}
+prs = kb.get("prs", []) or []
+universal = kb.get("universal", []) or []
+names = [k.get("name") for k in prs]
+builtins = [k.get("builtin") for k in universal]
+sections = [s.get("title") for s in cfg.get("prSections", []) or []]
+$1
+PYGH
+}
+
+if ghq 'assert "review (tuicr)" not in names, names
+assert "open in browser" not in names, names
+assert "agent review" not in names, names' 2>/dev/null
+then ok "uninstall removes the gh-dash keybindings it wrote"
+else no "uninstall removes the gh-dash keybindings it wrote"; fi
+
+if ghq 'assert "my own thing" in names, names
+assert "Mine" in sections, sections
+assert "quit" in builtins, builtins' 2>/dev/null
+then ok "the user's own gh-dash keybindings and sections survive uninstall"
+else no "the user's own gh-dash keybindings and sections survive uninstall"; fi
+
+# page_keys is spechub's too. Leaving pgup and pgdown bound after uninstall
+# leaves the dashboard scrolling by a keymap nobody owns any more.
+if ghq 'assert "pageUp" not in builtins, builtins
+assert "pageDown" not in builtins, builtins' 2>/dev/null
+then ok "uninstall removes the gh-dash page keys it bound"
+else no "uninstall removes the gh-dash page keys it bound"; fi
+
+
+echo "the config example only documents keys setup.sh reads"
+# Both of these carry a comment admitting the script never reads them, which
+# makes the example config a place a user can change a number and see nothing
+# happen. The port belongs to spechub-md through $SPECHUB_MD_PORT, and the
+# dynamic repo section is gh-dash's own setting.
+CFGEX="$ROOT/assets/terminal-workspace/config.example.yaml"
+if [ -f "$CFGEX" ]; then
+  if ! grep -qE '^[[:space:]]*preview_port:' "$CFGEX"; then
+    ok "config.example.yaml does not offer preview_port"
+  else
+    no "config.example.yaml still offers preview_port, which setup.sh never reads"
+  fi
+  if ! grep -qE '^[[:space:]]*dynamic_repo_section:' "$CFGEX"; then
+    ok "config.example.yaml does not offer dynamic_repo_section"
+  else
+    no "config.example.yaml still offers dynamic_repo_section, which setup.sh never reads"
+  fi
+else
+  no "config.example.yaml exists"
+  no "config.example.yaml exists"
+fi
+
+
 if [ "$skipped" -gt 0 ]; then
   printf '\nResult: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 else

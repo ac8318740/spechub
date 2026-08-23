@@ -2,7 +2,7 @@
 # SpecHub terminal workspace setup.
 #   setup.sh status     what is installed and enabled
 #   setup.sh apply      install and configure everything enabled in the config
-#   setup.sh disable <herdr|delta|diffnav|gh_dash>
+#   setup.sh disable <herdr|delta|diffnav|gh_dash|tuicr>
 #   setup.sh uninstall  remove every managed block, keep the binaries
 #
 # Idempotent. Only ever edits between managed markers, so hand-written config
@@ -1047,7 +1047,7 @@ H
 #   ... | spechub-clip       copy stdin
 #   spechub-clip --out       print what was copied last
 #
-# A dev VM reached over SSH has no display and no clipboard of its own, so
+# A VM reached over SSH has no display and no clipboard of its own, so
 # xclip and friends have nothing to talk to. OSC 52 is the escape sequence
 # that asks the terminal at the far end - Windows Terminal, iTerm2, kitty -
 # to put text on its own clipboard. It is only bytes in the terminal stream,
@@ -2148,7 +2148,7 @@ apply_delta() {
 }
 
 apply_remote() {
-  # A dev VM reached over SSH has no display and no clipboard of its own, so
+  # A VM reached over SSH has no display and no clipboard of its own, so
   # anything that shells out to xclip fails. Put an xclip on PATH that speaks
   # OSC 52 to the terminal at the far end instead.
   [ "$(cfg_get remote.clipboard_shim true)" = "true" ] || {
@@ -2331,7 +2331,8 @@ case "$ACTION" in
     echo "done. open a herdr session and press prefix+? to see the keymap"
     ;;
   disable)
-    comp="${2:?usage: setup.sh disable <herdr|delta|diffnav|gh_dash>}"
+    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|tuicr>"
+    comp="${2:?$DISABLE_USAGE}"
     case "$comp" in
       delta) for k in core.pager interactive.diffFilter delta.navigate delta.line-numbers; do
                git config --global --unset "$k" 2>/dev/null
@@ -2361,6 +2362,14 @@ yaml.safe_dump(c, open(p, "w"), sort_keys=False)
 PY
         apply_herdr
         say "$comp disabled, rest of the keymap left in place" ;;
+      yazi|markdown|remote)
+        # These three have no keys to remove and no git settings to unset, so
+        # there is nothing here to carry out. Refusing says so; the arm that
+        # was missing let the script exit 0 in silence, which reads as done.
+        say "$comp has no disable step"
+        say "set $comp.enabled: false in $CFG and run apply instead"
+        exit 1 ;;
+      *) echo "$comp is not a component. $DISABLE_USAGE" >&2; exit 1 ;;
     esac
     ;;
   uninstall)
@@ -2372,14 +2381,51 @@ PY
     rm -f "$BIN"/spechub-*
     # The xclip stand-in is the one managed file without the prefix.
     grep -q "Installed by spechub" "$BIN/xclip" 2>/dev/null && rm -f "$BIN/xclip"
-    SPECHUB_ARGS="$BEGIN|$END" py "$HOME/.config/tuicr/config.toml" <<'PY'
+    # Every file apply leaves a marked region in. Removing the region is the
+    # same edit `disable herdr` makes, so whatever the user wrote around it
+    # comes through untouched. Left behind, the yazi regions keep routing
+    # markdown at spechub-md, a helper this command has just deleted.
+    SPECHUB_ARGS="$BEGIN|$END" py \
+      "$HOME/.config/tuicr/config.toml" \
+      "$HOME/.config/yazi/yazi.toml" \
+      "$HOME/.config/yazi/keymap.toml" <<'PY'
 import os, re, sys
-p = sys.argv[1]
 b, e = os.environ["SPECHUB_ARGS"].split("|")
-if os.path.isfile(p):
-    t = open(p).read()
-    open(p, "w").write(re.sub(re.escape(b) + r".*?" + re.escape(e) + r"\n?", "", t, flags=re.S))
+for p in sys.argv[1:]:
+    if os.path.isfile(p):
+        t = open(p).read()
+        open(p, "w").write(re.sub(re.escape(b) + r".*?" + re.escape(e) + r"\n?", "", t, flags=re.S))
 PY
+    # gh-dash reads YAML that python rewrites whole, so a marker comment never
+    # survives the round trip. What identifies spechub's work there is the name
+    # on each keybinding, the same handle apply_ghdash uses to replace its own
+    # entries, plus the two page keys it binds. Sections, repo paths and every
+    # other keybinding belong to the user and stay.
+    if [ -f "$GHDASH_CFG" ] && python3 -c 'import yaml' 2>/dev/null; then
+      py "$GHDASH_CFG" <<'PY'
+import sys, yaml
+p = sys.argv[1]
+cfg = yaml.safe_load(open(p)) or {}
+MANAGED = ("review (tuicr)", "tree diff", "agent review", "open in browser")
+kbs = cfg.get("keybindings") or {}
+for scope in ("prs", "issues"):
+    if scope in kbs:
+        kbs[scope] = [k for k in kbs[scope] or [] if k.get("name") not in MANAGED]
+        if not kbs[scope]:
+            del kbs[scope]
+if "universal" in kbs:
+    kbs["universal"] = [k for k in kbs["universal"] or []
+                        if k.get("builtin") not in ("pageUp", "pageDown")]
+    if not kbs["universal"]:
+        del kbs["universal"]
+if kbs:
+    cfg["keybindings"] = kbs
+else:
+    cfg.pop("keybindings", None)
+yaml.safe_dump(cfg, open(p, "w"), sort_keys=False, default_flow_style=False, width=200)
+PY
+      say "gh-dash keybindings removed"
+    fi
     say "managed config and helpers removed. binaries left in place"
     ;;
   *) echo "usage: setup.sh [status|apply|disable <component>|uninstall]"; exit 1 ;;
