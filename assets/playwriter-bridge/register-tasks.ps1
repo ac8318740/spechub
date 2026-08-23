@@ -3,9 +3,17 @@
 # Creates three kinds of scheduled tasks, all at user logon, LogonType=Interactive:
 #
 #   Playwriter-Relay         – runs relay.ps1 (always one)
+#   Playwriter-Opener        – runs opener.ps1 (always one)
 #   Playwriter-Tunnel-VM1    – runs tunnel.ps1 -TargetHost <vm1>
 #   Playwriter-Tunnel-VM2    – runs tunnel.ps1 -TargetHost <vm2>
 #   ...                       (one per VM in -VMs, auto-numbered)
+#   Playwriter-OpenerTunnel-VM1 – runs tunnel.ps1 -TargetHost <vm1> -Port 19989
+#   ...                       (one per VM, carrying the opener's port)
+#
+# The opener gets its own tunnel task rather than a second -R on the bridge's
+# connection. ssh runs with ExitOnForwardFailure=yes, so one wedged port fails
+# the whole connection – sharing one would mean a stuck opener port takes the
+# bridge down too. See docs/adr/0006-document-opener-service.md.
 #
 # The tasks run as the current user, so the ssh-agent named pipe (SID-ACL'd
 # to the user) stays reachable and no password is ever stored. Each task
@@ -50,10 +58,10 @@ if (-not $principalCheck.IsInRole([Security.Principal.WindowsBuiltInRole]::Admin
 }
 
 # Validate that the script files are actually where we expect them.
-foreach ($file in @("relay.ps1", "tunnel.ps1")) {
+foreach ($file in @("relay.ps1", "tunnel.ps1", "opener.ps1", "opener.js")) {
     $full = Join-Path $ScriptsDir $file
     if (-not (Test-Path $full)) {
-        Write-Error "Missing required script: $full. Copy relay.ps1 and tunnel.ps1 into $ScriptsDir before running this."
+        Write-Error "Missing required script: $full. Copy relay.ps1, tunnel.ps1, opener.ps1 and opener.js into $ScriptsDir before running this."
         exit 1
     }
 }
@@ -82,6 +90,48 @@ $userId = "$env:USERDOMAIN\$env:USERNAME"
 $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
 
+# Unregister-ScheduledTask removes the task definition but does not take down a
+# running instance, and the scheduler force-terminates launcher.exe without
+# letting its ProcessExit handler run - so the launcher's WMI descendant kill
+# never fires and the child PowerShell, plus the ssh.exe or node.exe it was
+# holding, survives as an orphan still bound to 19988/19989. The task registered
+# next then never binds. Observed on Windows 11 26200 re-running this script
+# over a live bridge: two orphaned tunnel trees competing on 19988, each with
+# its own retry counter, writing interleaved lines into one log.
+#
+# Scoped by the task's own registered argument string so a tunnel task never
+# reaps its sibling on the other port or the other VM. launcher.exe drops the
+# quotes around -File when it builds the child command line, hence the de-quoted
+# comparison on both sides.
+function Stop-BridgeTaskTree {
+    param([string]$Name)
+
+    $task = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    $want = if ($task) { ($task.Actions.Arguments -replace '"', '') } else { $null }
+
+    Stop-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+
+    for ($i = 0; $i -lt 20; $i++) {
+        $state = (Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue).State
+        if ($state -ne 'Running') { break }
+        Start-Sleep -Milliseconds 250
+    }
+
+    if (-not $want) { return }
+
+    $survivors = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ProcessId -ne $PID -and $_.CommandLine -and ($_.CommandLine -replace '"', '') -eq $want
+    })
+    foreach ($p in $survivors) {
+        # Children first. Killing the supervisor alone re-orphans the ssh.exe or
+        # node.exe it was holding, which is the whole bug this guards against.
+        Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.ProcessId)" -ErrorAction SilentlyContinue |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "  reaped surviving $Name process (PID $($p.ProcessId))"
+    }
+}
+
 function Register-BridgeTask {
     param(
         [string]$Name,
@@ -109,6 +159,9 @@ function Register-BridgeTask {
     # while the script falsely reported success.
     $existing = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
     if ($existing) {
+        # Take the running instance down first, children included. Unregistering
+        # a running task leaves its process tree alive and holding the port.
+        Stop-BridgeTaskTree -Name $Name
         try {
             Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction Stop
         } catch {
@@ -161,22 +214,115 @@ function Register-BridgeTask {
 }
 
 Register-BridgeTask -Name "Playwriter-Relay" -ScriptFile "relay.ps1"
+Register-BridgeTask -Name "Playwriter-Opener" -ScriptFile "opener.ps1"
 
 for ($i = 0; $i -lt $VMs.Count; $i++) {
     $vm = $VMs[$i]
-    $taskName = "Playwriter-Tunnel-VM$($i + 1)"
     Register-BridgeTask `
-        -Name $taskName `
+        -Name "Playwriter-Tunnel-VM$($i + 1)" `
         -ScriptFile "tunnel.ps1" `
         -ExtraArgs @("-TargetHost", $vm, "-User", $TunnelUser)
+    Register-BridgeTask `
+        -Name "Playwriter-OpenerTunnel-VM$($i + 1)" `
+        -ScriptFile "tunnel.ps1" `
+        -ExtraArgs @("-TargetHost", $vm, "-User", $TunnelUser, "-Port", "19989")
+}
+
+# The opener refuses every request that does not carry this, so each VM needs
+# a copy. Generated here if the opener has not already made one; pushed over
+# the same ssh the tunnel uses, so it needs no new access. A VM that cannot be
+# reached is a warning, not a failure: the tunnel tasks are still worth
+# registering, and the token can be copied by hand afterwards.
+$tokenFile = Join-Path $env:LOCALAPPDATA "playwriter-bridge\opener.token"
+if (-not (Test-Path $tokenFile)) {
+    New-Item -Path (Split-Path $tokenFile) -ItemType Directory -Force | Out-Null
+    $bytes = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    Set-Content -Path $tokenFile -Value ([System.BitConverter]::ToString($bytes).Replace('-', '').ToLower()) -NoNewline -Encoding ascii
+    Write-Host "Generated opener token: $tokenFile"
+}
+$token = (Get-Content $tokenFile -Raw).Trim()
+
+Write-Host ""
+Write-Host "Pushing opener token to VMs..."
+# Resolve ssh the same way tunnel.ps1 does. A bare 'ssh' can resolve to the Git
+# for Windows build, which cannot reach the Windows ssh-agent named pipe and so
+# fails with "Permission denied (publickey)" - the push would then be skipped
+# with only a warning and the VM would 401 on every opener request.
+$sshExe = Join-Path $env:WINDIR "System32\OpenSSH\ssh.exe"
+if (-not (Test-Path $sshExe)) {
+    $onPath = Get-Command ssh -ErrorAction SilentlyContinue
+    if ($onPath) {
+        $sshExe = $onPath.Source
+    } else {
+        # A warning, never a throw. The tasks are already registered by this
+        # point and the start loop is still ahead, so throwing here left every
+        # task registered and none of them running.
+        Write-Warning "ssh.exe not found, so the opener token was not pushed. Enable the Windows OpenSSH Client optional feature, then copy $tokenFile to ~/.config/spechub/opener.token on each VM by hand."
+        $sshExe = $null
+    }
+}
+foreach ($vm in $VMs) {
+    if (-not $sshExe) { break }
+    $remote = "$TunnelUser@$vm"
+    # Single-quoted on the remote side so the shell there cannot interpret it,
+    # and 0600 because it is a bearer credential for opening pages on this
+    # screen.
+    $cmd = "mkdir -p ~/.config/spechub && umask 077 && printf '%s' '$token' > ~/.config/spechub/opener.token"
+    # $ErrorActionPreference is 'Stop' for this script, and merging a native
+    # command's stderr into the pipeline under it turns any stderr line into a
+    # terminating NativeCommandError. ssh writes one on a first connection:
+    # "Warning: Permanently added ... to the list of known hosts". That aborted
+    # the run before the start loop, on nothing but a routine notice. Discard
+    # stderr and read the real result from the exit code.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $sshExe -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $remote $cmd 2>$null | Out-Null
+    $sshCode = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    if ($sshCode -eq 0) {
+        Write-Host "  $vm : token installed at ~/.config/spechub/opener.token"
+    } else {
+        Write-Warning "  $vm : could not push the token (ssh exit $sshCode). Copy $tokenFile to ~/.config/spechub/opener.token on that VM by hand."
+    }
+}
+
+# Tasks whose VM is not in -VMs. A re-run with a shorter list leaves the earlier
+# tunnels registered and untouched: this script removes nothing. The case that
+# matters is a VM behind a VPN that was down at registration time. Its
+# Playwriter-Tunnel-VM2 must survive a re-run that could not reach it, because
+# dropping the task would silently drop that VM from the bridge - and the user
+# would find out the next time they needed a browser on it.
+#
+# Reported here rather than after the start loop, because a warning printed
+# under "Starting tasks..." reads as a task that failed to start.
+$leftover = @()
+foreach ($t in @(Get-ScheduledTask -TaskName 'Playwriter-Tunnel-*','Playwriter-OpenerTunnel-*' -ErrorAction SilentlyContinue)) {
+    # The VM is in the action arguments, not the task name: an index-based guess
+    # would mislabel every task whenever -VMs is reordered.
+    $argText = ($t.Actions | ForEach-Object { $_.Arguments }) -join ' '
+    if ($argText -match '-TargetHost\s+(\S+)') {
+        $taskTarget = $Matches[1].Trim('"')
+        if ($VMs -notcontains $taskTarget) {
+            $leftover += [pscustomobject]@{ Name = $t.TaskName; Target = $taskTarget }
+        }
+    }
+}
+if ($leftover.Count -gt 0) {
+    Write-Host ""
+    foreach ($l in $leftover) {
+        Write-Warning ("Left alone: task '{0}' forwards to {1}, which is not in -VMs. It stays registered and keeps running. This script removes nothing. Re-run with {1} in -VMs to update it, or delete the task yourself in Task Scheduler." -f $l.Name, $l.Target)
+    }
 }
 
 Write-Host ""
 Write-Host "Starting tasks..."
 Start-ScheduledTask -TaskName "Playwriter-Relay"
+Start-ScheduledTask -TaskName "Playwriter-Opener"
 Start-Sleep -Seconds 2
 for ($i = 0; $i -lt $VMs.Count; $i++) {
     Start-ScheduledTask -TaskName "Playwriter-Tunnel-VM$($i + 1)"
+    Start-ScheduledTask -TaskName "Playwriter-OpenerTunnel-VM$($i + 1)"
 }
 
 Write-Host "Done. Logs: $env:LOCALAPPDATA\playwriter-bridge\"

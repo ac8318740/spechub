@@ -1,6 +1,6 @@
 ---
 name: bridge
-description: Set up, diagnose, and operate the Playwriter bridge – the reverse-SSH setup that lets a coding agent on a Linux dev VM drive a real Chrome browser on a user's Windows laptop. Any bridge work spans two devices, so this skill routes you to the right platform-specific runbook and establishes the handoff convention for cross-device work. ALWAYS invoke before touching bridge scripts, diagnosing connection issues to the user's browser, or responding to questions about the CDP tunnel on port 19988.
+description: Set up, diagnose, and operate the Playwriter bridge – the reverse-SSH setup that lets a coding agent on a Linux VM drive a real Chrome browser on a user's Windows laptop. Any bridge work spans two devices, so this skill routes you to the right platform-specific runbook and establishes the handoff convention for cross-device work. ALWAYS invoke before touching bridge scripts, diagnosing connection issues to the user's browser, or responding to questions about the CDP tunnel on port 19988.
 ---
 
 # Playwriter bridge
@@ -9,7 +9,7 @@ description: Set up, diagnose, and operate the Playwriter bridge – the reverse
 
 The Playwriter bridge is a cross-device setup. A Node relay + Chrome
 extension run on the user's Windows laptop. A reverse SSH tunnel makes
-that relay reachable at `127.0.0.1:19988` on one or more Linux dev VMs. A
+that relay reachable at `127.0.0.1:19988` on one or more Linux VMs. A
 coding agent on the VM uses `agent-browser` against that endpoint to drive
 the user's real browser.
 
@@ -34,7 +34,7 @@ In PowerShell (Windows):
 if ($env:OS -eq 'Windows_NT') { 'windows' } else { 'other' }
 ```
 
-In bash (Linux / macOS / dev VM):
+In bash (Linux / macOS / VM):
 
 ```bash
 case "$(uname -s)" in
@@ -47,7 +47,7 @@ esac
 Then:
 
 - **Windows** – read [`SKILL-WINDOWS.md`](SKILL-WINDOWS.md). Stop here.
-- **Linux / macOS / dev VM** – read [`SKILL-VM.md`](SKILL-VM.md). Stop here.
+- **Linux / macOS / VM** – read [`SKILL-VM.md`](SKILL-VM.md). Stop here.
 
 ## Step 2 – understand the handoff convention
 

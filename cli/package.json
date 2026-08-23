@@ -1,6 +1,6 @@
 {
-  "name": "@ac8318740/spechub-cli",
-  "version": "0.1.0",
+  "name": "spechub-cli",
+  "version": "0.20.1",
   "description": "CLI for spec-driven development with SpecHub",
   "type": "module",
   "license": "MIT",
@@ -9,41 +9,51 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ac8318740/spechub"
+    "url": "git+https://github.com/ac8318740/spechub.git",
+    "directory": "cli"
   },
   "bin": {
     "spechub": "./bin/spechub.js"
   },
   "files": [
-    "dist/",
+    "dist/index.js",
     "bin/",
-    "schemas/"
+    "LICENSE",
+    "README.md"
   ],
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "node build.mjs",
+    "build": "npm run sync-version && node build.mjs",
     "dev": "node build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run",
-    "prepublishOnly": "npm run build"
-  },
-  "dependencies": {
-    "chalk": "^5.4.0",
-    "commander": "^14.0.0",
-    "fast-glob": "^3.3.0",
-    "yaml": "^2.7.0",
-    "zod": "^3.24.0"
+    "prepublishOnly": "npm run build",
+    "sync-version": "node scripts/sync-version.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/node": "^22.0.0",
+    "chalk": "^5.4.0",
+    "commander": "^14.0.0",
     "esbuild": "^0.24.0",
     "eslint": "^9.39.5",
+    "fast-glob": "^3.3.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.67.0",
-    "vitest": "^3.0.0"
-  }
+    "vitest": "^3.0.0",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.0"
+  },
+  "homepage": "https://github.com/ac8318740/spechub/tree/main/cli",
+  "keywords": [
+    "spec-driven",
+    "spec",
+    "planning",
+    "agent",
+    "claude",
+    "cli"
+  ]
 }

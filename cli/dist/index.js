@@ -8033,9 +8033,9 @@ var require_resolve_block_scalar = __commonJS({
     }
     function splitLines(source) {
       const split = source.split(/\n( *)/);
-      const first = split[0];
-      const m = first.match(/^( *)/);
-      const line0 = m?.[1] ? [m[1], first.slice(m[1].length)] : ["", first];
+      const first2 = split[0];
+      const m = first2.match(/^( *)/);
+      const line0 = m?.[1] ? [m[1], first2.slice(m[1].length)] : ["", first2];
       const lines = [line0];
       for (let i = 1; i < split.length; i += 2)
         lines.push([split[i], split[i + 1]]);
@@ -8122,20 +8122,20 @@ var require_resolve_flow_scalar = __commonJS({
       return foldLines(source.slice(1, -1)).replace(/''/g, "'");
     }
     function foldLines(source) {
-      let first, line;
+      let first2, line;
       try {
-        first = new RegExp("(.*?)(?<![ 	])[ 	]*\r?\n", "sy");
+        first2 = new RegExp("(.*?)(?<![ 	])[ 	]*\r?\n", "sy");
         line = new RegExp("[ 	]*(.*?)(?:(?<![ 	])[ 	]*)?\r?\n", "sy");
       } catch {
-        first = /(.*?)[ \t]*\r?\n/sy;
+        first2 = /(.*?)[ \t]*\r?\n/sy;
         line = /[ \t]*(.*?)[ \t]*\r?\n/sy;
       }
-      let match = first.exec(source);
+      let match = first2.exec(source);
       if (!match)
         return source;
       let res = match[1];
       let sep = " ";
-      let pos = first.lastIndex;
+      let pos = first2.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
@@ -10666,7 +10666,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse(src, reviver, options) {
+    function parse2(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -10707,7 +10707,7 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports.parse = parse;
+    exports.parse = parse2;
     exports.parseAllDocuments = parseAllDocuments;
     exports.parseDocument = parseDocument;
     exports.stringify = stringify;
@@ -11283,7 +11283,7 @@ var init_source = __esm({
 });
 
 // src/lib/constants.ts
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 import { homedir } from "node:os";
 var SPECHUB_DIR, CHANGES_DIR, MAPS_DIR, SPECS_DIR, ARCHIVE_DIR, CONFIG_FILE, PROJECT_FILE, VOCABULARY_PATH, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE, GLOBAL_DATA_DIR;
 var init_constants = __esm({
@@ -11296,22 +11296,22 @@ var init_constants = __esm({
     ARCHIVE_DIR = "archive";
     CONFIG_FILE = "config.yaml";
     PROJECT_FILE = "project.yaml";
-    VOCABULARY_PATH = join("skills", "writing", "vocabulary.md");
-    GLOBAL_CONFIG_DIR = join(
-      process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+    VOCABULARY_PATH = join2("skills", "writing", "vocabulary.md");
+    GLOBAL_CONFIG_DIR = join2(
+      process.env.XDG_CONFIG_HOME ?? join2(homedir(), ".config"),
       "spechub"
     );
-    GLOBAL_CONFIG_FILE = join(GLOBAL_CONFIG_DIR, "config.json");
-    GLOBAL_DATA_DIR = join(
-      process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
+    GLOBAL_CONFIG_FILE = join2(GLOBAL_CONFIG_DIR, "config.json");
+    GLOBAL_DATA_DIR = join2(
+      process.env.XDG_DATA_HOME ?? join2(homedir(), ".local", "share"),
       "spechub"
     );
   }
 });
 
 // src/lib/utils.ts
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
-import { join as join2 } from "node:path";
+import { existsSync, mkdirSync, readFileSync as readFileSync2, readdirSync } from "node:fs";
+import { join as join3 } from "node:path";
 function fail(message, hint) {
   console.error(source_default.red(message));
   if (hint) console.error(source_default.dim(hint));
@@ -11322,19 +11322,19 @@ function ensureDir(path) {
 }
 function readYaml(path) {
   if (!existsSync(path)) return null;
-  return (0, import_yaml.parse)(readFileSync(path, "utf-8"));
+  return (0, import_yaml.parse)(readFileSync2(path, "utf-8"));
 }
 function readMarkdown(path) {
   if (!existsSync(path)) return null;
-  return readFileSync(path, "utf-8");
+  return readFileSync2(path, "utf-8");
 }
 function listChanges(root) {
-  const dir = join2(root, SPECHUB_DIR, CHANGES_DIR);
+  const dir = join3(root, SPECHUB_DIR, CHANGES_DIR);
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== ARCHIVE_DIR).map((e) => e.name);
 }
 function listSpecs(root) {
-  const dir = join2(root, SPECHUB_DIR, SPECS_DIR);
+  const dir = join3(root, SPECHUB_DIR, SPECS_DIR);
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 }
@@ -11360,20 +11360,20 @@ __export(init_exports, {
   register: () => register
 });
 import { existsSync as existsSync2, writeFileSync } from "node:fs";
-import { join as join3, resolve } from "node:path";
+import { join as join4, resolve } from "node:path";
 function register(program3) {
   program3.command("init").description("Initialize SpecHub in a project").argument("[path]", "project directory", ".").option("--force", "overwrite existing configuration").action((path, opts) => {
     const root = resolve(path);
-    const dir = join3(root, SPECHUB_DIR);
+    const dir = join4(root, SPECHUB_DIR);
     if (existsSync2(dir) && !opts.force) {
       console.error(source_default.yellow(`${SPECHUB_DIR}/ already exists. Use --force to overwrite.`));
       process.exit(1);
     }
-    ensureDir(join3(dir, SPECS_DIR));
+    ensureDir(join4(dir, SPECS_DIR));
     const config = {
       context: {}
     };
-    writeFileSync(join3(dir, CONFIG_FILE), (0, import_yaml2.stringify)(config), "utf-8");
+    writeFileSync(join4(dir, CONFIG_FILE), (0, import_yaml2.stringify)(config), "utf-8");
     console.log(source_default.green("Initialized SpecHub project:"));
     console.log(`  ${SPECHUB_DIR}/`);
     console.log(`  ${SPECHUB_DIR}/${SPECS_DIR}/`);
@@ -11393,12 +11393,12 @@ var init_init = __esm({
 
 // src/lib/project.ts
 import { existsSync as existsSync3 } from "node:fs";
-import { dirname, join as join4, resolve as resolve2 } from "node:path";
+import { dirname as dirname2, join as join5, resolve as resolve2 } from "node:path";
 function findUp(startDir, marker) {
   let dir = resolve2(startDir);
   while (true) {
-    if (existsSync3(join4(dir, marker))) return dir;
-    const parent = dirname(dir);
+    if (existsSync3(join5(dir, marker))) return dir;
+    const parent = dirname2(dir);
     if (parent === dir) return null;
     dir = parent;
   }
@@ -11408,7 +11408,7 @@ function findProjectRoot(from = process.cwd()) {
 }
 function findPluginRoot(startDir = import.meta.dirname) {
   const fromEnv = process.env.CLAUDE_PLUGIN_ROOT;
-  if (fromEnv && existsSync3(join4(fromEnv, PLUGIN_MARKER))) return resolve2(fromEnv);
+  if (fromEnv && existsSync3(join5(fromEnv, PLUGIN_MARKER))) return resolve2(fromEnv);
   return findUp(startDir, PLUGIN_MARKER);
 }
 var PLUGIN_MARKER;
@@ -11416,7 +11416,7 @@ var init_project = __esm({
   "src/lib/project.ts"() {
     "use strict";
     init_constants();
-    PLUGIN_MARKER = join4(".claude-plugin", "plugin.json");
+    PLUGIN_MARKER = join5(".claude-plugin", "plugin.json");
   }
 });
 
@@ -11426,7 +11426,7 @@ __export(list_exports, {
   register: () => register2
 });
 import { existsSync as existsSync4, readdirSync as readdirSync2, statSync } from "node:fs";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 function register2(program3) {
   program3.command("list").description("List active changes or specs").option("--specs", "list specs instead of changes").option("--changes", "list changes (default)").option("--json", "output as JSON").option("--sort <order>", "sort order: name or recent", "recent").action((opts) => {
     const root = findProjectRoot();
@@ -11435,8 +11435,8 @@ function register2(program3) {
     const items = [];
     if (showSpecs) {
       for (const name of listSpecs(root)) {
-        const specDir = join5(root, SPECHUB_DIR, SPECS_DIR, name);
-        const specFile = join5(specDir, "spec.md");
+        const specDir = join6(root, SPECHUB_DIR, SPECS_DIR, name);
+        const specFile = join6(specDir, "spec.md");
         items.push({
           name,
           type: "spec",
@@ -11446,7 +11446,7 @@ function register2(program3) {
       }
     } else {
       for (const name of listChanges(root)) {
-        const changeDir = join5(root, SPECHUB_DIR, CHANGES_DIR, name);
+        const changeDir = join6(root, SPECHUB_DIR, CHANGES_DIR, name);
         const artifacts = existsSync4(changeDir) ? readdirSync2(changeDir).filter((f) => f.endsWith(".md")).map((f) => f.replace(".md", "")) : [];
         items.push({
           name,
@@ -11496,8 +11496,8 @@ var show_exports = {};
 __export(show_exports, {
   register: () => register3
 });
-import { existsSync as existsSync5, readFileSync as readFileSync2, readdirSync as readdirSync3 } from "node:fs";
-import { join as join6 } from "node:path";
+import { existsSync as existsSync5, readFileSync as readFileSync3, readdirSync as readdirSync3 } from "node:fs";
+import { join as join7 } from "node:path";
 function register3(program3) {
   program3.command("show").description("Display a change or spec").argument("[name]", "change or spec name").option("--json", "output as JSON").option("--type <type>", "force type: change or spec").action((name, opts) => {
     const root = findProjectRoot();
@@ -11506,8 +11506,8 @@ function register3(program3) {
       console.error(source_default.red("Provide a change or spec name."));
       process.exit(1);
     }
-    const changeDir = join6(root, SPECHUB_DIR, CHANGES_DIR, name);
-    const specDir = join6(root, SPECHUB_DIR, SPECS_DIR, name);
+    const changeDir = join7(root, SPECHUB_DIR, CHANGES_DIR, name);
+    const specDir = join7(root, SPECHUB_DIR, SPECS_DIR, name);
     let type;
     let targetDir;
     if (opts.type === "spec" || !opts.type && !existsSync5(changeDir) && existsSync5(specDir)) {
@@ -11524,12 +11524,12 @@ function register3(program3) {
       process.exit(1);
     }
     if (type === "spec") {
-      const specFile = join6(targetDir, "spec.md");
+      const specFile = join7(targetDir, "spec.md");
       if (!existsSync5(specFile)) {
         console.error(source_default.red(`Spec '${name}' has no spec.md file.`));
         process.exit(1);
       }
-      const content = readFileSync2(specFile, "utf-8");
+      const content = readFileSync3(specFile, "utf-8");
       if (opts.json) {
         console.log(JSON.stringify({ name, type: "spec", content }, null, 2));
       } else {
@@ -11540,7 +11540,7 @@ function register3(program3) {
     const files = readdirSync3(targetDir).filter((f) => f.endsWith(".md"));
     const artifacts = {};
     for (const file of files) {
-      artifacts[file.replace(".md", "")] = readFileSync2(join6(targetDir, file), "utf-8");
+      artifacts[file.replace(".md", "")] = readFileSync3(join7(targetDir, file), "utf-8");
     }
     if (opts.json) {
       console.log(JSON.stringify({ name, type: "change", artifacts }, null, 2));
@@ -11569,7 +11569,7 @@ __export(archive_exports, {
   register: () => register4
 });
 import { existsSync as existsSync6, cpSync, rmSync } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 function register4(program3) {
   program3.command("archive").description("Archive a completed change").argument("[name]", "change name").option("-y, --yes", "skip confirmation").option("--skip-specs", "skip living spec updates").action((name, opts) => {
     const root = findProjectRoot();
@@ -11587,14 +11587,14 @@ function register4(program3) {
       console.log(source_default.dim("\nRun: spechub archive <name>"));
       return;
     }
-    const changeDir = join7(root, SPECHUB_DIR, CHANGES_DIR, name);
+    const changeDir = join8(root, SPECHUB_DIR, CHANGES_DIR, name);
     if (!existsSync6(changeDir)) {
       console.error(source_default.red(`Change '${name}' not found.`));
       process.exit(1);
     }
     const archiveName = `${formatDate()}-${name}`;
-    const archiveDir = join7(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR, archiveName);
-    ensureDir(join7(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR));
+    const archiveDir = join8(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR, archiveName);
+    ensureDir(join8(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR));
     cpSync(changeDir, archiveDir, { recursive: true });
     rmSync(changeDir, { recursive: true });
     console.log(source_default.green(`Archived: ${name}`));
@@ -11678,9 +11678,9 @@ var init_util = __esm({
       };
     })(util || (util = {}));
     (function(objectUtil2) {
-      objectUtil2.mergeShapes = (first, second) => {
+      objectUtil2.mergeShapes = (first2, second) => {
         return {
-          ...first,
+          ...first2,
           ...second
           // second overwrites first
         };
@@ -14681,10 +14681,10 @@ var init_types = __esm({
       get element() {
         return this._def.valueType;
       }
-      static create(first, second, third) {
+      static create(first2, second, third) {
         if (second instanceof ZodType) {
           return new _ZodRecord({
-            keyType: first,
+            keyType: first2,
             valueType: second,
             typeName: ZodFirstPartyTypeKind.ZodRecord,
             ...processCreateParams(third)
@@ -14692,7 +14692,7 @@ var init_types = __esm({
         }
         return new _ZodRecord({
           keyType: ZodString.create(),
-          valueType: first,
+          valueType: first2,
           typeName: ZodFirstPartyTypeKind.ZodRecord,
           ...processCreateParams(second)
         });
@@ -15722,15 +15722,15 @@ var init_zod = __esm({
 });
 
 // src/lib/nodes.ts
-import { existsSync as existsSync7, readFileSync as readFileSync3, readdirSync as readdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join8 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync4, readdirSync as readdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
+import { join as join9 } from "node:path";
 function normalizeId(id) {
   const trimmed = id.trim();
   if (!/^\d+$/.test(trimmed)) return trimmed;
   return trimmed.padStart(3, "0");
 }
 function mapDir(root, map) {
-  return join8(root, SPECHUB_DIR, MAPS_DIR, map);
+  return join9(root, SPECHUB_DIR, MAPS_DIR, map);
 }
 function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/, "") || "node";
@@ -15749,7 +15749,7 @@ function compareIds(a, b) {
   return parseInt(a, 10) - parseInt(b, 10);
 }
 function parseNodeFile(dir, file) {
-  const raw = readFileSync3(join8(dir, file), "utf-8").replace(/\r\n/g, "\n");
+  const raw = readFileSync4(join9(dir, file), "utf-8").replace(/\r\n/g, "\n");
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
@@ -15822,7 +15822,7 @@ function serializeNode(node) {
 function writeNode(root, map, node) {
   const dir = mapDir(root, map);
   ensureDir(dir);
-  writeFileSync2(join8(dir, node.file), serializeNode(node), "utf-8");
+  writeFileSync2(join9(dir, node.file), serializeNode(node), "utf-8");
 }
 function requireExisting(nodes, id, role) {
   if (!nodes.some((n) => n.id === id)) {
@@ -15919,8 +15919,8 @@ function deriveDepths(nodes) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const depths = /* @__PURE__ */ new Map();
   function depthOf(id, trail) {
-    const known = depths.get(id);
-    if (known !== void 0) return known;
+    const known2 = depths.get(id);
+    if (known2 !== void 0) return known2;
     if (trail.has(id)) {
       throw new Error(`node ${id}: provenance cycle in answers chain`);
     }
@@ -16007,8 +16007,8 @@ var node_exports = {};
 __export(node_exports, {
   register: () => register5
 });
-import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join9 } from "node:path";
+import { readFileSync as readFileSync5 } from "node:fs";
+import { join as join10 } from "node:path";
 function parseStatus(value) {
   if (!NODE_STATUSES.includes(value)) {
     fail(`Invalid status '${value}'. One of: ${NODE_STATUSES.join(", ")}`);
@@ -16030,8 +16030,8 @@ function readBody(body, bodyFile) {
   }
   if (body !== void 0) return body;
   if (bodyFile === void 0) return void 0;
-  if (bodyFile === "-") return readFileSync4(0, "utf-8");
-  return readFileSync4(bodyFile, "utf-8");
+  if (bodyFile === "-") return readFileSync5(0, "utf-8");
+  return readFileSync5(bodyFile, "utf-8");
 }
 function toJson(node) {
   return {
@@ -16093,7 +16093,7 @@ function register5(program3) {
       if (opts.json) {
         console.log(JSON.stringify({ ...toJson(node), body: node.body }, null, 2));
       } else {
-        console.log(readFileSync4(join9(mapDir(root, opts.map), node.file), "utf-8"));
+        console.log(readFileSync5(join10(mapDir(root, opts.map), node.file), "utf-8"));
       }
     } catch (err) {
       fail(err.message);
@@ -16236,8 +16236,8 @@ var init_node = __esm({
 });
 
 // src/lib/global-config.ts
-import { existsSync as existsSync8, mkdirSync as mkdirSync2, readFileSync as readFileSync5, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname2 } from "node:path";
+import { existsSync as existsSync8, mkdirSync as mkdirSync2, readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname3 } from "node:path";
 function hostAxis(key) {
   return HOST_AXES.find((axis) => axis.key === key);
 }
@@ -16259,7 +16259,7 @@ function assertSettableKey(key) {
 }
 function readGlobalConfig(file) {
   if (!existsSync8(file)) return {};
-  const raw = readFileSync5(file, "utf-8");
+  const raw = readFileSync6(file, "utf-8");
   try {
     return JSON.parse(raw);
   } catch (err) {
@@ -16267,7 +16267,7 @@ function readGlobalConfig(file) {
   }
 }
 function writeGlobalConfig(config, file) {
-  mkdirSync2(dirname2(file), { recursive: true });
+  mkdirSync2(dirname3(file), { recursive: true });
   writeFileSync3(file, JSON.stringify(config, null, 2) + "\n", "utf-8");
 }
 function parseValue(key, raw) {
@@ -16536,12 +16536,12 @@ var init_host_status = __esm({
 import { spawnSync } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { request } from "node:http";
-import { delimiter, join as join10 } from "node:path";
+import { delimiter, join as join11 } from "node:path";
 function binaryOnPath(binary) {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (!dir) continue;
     try {
-      accessSync(join10(dir, binary), constants.X_OK);
+      accessSync(join11(dir, binary), constants.X_OK);
       return true;
     } catch {
     }
@@ -16597,7 +16597,7 @@ var config_exports = {};
 __export(config_exports, {
   register: () => register6
 });
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 function reportingUserErrors(action) {
   try {
     action();
@@ -16627,7 +16627,7 @@ function qualifier(key, required) {
 function loadProject() {
   const root = findProjectRoot();
   if (!root) return { context: projectHostContext(void 0, false), settings: null };
-  const yaml = readYaml(join11(root, SPECHUB_DIR, PROJECT_FILE));
+  const yaml = readYaml(join12(root, SPECHUB_DIR, PROJECT_FILE));
   return { context: projectHostContext(yaml, true), settings: projectSettings(yaml, true) };
 }
 async function detectHostAxes(wanted, project) {
@@ -17055,7 +17055,7 @@ var init_feedback = __esm({
 });
 
 // src/lib/ackfile.ts
-import { existsSync as existsSync9, readFileSync as readFileSync6, renameSync, rmSync as rmSync2, writeFileSync as writeFileSync4 } from "node:fs";
+import { existsSync as existsSync9, readFileSync as readFileSync7, renameSync, rmSync as rmSync2, writeFileSync as writeFileSync4 } from "node:fs";
 function isAckDecision(value) {
   return typeof value === "string" && ACK_DECISIONS.includes(value);
 }
@@ -17126,7 +17126,7 @@ function writeAck(args) {
 function readAck(file) {
   let raw;
   try {
-    raw = readFileSync6(ackPath(file), "utf-8");
+    raw = readFileSync7(ackPath(file), "utf-8");
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
@@ -17157,12 +17157,12 @@ var init_ackfile = __esm({
 });
 
 // src/lib/ackwatch.ts
-import { readFileSync as readFileSync7, statSync as statSync2 } from "node:fs";
+import { readFileSync as readFileSync8, statSync as statSync2 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { basename, join as join12 } from "node:path";
+import { basename, join as join13 } from "node:path";
 function transcriptPath(cwd, sessionId, projectsDir) {
-  const base = projectsDir ?? join12(homedir2(), ".claude", "projects");
-  return join12(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
+  const base = projectsDir ?? join13(homedir2(), ".claude", "projects");
+  return join13(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
 }
 function parseAck(text) {
   const match = ACK_PATTERN.exec(text ?? "");
@@ -17322,7 +17322,7 @@ function analyze(lines, options) {
 }
 function readLines(path) {
   try {
-    return readFileSync7(path, "utf-8").split("\n");
+    return readFileSync8(path, "utf-8").split("\n");
   } catch (err) {
     if (err.code === "ENOENT") return [];
     throw err;
@@ -18612,7 +18612,7 @@ var require_parse = __commonJS({
       CHAR_NO_BREAK_SPACE,
       CHAR_ZERO_WIDTH_NOBREAK_SPACE
     } = require_constants();
-    var parse = (input, options = {}) => {
+    var parse2 = (input, options = {}) => {
       if (typeof input !== "string") {
         throw new TypeError("Expected a string");
       }
@@ -18812,7 +18812,7 @@ var require_parse = __commonJS({
       push({ type: "eos" });
       return ast;
     };
-    module.exports = parse;
+    module.exports = parse2;
   }
 });
 
@@ -18823,7 +18823,7 @@ var require_braces = __commonJS({
     var stringify = require_stringify2();
     var compile = require_compile();
     var expand = require_expand();
-    var parse = require_parse();
+    var parse2 = require_parse();
     var braces = (input, options = {}) => {
       let output = [];
       if (Array.isArray(input)) {
@@ -18843,7 +18843,7 @@ var require_braces = __commonJS({
       }
       return output;
     };
-    braces.parse = (input, options = {}) => parse(input, options);
+    braces.parse = (input, options = {}) => parse2(input, options);
     braces.stringify = (input, options = {}) => {
       if (typeof input === "string") {
         return stringify(braces.parse(input, options), options);
@@ -19496,7 +19496,7 @@ var require_parse2 = __commonJS({
     var syntaxError = (type, char) => {
       return `Missing ${type}: "${char}" - use "\\\\${char}" to match literal characters`;
     };
-    var parse = (input, options) => {
+    var parse2 = (input, options) => {
       if (typeof input !== "string") {
         throw new TypeError("Expected a string");
       }
@@ -19645,7 +19645,7 @@ var require_parse2 = __commonJS({
             output = token.close = `)$))${extglobStar}`;
           }
           if (token.inner.includes("*") && (rest = remaining()) && /^\.[^\\/.]+$/.test(rest)) {
-            const expression = parse(rest, { ...options, fastpaths: false }).output;
+            const expression = parse2(rest, { ...options, fastpaths: false }).output;
             output = token.close = `)${expression})${extglobStar})`;
           }
           if (token.prev.type === "bos") {
@@ -19657,26 +19657,26 @@ var require_parse2 = __commonJS({
       };
       if (opts.fastpaths !== false && !/(^[*!]|[/()[\]{}"])/.test(input)) {
         let backslashes = false;
-        let output = input.replace(REGEX_SPECIAL_CHARS_BACKREF, (m, esc, chars, first, rest, index) => {
-          if (first === "\\") {
+        let output = input.replace(REGEX_SPECIAL_CHARS_BACKREF, (m, esc, chars, first2, rest, index) => {
+          if (first2 === "\\") {
             backslashes = true;
             return m;
           }
-          if (first === "?") {
+          if (first2 === "?") {
             if (esc) {
-              return esc + first + (rest ? QMARK.repeat(rest.length) : "");
+              return esc + first2 + (rest ? QMARK.repeat(rest.length) : "");
             }
             if (index === 0) {
               return qmarkNoDot + (rest ? QMARK.repeat(rest.length) : "");
             }
             return QMARK.repeat(chars.length);
           }
-          if (first === ".") {
+          if (first2 === ".") {
             return DOT_LITERAL.repeat(chars.length);
           }
-          if (first === "*") {
+          if (first2 === "*") {
             if (esc) {
-              return esc + first + (rest ? star : "");
+              return esc + first2 + (rest ? star : "");
             }
             return star;
           }
@@ -20170,7 +20170,7 @@ var require_parse2 = __commonJS({
       }
       return state;
     };
-    parse.fastpaths = (input, options) => {
+    parse2.fastpaths = (input, options) => {
       const opts = { ...options };
       const max = typeof opts.maxLength === "number" ? Math.min(MAX_LENGTH, opts.maxLength) : MAX_LENGTH;
       const len = input.length;
@@ -20236,7 +20236,7 @@ var require_parse2 = __commonJS({
       }
       return source;
     };
-    module.exports = parse;
+    module.exports = parse2;
   }
 });
 
@@ -20246,7 +20246,7 @@ var require_picomatch = __commonJS({
     "use strict";
     var path = __require("path");
     var scan = require_scan();
-    var parse = require_parse2();
+    var parse2 = require_parse2();
     var utils = require_utils2();
     var constants2 = require_constants2();
     var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
@@ -20334,7 +20334,7 @@ var require_picomatch = __commonJS({
     picomatch.isMatch = (str, patterns, options) => picomatch(patterns, options)(str);
     picomatch.parse = (pattern, options) => {
       if (Array.isArray(pattern)) return pattern.map((p) => picomatch.parse(p, options));
-      return parse(pattern, { ...options, fastpaths: false });
+      return parse2(pattern, { ...options, fastpaths: false });
     };
     picomatch.scan = (input, options) => scan(input, options);
     picomatch.compileRe = (state, options, returnOutput = false, returnState = false) => {
@@ -20360,10 +20360,10 @@ var require_picomatch = __commonJS({
       }
       let parsed = { negated: false, fastpaths: true };
       if (options.fastpaths !== false && (input[0] === "." || input[0] === "*")) {
-        parsed.output = parse.fastpaths(input, options);
+        parsed.output = parse2.fastpaths(input, options);
       }
       if (!parsed.output) {
-        parsed = parse(input, options);
+        parsed = parse2(input, options);
       }
       return picomatch.compileRe(parsed, options, returnOutput, returnState);
     };
@@ -23673,8 +23673,8 @@ __export(lint_prose_exports, {
   reportFile: () => reportFile,
   summarize: () => summarize
 });
-import { existsSync as existsSync10, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
-import { join as join13, relative, resolve as resolve5 } from "node:path";
+import { existsSync as existsSync10, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
+import { join as join14, relative, resolve as resolve5 } from "node:path";
 function loadVocabulary() {
   const pluginRoot = findPluginRoot();
   if (!pluginRoot) {
@@ -23683,7 +23683,7 @@ function loadVocabulary() {
       VOCABULARY_HINT
     );
   }
-  const path = join13(pluginRoot, VOCABULARY_PATH);
+  const path = join14(pluginRoot, VOCABULARY_PATH);
   let markdown = null;
   try {
     markdown = readMarkdown(path);
@@ -23753,7 +23753,7 @@ function displayPath(root, file) {
 function reportFile(file, display, vocabulary) {
   let text;
   try {
-    text = readFileSync8(file, "utf-8");
+    text = readFileSync9(file, "utf-8");
   } catch {
     console.error(source_default.yellow(`Cannot read, skipping: ${display}`));
     return { path: display, findings: [], unreadable: true };
@@ -23859,12 +23859,36 @@ var {
 } = import_index.default;
 
 // src/index.ts
-import { readFileSync as readFileSync9 } from "node:fs";
-import { join as join14 } from "node:path";
-var pkg = JSON.parse(
-  readFileSync9(join14(import.meta.dirname, "..", "package.json"), "utf-8")
-);
-var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(pkg.version);
+import { spawnSync as spawnSync2 } from "node:child_process";
+
+// src/lib/version.ts
+import { readFileSync } from "node:fs";
+import { dirname, join, parse } from "node:path";
+function resolveVersion(startDir) {
+  const candidates = [join(".claude-plugin", "plugin.json"), "package.json"];
+  for (const relative2 of candidates) {
+    let dir = startDir;
+    const { root } = parse(dir);
+    while (true) {
+      try {
+        const parsed = JSON.parse(
+          readFileSync(join(dir, relative2), "utf-8")
+        );
+        const version = parsed.version;
+        if (typeof version === "string" && version.length > 0) {
+          return version;
+        }
+      } catch {
+      }
+      if (dir === root) break;
+      dir = dirname(dir);
+    }
+  }
+  return "0.0.0-unknown";
+}
+
+// src/index.ts
+var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(resolveVersion(import.meta.dirname));
 var commands = await Promise.all([
   Promise.resolve().then(() => (init_init(), init_exports)),
   Promise.resolve().then(() => (init_list(), list_exports)),
@@ -23878,6 +23902,23 @@ var commands = await Promise.all([
 ]);
 for (const mod of commands) {
   mod.register(program2);
+}
+program2.addHelpText(
+  "after",
+  "\nAny other subcommand runs `spechub-<name>` from your PATH, the way git\ndoes. The terminal workspace installs several: md, diff, dash, tab."
+);
+var first = process.argv[2];
+var known = new Set(
+  program2.commands.flatMap((c) => [c.name(), ...c.aliases()])
+);
+if (first && !first.startsWith("-") && !known.has(first)) {
+  const result = spawnSync2(`spechub-${first}`, process.argv.slice(3), {
+    stdio: "inherit"
+  });
+  const failedToSpawn = result.error !== void 0 && "code" in result.error;
+  if (!failedToSpawn) {
+    process.exit(result.status ?? 0);
+  }
 }
 await program2.parseAsync();
 /*! Bundled license information:

@@ -18,7 +18,7 @@
 # tiny node wrapper that loads ../dist/index.js.
 #
 # When a project is initialized (spechub/project.yaml exists), the hook also
-# injects the plugin's orchestrator CLAUDE.md as additionalContext so installs
+# injects the plugin's orchestrator instructions as additionalContext so installs
 # stay version-agnostic. Otherwise prints a one-line reminder.
 
 set -u
@@ -69,8 +69,25 @@ if [ -n "$plugin_root" ] && [ -f "$cli_wrapper" ]; then
     link_cli "$cli_wrapper" "${HOME}/.claude/spechub/bin/spechub" "agent CLI"
 
     # Human-convenience path. Only useful when ~/.local/bin is on PATH.
+    #
+    # Defer to any other spechub that already owns the name. The usual one is a
+    # global `npm install -g spechub-cli`, which people install to drive a
+    # project from outside Claude Code. Two managers pointing one command name
+    # at different copies is a silent PATH race: whichever directory sorts
+    # first wins, and it can differ per machine. Better to let the one the user
+    # installed deliberately win, and say so.
+    #
+    # The agent path above is never affected. It is absolute, so it always
+    # reaches this plugin's own CLI no matter what is on PATH.
     human_link="${HOME}/.local/bin/spechub"
-    link_cli "$cli_wrapper" "$human_link" "human CLI"
+    on_path=$(command -v spechub 2>/dev/null || true)
+    if [ -n "$on_path" ] && [ "$on_path" != "$human_link" ] &&
+       [ "$(readlink -f "$on_path" 2>/dev/null)" != "$(readlink -f "$human_link" 2>/dev/null)" ]; then
+      echo "spechub: \`spechub\` on PATH comes from ${on_path} – leaving it alone." >&2
+      echo "spechub: agents and skills are unaffected – they use ~/.claude/spechub/bin/spechub directly." >&2
+    else
+      link_cli "$cli_wrapper" "$human_link" "human CLI"
+    fi
 
     if [ -L "$human_link" ]; then
       case ":${PATH}:" in
@@ -91,6 +108,46 @@ if [ -n "$plugin_root" ] && [ -f "$cli_wrapper" ]; then
           ;;
       esac
     fi
+  fi
+fi
+
+# --- Codex subagents: keep ~/.codex/agents current with the plugin ---
+# Codex cannot ship agent definitions inside a plugin - its plugin manifest has
+# no agent field - so they have to be installed as files. This reconciles them
+# on every session, the same way the CLI symlink above is reconciled, so a
+# plugin upgrade heals them instead of leaving stale copies behind.
+#
+# Copies rather than symlinks: Codex is known to refuse symlinked skill
+# directories and manifests, and the agent loader's behaviour there is
+# unverified. A copy is boring and works.
+#
+# Only ever overwrites files this generator wrote. A file without the generated
+# marker is someone's own agent that happens to share a name, and clobbering it
+# would be unforgivable.
+if [ -n "$plugin_root" ] && [ -d "${HOME}/.codex" ]; then
+  codex_src="${plugin_root}/agents/codex"
+  codex_dst="${HOME}/.codex/agents"
+  marker="by scripts/gen-codex-agents.mjs"
+
+  if [ -d "$codex_src" ]; then
+    mkdir -p "$codex_dst" 2>/dev/null
+    for src in "$codex_src"/*.toml; do
+      [ -f "$src" ] || continue
+      dst="${codex_dst}/$(basename "$src")"
+
+      if [ -e "$dst" ] && ! grep -qF "$marker" "$dst" 2>/dev/null; then
+        echo "spechub: ${dst} was not written by spechub - leaving it alone." >&2
+        continue
+      fi
+
+      if ! cmp -s "$src" "$dst" 2>/dev/null; then
+        if cp "$src" "$dst" 2>/dev/null; then
+          echo "spechub: installed Codex agent $(basename "$src" .toml)" >&2
+        else
+          echo "spechub: could not write ${dst}" >&2
+        fi
+      fi
+    done
   fi
 fi
 
@@ -129,10 +186,10 @@ if [ ! -f spechub/project.yaml ]; then
   exit 0
 fi
 
-claude_md="${plugin_root}/CLAUDE.md"
+claude_md="${plugin_root}/orchestrator/AGENTS.md"
 
 if [ -z "$plugin_root" ] || [ ! -r "$claude_md" ]; then
-  echo "spechub: could not read orchestrator CLAUDE.md (CLAUDE_PLUGIN_ROOT=${plugin_root:-unset})" >&2
+  echo "spechub: could not read orchestrator/AGENTS.md (CLAUDE_PLUGIN_ROOT=${plugin_root:-unset})" >&2
   exit 0
 fi
 

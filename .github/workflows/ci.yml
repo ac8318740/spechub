@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  cli:
+    name: CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+
+      - run: npm ci
+        working-directory: cli
+
+      - run: npm run typecheck
+        working-directory: cli
+
+      - run: npm test
+        working-directory: cli
+
+      # Generated files are committed so the plugin installs with no build step.
+      # That only holds if they are actually current. The pre-commit hook in
+      # CONTRIBUTING is opt-in and easy to not have installed, so this is the
+      # check that really enforces it.
+      - name: Generated files are current
+        run: |
+          npm --prefix cli run build
+          if ! git diff --exit-code -- cli/dist cli/package.json; then
+            echo "::error::cli/dist or cli/package.json is stale. Run 'npm run build' in cli/ and commit the result."
+            exit 1
+          fi
+
+      # The markdown in agents/ is the source; agents/codex/*.toml is generated
+      # from it and committed so the hook can install it with no build step.
+      - name: Codex agent definitions are current
+        run: |
+          node scripts/gen-codex-agents.mjs
+          if ! git diff --exit-code -- agents/codex; then
+            echo "::error::agents/codex is stale. Run 'node scripts/gen-codex-agents.mjs' and commit the result."
+            exit 1
+          fi
+
+  shell:
+    name: Shell suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # spechub-md renders HTML with the python markdown package. Without it
+      # the helper exits 1 by design, and the suite skips every --html and
+      # --browser check rather than report a missing optional dependency as
+      # fourteen failures. Skipped checks are not coverage, so install it and
+      # let them run.
+      - name: Install the python markdown package
+        run: sudo apt-get update && sudo apt-get install -y python3-markdown
+
+      # Guards setup.sh against its docs. Every spechub-* and every bound
+      # command the docs name must be something setup.sh installs, every
+      # default key must be documented, and the generated keymap must still
+      # be valid TOML after merging onto a config written by hand. Offline
+      # apart from the package above, so no herdr needed.
+      - name: Terminal workspace and docs
+        run: bash tests/test-terminal-workspace.sh
+
+      - name: Session start handoff hook
+        run: bash tests/test-session-start-handoff.sh
+
+  wiring:
+    name: Plugin wiring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hooks parse
+        run: for f in hooks/*.sh; do bash -n "$f"; done
+
+      # The orchestrator payload is loaded by path, so a rename or move breaks
+      # injection silently - nothing else reads that file.
+      - name: Orchestrator payload is where the hook looks for it
+        run: |
+          path=$(grep -oP '(?<=^claude_md="\$\{plugin_root\}/).*(?=")' hooks/session-start.sh)
+          echo "hook reads: $path"
+          test -n "$path" || { echo "::error::could not find the payload path in session-start.sh"; exit 1; }
+          test -f "$path" || { echo "::error::session-start.sh points at $path, which does not exist"; exit 1; }
+
+      - name: Root AGENTS.md is contributor guidance, not the payload
+        run: |
+          if grep -qi 'you are a coordinator' AGENTS.md; then
+            echo "::error::the orchestrator payload is back in the root AGENTS.md - it belongs in orchestrator/"
+            exit 1
+          fi
+
+      # Codex parses agent files with deny_unknown_fields: one unrecognised key
+      # and it discards the entire file, logging where nobody looks. Catch that
+      # here rather than in a silently agent-less Codex session.
+      - name: Codex agent TOML is valid and has no unknown keys
+        run: |
+          python3 - <<'PY'
+          import glob, sys, tomllib
+          allowed = {"name", "description", "developer_instructions"}
+          failed = False
+          for f in sorted(glob.glob("agents/codex/*.toml")):
+              with open(f, "rb") as fh:
+                  try:
+                      d = tomllib.load(fh)
+                  except Exception as e:
+                      print(f"::error file={f}::does not parse as TOML: {e}")
+                      failed = True
+                      continue
+              extra = set(d) - allowed
+              if extra:
+                  print(f"::error file={f}::Codex would discard this file for unknown keys: {sorted(extra)}")
+                  failed = True
+              for required in ("name", "description", "developer_instructions"):
+                  if not str(d.get(required, "")).strip():
+                      print(f"::error file={f}::missing or blank {required}")
+                      failed = True
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: Plugin manifest version is valid semver
+        run: |
+          v=$(python3 -c "import json;print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+          echo "version: $v"
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::bad version: $v"; exit 1; }
