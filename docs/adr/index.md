@@ -1,1 +1,2 @@
 - [0001](0001-ste-writing-standard.md) – One plain-language writing standard based on ASD-STE100
+- [0002](0002-handoff-ack-command.md) – Handoff acknowledgement is a CLI command, not a reply

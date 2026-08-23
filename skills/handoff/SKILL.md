@@ -119,16 +119,16 @@ conversation content, not project state, and must not be committable. Name it
 where `<slug>` names the work and `<timestamp>` stops two handoffs colliding.
 
 Its first line, above every heading, repeats the acknowledgement requirement
-verbatim:
+verbatim, with `<this-file>` replaced by the file's own path:
 
 ```text
-Acknowledge first: ACCEPT or DECLINE, the way the message that brought you here told you to, before doing anything else.
+Acknowledge before any other tool call. Run ~/.claude/spechub/bin/spechub handoff ack accept --file <this-file> "<one-line reason>", or ack decline --file <this-file> "<one-line reason>". The command writes <this-file>.ack, which the sender watches.
 ```
 
-It stays channel-neutral because the file is read on both routes, and the two
-routes acknowledge differently. The receiving agent is invited to read this file
-before it decides, so the file is the second place the requirement lands. The
-launch prompt is the first.
+Both routes acknowledge with the same command, so this line reads the same on
+both. The receiving agent is invited to read this file before it decides, so
+the file is the second place the requirement lands. The launch prompt is the
+first.
 
 This temp file is not `spechub/HANDOFF.md`, which is the `compact-and-continue`
 anchor: never put this line into that anchor, which has to start with `---`
@@ -145,35 +145,39 @@ text itself: `herdr agent start` rejects newlines and tabs in its arguments.
 
 ## Every prompt opens with an acknowledgement
 
-*A convention, not a protocol.*
+*The command records the decision. The typed word stays a convention.*
 
 Cross-session messaging has no accept-or-decline mechanism. A peer can read a
-message and simply ignore it, and the sender is never told. Refusal is
-ultimately a model-level choice, so the handshake has to live in the prompt text
-itself.
+message and simply ignore it, and the sender is never told. So the receiver
+acknowledges by running a command. `spechub handoff ack accept|decline` writes
+a sidecar file at `<handoff-file>.ack`, beside the handoff file in the temp
+directory, and the watcher polls for that path.
 
-So every handoff prompt opens with an acknowledgement instruction. There are
-two of them, because the two destinations answer over different channels. Use
-the matching one verbatim, substituting only the handoff file path. Each is a
-single line: `herdr agent start` rejects newlines and tabs in its arguments, so
-the instruction and the pointer at the handoff file share that one line.
+The sidecar makes the decision a recorded fact rather than a phrase the sender
+must recognise. A typed ACCEPT or DECLINE in the transcript still counts. The
+watcher reports that fallback as `ack.via: 'text'`, and it stays a convention
+an agent can drift from. Every handoff prompt asks for the command.
+
+There are two prompts, because the two destinations differ in what else they
+must say. Use the matching one verbatim, substituting only the handoff file
+path. Each one is a single line, because `herdr agent start` rejects newlines
+and tabs in its arguments. The instruction and the pointer at the handoff file
+share that one line.
 
 **Fresh agent** – one launched for this handoff, into a new pane, worktree or
-tab, or as a `--bg` session. It has no handle to reply on, so its acknowledgement
-is simply the first line of its first reply. A tool call is not a reply: reading
-the handoff file, running a command or spawning a subagent all leave the
-acknowledgement still owed, because the acknowledgement is the first *text* the
-agent sends.
+tab, or as a `--bg` session. Reading the handoff file is the one tool call
+allowed before the ack command. Every other tool call – a command, an edit, a
+subagent – leaves the acknowledgement still owed.
 
-> The first line of your first reply must be the single word ACCEPT or DECLINE, followed by a one-line reason – plain text, nothing at all before it, and no bold, heading, quote or code formatting – because the sender matches that line literally and cannot report this work as yours until it sees it. You may read <handoff-file> first to judge whether the work suits you, but reply before doing any other work. Then continue that work.
+> Before any other tool call, acknowledge this handoff by running ~/.claude/spechub/bin/spechub handoff ack accept --file <handoff-file> "<one-line reason>", or ack decline --file <handoff-file> "<one-line reason>". You may read <handoff-file> first to judge whether the work suits you, and nothing else until the command has run – the sender watches for the file it writes and cannot report this work as yours until it exists. Then continue that work.
 
-**Agent already running** – one reached by cross-session message. A reply typed
-into its own conversation goes nowhere this session can see, so the
-acknowledgement has to travel back over the same channel it arrived on:
+**Agent already running** – one reached by cross-session message. It runs the
+same command. A `SendMessage` reply is no longer required, and a reply that
+begins ACCEPT or DECLINE is the recognised fallback:
 
-> The first thing you do must be to send an acknowledgement back to me with SendMessage – copy this message's from field as your to field – and that message must begin with the single word ACCEPT or DECLINE, followed by a one-line reason, as plain text with nothing at all before it and no bold, heading, quote or code formatting, because the sender matches it literally. A reply typed only into your own conversation is not seen, and the sender cannot report this work as yours until that message arrives. You may read <handoff-file> first to judge whether the work suits you, but send the acknowledgement before doing any other work. Then continue that work.
+> Before any other tool call, acknowledge this handoff by running ~/.claude/spechub/bin/spechub handoff ack accept --file <handoff-file> "<one-line reason>", or ack decline --file <handoff-file> "<one-line reason>". You may read <handoff-file> first to judge whether the work suits you, and nothing else until the command has run – the sender watches for the file it writes and cannot report this work as yours until it exists. A SendMessage reply beginning ACCEPT or DECLINE is a recognised fallback, but the command is what this handoff expects. Then continue that work.
 
-Investigating before deciding is explicitly allowed: acknowledgement comes
+Investigating before deciding is explicitly allowed. Acknowledgement comes
 first, work second. What is not allowed is starting the work and acknowledging
 later – by then the sender has already had to guess.
 
@@ -188,7 +192,7 @@ herdr worktree create --cwd "<main-repo-root>" --branch <branch> --base <base> \
 
 # the quoted prompt is the FRESH AGENT opener defined above – use it verbatim
 herdr agent start <handoff-name> --kind claude --pane <root_pane_id> \
-  -- "The first line of your first reply must be the single word ACCEPT or DECLINE, followed by a one-line reason – plain text, nothing at all before it, and no bold, heading, quote or code formatting – because the sender matches that line literally and cannot report this work as yours until it sees it. You may read <handoff-file> first to judge whether the work suits you, but reply before doing any other work. Then continue that work."
+  -- "Before any other tool call, acknowledge this handoff by running ~/.claude/spechub/bin/spechub handoff ack accept --file <handoff-file> \"<one-line reason>\", or ack decline --file <handoff-file> \"<one-line reason>\". You may read <handoff-file> first to judge whether the work suits you, and nothing else until the command has run – the sender watches for the file it writes and cannot report this work as yours until it exists. Then continue that work."
 ```
 
 `<base>` is `origin/dev` when that ref exists, otherwise `origin/main` – the same
@@ -279,7 +283,7 @@ background session using the command template from `workflow.handoff.agent`
 
 ```bash
 # again the FRESH AGENT opener defined above, verbatim
-<agent-template> --bg --name "<name>" "The first line of your first reply must be the single word ACCEPT or DECLINE, followed by a one-line reason – plain text, nothing at all before it, and no bold, heading, quote or code formatting – because the sender matches that line literally and cannot report this work as yours until it sees it. You may read <handoff-file> first to judge whether the work suits you, but reply before doing any other work. Then continue that work."
+<agent-template> --bg --name "<name>" "Before any other tool call, acknowledge this handoff by running ~/.claude/spechub/bin/spechub handoff ack accept --file <handoff-file> \"<one-line reason>\", or ack decline --file <handoff-file> \"<one-line reason>\". You may read <handoff-file> first to judge whether the work suits you, and nothing else until the command has run – the sender watches for the file it writes and cannot report this work as yours until it exists. Then continue that work."
 ```
 
 There are no tabs and no workspaces here, so the destination rule has two cases,
@@ -301,44 +305,70 @@ transcript.
 Message that session by name, *proposing* the work and pointing at the handoff
 file. Do not assign it, and do not assume it was accepted. Open the message with
 the **agent already running** variant of the acknowledgement instruction above –
-the one that asks for a SendMessage reply whose first word is ACCEPT or DECLINE.
-That reply is the only form of acknowledgement the watcher can see on this
-channel.
+the one that asks for the ack command and names the reply as a fallback.
 
 Generate a short token – a random string that appears nowhere else, say
-`ack-7f3a91c4` – and include it in the message text. The watcher anchors on it,
-so counting starts when the message is **delivered**, not when it is sent: the
-target's queue absorbs however long it was busy. That is why a single number of
-turns serves both a running agent and a fresh launch.
+`ack-7f3a91c4` – and include it in the message text. The token still belongs in
+the message even though the acknowledgement no longer travels back over this
+channel. The watcher anchors on it, so counting starts when the message is
+**delivered**, not when it is sent: the target's queue absorbs however long it
+was busy. That is why a single number of turns serves both a running agent and
+a fresh launch.
 
 Generate the token fresh for every attempt – at least 8 random characters, and
 never reused on a retry. The watcher matches it by substring and anchors on the
 FIRST match, so a reused token anchors on the ORIGINAL delivery, where the turns
-have already elapsed, and reports an instant silence that never happened.
+have already elapsed, and reports an instant silence that never happened. The
+nudge in *Nudge once, then watch again*, below, is one of those attempts, and
+carries a fresh token of its own.
 
 ## Watch for the acknowledgement
 
 Do not eyeball transcripts. The CLI watches for you:
 
 ```bash
+# --file <handoff-file> names the handoff file. The watcher polls its sidecar,
+# at <handoff-file>.ack. Always pass it, as an absolute path.
 # --session-id with --cwd locates the target's transcript; --transcript <path>
 # does it directly when the path is already known.
 # --token anchors on delivery of our message. --turns: workflow.handoff.ack_turns,
 # default 5. --poll-interval <ms> (default 1000) is how often the transcript is
 # re-read. --timeout <ms> (default 1800000) is the watcher's own deadline –
 # its expiry is the source of the `timeout` outcome.
-~/.claude/spechub/bin/spechub handoff watch \
+# --nudged marks a restart after the one nudge – see the section below.
+# --ack-after <epoch-ms> moves the sidecar cut-off back. Only the nudge restart
+# passes it; it defaults to the moment this watch starts.
+~/.claude/spechub/bin/spechub handoff watch --file <handoff-file> \
   --session-id <id> --cwd <dir> --token <token> --turns <n>
 ```
 
-The two modes detect the acknowledgement differently. An existing agent
-received a cross-session message, and its acknowledgement is a SendMessage sent
-back over that same channel, whose message text must begin with ACCEPT or
-DECLINE. A freshly launched agent has no handle for this session to reply on, so
-its acknowledgement is the first line of its first reply, again beginning ACCEPT
-or DECLINE, which the watcher – in `--fresh` mode – reads straight from the
-transcript text. Either way the word has to lead: a decision buried mid-sentence
-is not matched, and neither form counts once the turn budget has run out.
+The watcher reads two sources. The sidecar `<handoff-file>.ack` holds the
+acknowledgement the ack command writes, and the watcher reports it as
+`ack.via: 'cli'`. The transcript is the fallback, reported as `ack.via: 'text'`
+– a SendMessage beginning ACCEPT or DECLINE, or, for a fresh agent, a reply
+beginning with it. The word has to lead there, because the watcher skips a
+decision buried mid-sentence.
+
+`--file` must be an absolute path here, the same rule `--cwd` follows, and the
+watcher exits 1 on a relative one. The sender types this path against another
+session's world, where "relative to here" names a different file. The
+receiver's `handoff ack --file` is the lenient half of the pair – it takes a
+relative path and resolves it against its own working directory.
+
+The two sources differ in when they count. The transcript stops counting once
+the target spends the turn budget, because the watch has resolved by then. The
+sidecar needs no anchor at all. The watcher reads it first on every tick, so a
+target whose delivery record has not landed yet still acknowledges. The
+transcript also shows whether the target is working, which separates `engaged`
+from `silence`.
+
+Every watch reports the moment it started, as `startedAt` in epoch
+milliseconds, and ignores any sidecar written before that cut-off. The default
+cut-off is the watch's own start. So a sidecar from an earlier round never
+closes this watch, and nothing has to delete `<handoff-file>.ack` between
+attempts. The default needs no flag. `--ack-after <epoch-ms>` moves the cut-off
+back, for a restart that has to reach behind its own start. Only the nudge
+restart does – *Nudge once, then watch again*, below.
 
 For an agent launched for this handoff there is no delivery record, so pass
 `--fresh` instead of `--token`: counting starts at the first line of its
@@ -359,16 +389,71 @@ task, but it must not lock up: the user can keep talking to it while the handoff
 lands, and the harness surfaces the watcher's exit on its own. Never sit in a
 foreground wait.
 
-The watcher prints one JSON object and exits with one of three outcomes. The
+The watcher prints one JSON object and exits with one of four outcomes. The
 same object carries `anchored`, and one of those outcomes cannot be read
 honestly without it:
 
 | Field                   | Means                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------ |
-| `outcome: acknowledged` | the target replied – `ack.decision` is `accept`, `decline`, or `null` if neither |
+| `outcome: acknowledged` | the target acknowledged – `ack.decision` is `accept`, `decline`, or `null` if neither |
+| `outcome: engaged`      | no acknowledgement after N turns, but the target read the handoff file or started using work tools |
 | `outcome: silence`      | delivered, or launched, then N turns passed with no acknowledgement            |
 | `outcome: timeout`      | the watcher's own deadline elapsed first                                        |
+| `ack.via`               | `cli` when the sidecar recorded the decision, `text` when only the transcript did |
+| `ack.reason`            | the one-line reason the target gave, or `null` when it gave none               |
+| `nudged`                | whether this watch ran with `--nudged`, so the one nudge is already spent      |
+| `engaged`               | whether the target is working on the handoff, whatever the outcome            |
+| `startedAt`             | epoch milliseconds at which this watch began, and its default sidecar cut-off |
 | `anchored`              | whether the watcher ever saw the thing it counts from – our message arriving in the target's transcript, or a fresh agent's transcript beginning. `false` means delivery was never observed at all |
+
+## Nudge once, then watch again
+
+An unacknowledged target gets exactly one nudge. The watcher returns `silence`
+or `engaged`, and `nudged` is `false`. Send one message to the target saying it
+has not acknowledged, and that it must run the ack command now. Quote the
+command with the handoff file path in it.
+
+| The target is        | Nudge it with                                            |
+| -------------------- | -------------------------------------------------------- |
+| in a fresh pane      | `herdr agent prompt <name> "<nudge text>"`               |
+| already running      | `SendMessage`                                            |
+
+Then restart the watcher. Keep every argument, add `--nudged`, and re-anchor.
+The second watch must not count from where the first one started. It would
+report an instant silence off turns that elapsed before the nudge. Each route
+re-anchors differently:
+
+| The first watch used | Re-anchor the second one by                                              |
+| -------------------- | ------------------------------------------------------------------------ |
+| `--token`            | putting a fresh token in the nudge message, and passing that new token    |
+| `--fresh`            | passing `--turns` at double `workflow.handoff.ack_turns`                  |
+
+The token route gets a new anchor for free, because the nudge is a fresh
+delivery. The nudge counts as an attempt under *Generate the token fresh for
+every attempt*, above, so never send it carrying the first token. The fresh
+route has no such anchor – `--fresh` counts from record 0 again, over a
+transcript that already holds the spent turns. Double the budget covers the
+spent turns and a fresh budget on top.
+
+Pass `--ack-after <startedAt>` too, carrying the `startedAt` the first watch
+reported. Without it the restart would throw away an ack the target wrote in
+the gap between the first watch ending and this one starting.
+
+```bash
+# token route – <new-token> is the one in the nudge message
+~/.claude/spechub/bin/spechub handoff watch --file <handoff-file> --nudged \
+  --session-id <id> --cwd <dir> --token <new-token> --turns <n> \
+  --ack-after <startedAt of the first watch>
+
+# fresh route – <n> doubled, because --fresh re-counts the spent turns
+~/.claude/spechub/bin/spechub handoff watch --file <handoff-file> --nudged \
+  --session-id <id> --cwd <dir> --fresh --turns <2n> \
+  --ack-after <startedAt of the first watch>
+```
+
+The `--nudged` flag tells the second watch that the target has had its nudge,
+so never omit it. Never nudge twice. A watcher that returns `nudged: true` has
+had its one nudge – act on the outcome and report.
 
 ## What each outcome means
 
@@ -384,14 +469,37 @@ wear the same word:
 
 Treating the two identically throws away the useful half of the answer.
 
-**Acknowledged, but `ack.decision` is null** – the target replied, but with
-something that is neither ACCEPT nor DECLINE: a clarifying question, for
-instance. This is not acceptance. Report the reply verbatim and stop. Never
-treat it as ownership.
+A relaunch after a decline on fit reuses the same handoff file, and needs no
+cleanup. The new watch ignores the decline sidecar the first target wrote,
+because that sidecar predates it. Never pass `--ack-after` on such a relaunch.
+It aims at a new agent, so the default cut-off is the one that keeps the old
+decline out.
+
+**Acknowledged, but `ack.decision` is null** – the target answered, but with
+something that is neither ACCEPT nor DECLINE, a clarifying question for
+instance. This only appears when the watch ran without `--file`. With `--file`
+the watcher never reports a null decision, because the sidecar records one word
+or the other, and a keyword-free SendMessage is not an acknowledgement. This is
+not acceptance. Report the answer verbatim and stop. Never treat it as
+ownership.
+
+**`ack.via: text`** – report it as an acknowledgement, and say the target typed
+the decision rather than recording it. The sidecar does not exist, so nothing
+on disk holds the decision. A target that cannot write the sidecar, on a
+read-only temp directory for instance, gets that instruction from the failing
+ack command itself, which tells it to reply with a message beginning ACCEPT or
+DECLINE. Everything else about the outcome reads the same.
+
+**Engaged** – the target is doing the work without acknowledging it. On
+`nudged: false`, nudge once and watch again. On `nudged: true`, report
+"proceeding, unacknowledged", name the target, and stop. **Never relaunch the
+work elsewhere.** Two agents on the same files is the failure file ownership
+exists to prevent. A second launch causes exactly it.
 
 **Silence** – a first-class outcome, not an error. The message was delivered, or
-the agent was launched, and N turns passed with nothing back. Report exactly
-that, name the target so the user can go and look, and stop.
+the agent was launched, and N turns passed with nothing back. Nudge once, then
+watch again. After the nudge, report exactly that, name the target so the user
+can go and look, and stop.
 
 **Timeout – read `anchored` before saying a word about the target.** One outcome
 covers two situations, and reporting the second as the first is the one report
@@ -405,6 +513,10 @@ that must never be wrong:
 On `anchored: false`, never call the target silent, busy or unresponsive: there
 is no evidence about the target at all. Have the user check the target's session
 id, its cwd, and the token before concluding anything about it.
+
+On `engaged: true`, report "proceeding, unacknowledged", whatever the outcome.
+The field rides on every result, so a timeout can carry it too. A target that
+is working on the handoff must never be relaunched elsewhere.
 
 Nothing in any of these reports may imply anyone owns the work.
 
@@ -431,11 +543,16 @@ can return once the context grows again.
 
 Always name the target (agent name and its pane or workspace, or the existing
 session), the handoff file path, and the next action the receiving agent would
-take. Then say where the handoff actually stands, in the terms of the outcome
-above: accepted; declined on fit and relaunched elsewhere; declined on the
-merits, with the objection in enough of its own words to act on; or
-unacknowledged. For an unacknowledged handoff say which kind – delivered (or
-launched) with no reply, versus never observed delivered at all – and point the
-user at where to look.
+take. Then say where the handoff stands, in the terms of the outcome above.
+
+- accepted
+- declined on fit, and relaunched elsewhere
+- declined on the merits, with the objection in enough of its own words to act on
+- proceeding, unacknowledged – the target engaged, and the nudge is gone
+- unacknowledged
+
+For an unacknowledged handoff say which kind – delivered (or launched) with no
+answer, versus never observed delivered at all – and point the user at where to
+look.
 
 Never describe the work as owned by the target until the target has accepted it.
