@@ -54,9 +54,10 @@ tuicr:
   # Per-file +added -removed counts in the tree.
   show_file_line_stats: true
   #
-  # TEMPORARY. Two upstream pull requests are still open:
+  # TEMPORARY. Two upstream pull requests are still open, plus one local fix with none yet:
   #   agavra/tuicr#607  configurable file line stats  (antonio2368)
   #   agavra/tuicr#633  <leader>L / <leader>H resize  (ours)
+  #   (no PR yet)       fixes blank +/- counts in PR review mode  (ours)
   # Until both merge, the two settings above only exist in a fork build.
   # `setup.sh status` checks both and tells you when to switch this off.
   # With it false, the stock release installs and those keys are ignored.

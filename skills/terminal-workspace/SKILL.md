@@ -86,8 +86,9 @@ Removes every managed block and the helper scripts, and leaves the binaries.
 - **`markdown.preview_port`**: must match a port the user forwards from their
   laptop, or `spechub-md --serve` is unreachable. Say so rather than assuming
 - **`tuicr.build_from_fork`**: leave `false` unless the user wants the two unmerged
-  upstream pull requests (#607 stats, #633 resize). `true` needs cargo and takes a
-  few minutes to build. Tell them it is temporary and that `status` tracks both PRs
+  upstream pull requests (#607 stats, #633 resize) or the fork's own fix for blank
+  `+N -N` counts in PR review mode. `true` needs cargo and takes a few minutes to
+  build. Tell them it is temporary and that `status` tracks the two upstream PRs, not the local fix
 - **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
 - **`remote.clipboard_shim`**: leave `true` on any machine reached over SSH. It puts an `xclip` on `$PATH` backed by `spechub-clip`, which is the only reason gh-dash's `y` and `Y` work there. The script skips it automatically when the machine has a real `xclip` or a display
 

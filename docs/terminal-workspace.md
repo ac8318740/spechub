@@ -380,6 +380,15 @@ Two upstream pull requests are still open:
 - [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633) - move the file
   list boundary with `<leader>L` / `<leader>H`, and the `file_list_width` key
 
+The fork also carries a third change with no upstream PR yet: a fix for blank
+`+N -N` counts in PR review mode (`tuicr pr <N>`). tuicr's PR mode has no local
+version-control backend of its own, so it borrowed the `File` version-control system (VCS) type - the
+one `--file <path>` uses - as a stand-in. The fork's whole-file gate hides
+counts for `--file` and `--all-files`, since every line there counts as added,
+and that gate matched PR sessions too, so the counts stayed blank in PR review
+even with `show_file_line_stats` on. The fix gives PR sessions their own
+`PullRequest` VCS type so the gate no longer matches them.
+
 The default, `build_from_fork: false`, installs the stock release and skips both
 config keys, so tuicr does not warn about unknown keys. Setting
 `build_from_fork: true` clones the fork, builds `local/daily` with cargo, and
@@ -387,8 +396,12 @@ writes the two keys plus `no_update_check = true`, so `tuicr update` cannot
 replace the build.
 
 `setup.sh status` reports the state of both pull requests. After both pull
-requests merge, set `build_from_fork: false` and re-run `apply`. Check the merged
-key names first - review can rename them.
+requests merge, check whether the PR-mode counts fix above has been submitted
+upstream too before you set `build_from_fork: false` - stock tuicr 0.23.0 has
+no counts feature at all, so it never had this bug or the fix. Switching to
+the stock build before that fix lands upstream brings the blank counts back
+in PR review. Re-run `apply` once you do switch, and check the merged key
+names first - review can rename them.
 
 ### 6.3. Reading markdown and mermaid
 
