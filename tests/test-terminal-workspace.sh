@@ -806,6 +806,66 @@ else
   ok "tree diff prune check skipped (no PyYAML)"
 fi
 
+# A machine with no terminal-workspace yaml still gets D and S. Every other
+# setting reaches setup.sh through cfg_get, which defaults; this block reads
+# the yaml itself, and without defaults of its own an absent file pruned both
+# managed bindings and wrote nothing back. o kept working, so the dashboard
+# looked configured while the two review keys were dead.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  printf 'prSections:\n- {title: Mine, filters: "is:open"}\n' > "$WORK/gh-dash-nocfg.yml"
+  SPECHUB_CFG="$WORK/does-not-exist.yaml" python3 "$GHKB" "$WORK/gh-dash-nocfg.yml" >/dev/null 2>&1
+  if python3 - "$WORK/gh-dash-nocfg.yml" <<'GHCHK'
+import sys, yaml
+kb = (yaml.safe_load(open(sys.argv[1])) or {}).get("keybindings", {})
+by_name = {k.get("name"): k for k in kb.get("prs", [])}
+assert by_name["review (tuicr)"]["key"] == "D", kb.get("prs")
+assert by_name["agent review"]["key"] == "S", kb.get("prs")
+GHCHK
+  then ok "with no terminal-workspace config, D and S still bind to their defaults"
+  else no "with no terminal-workspace config, D and S still bind to their defaults"; fi
+else
+  ok "gh-dash default keybinding check skipped (no PyYAML)"
+fi
+
+# An empty string is how the config turns one of those keys off, so a default
+# must not put it back. config.example.yaml says so about agent_review.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  printf 'gh_dash:\n  keybindings:\n    agent_review: ""\n' > "$WORK/gh-tw-noagent.yaml"
+  printf 'prSections:\n- {title: Mine, filters: "is:open"}\n' > "$WORK/gh-dash-noagent.yml"
+  SPECHUB_CFG="$WORK/gh-tw-noagent.yaml" python3 "$GHKB" "$WORK/gh-dash-noagent.yml" >/dev/null 2>&1
+  if python3 - "$WORK/gh-dash-noagent.yml" <<'GHCHK'
+import sys, yaml
+kb = (yaml.safe_load(open(sys.argv[1])) or {}).get("keybindings", {})
+names = [k.get("name") for k in kb.get("prs", [])]
+assert "agent review" not in names, names
+assert "review (tuicr)" in names, names
+GHCHK
+  then ok "an empty keybinding in the config disables it rather than taking the default"
+  else no "an empty keybinding in the config disables it rather than taking the default"; fi
+else
+  ok "gh-dash empty keybinding check skipped (no PyYAML)"
+fi
+
+# "gh_dash:" with nothing under it is what commenting the block out leaves
+# behind, and yaml parses it to None. Every tw.get then raised AttributeError,
+# so apply_ghdash died with a traceback and wrote no config at all.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  printf 'gh_dash:\n' > "$WORK/gh-tw-null.yaml"
+  printf 'prSections:\n- {title: Mine, filters: "is:open"}\n' > "$WORK/gh-dash-null.yml"
+  nullerr=$(SPECHUB_CFG="$WORK/gh-tw-null.yaml" python3 "$GHKB" "$WORK/gh-dash-null.yml" 2>&1 >/dev/null)
+  if [ -z "$nullerr" ] && python3 - "$WORK/gh-dash-null.yml" <<'GHCHK'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1])) or {}
+names = [k.get("name") for k in cfg.get("keybindings", {}).get("prs", [])]
+assert "review (tuicr)" in names, names
+assert [s["title"] for s in cfg.get("prSections", [])] == ["Mine"], cfg.get("prSections")
+GHCHK
+  then ok "an empty gh_dash section falls back to defaults instead of raising"
+  else no "an empty gh_dash section falls back to defaults instead of raising"; fi
+else
+  ok "gh-dash null section check skipped (no PyYAML)"
+fi
+
 # The route that always works: a terminal, and nothing else. script gives the
 # helper a pty, which is what tells it to draw a link rather than give up.
 screen=$(printf x | bare script -qec 'SPECHUB_OPEN_BRIDGE=off spechub-open https://example.com/pr/9' /dev/null 2>/dev/null)
@@ -897,6 +957,78 @@ if [ "$(bare spechub-clip --out 2>/dev/null)" = "https://example.com/pr/7" ]; th
   ok "spechub-open falls back to the clipboard when no browser is reachable"
 else
   no "spechub-open falls back to the clipboard when no browser is reachable"
+fi
+
+echo "spechub-diff drops what diffnav cannot draw"
+# delta dies on SIGABRT on a line hundreds of kilobytes long, and diffnav
+# reports its child's death as "FATA signal: aborted (core dumped)" and quits.
+# One committed source map therefore took a whole diff down. The helper drops
+# that file and draws the rest, so these pin both halves: the long-lined file
+# never reaches diffnav, and the file beside it still does.
+DIFFBIN="$WORK/diff-bin"; DIFFREPO="$WORK/diff-repo"
+mkdir -p "$DIFFBIN" "$DIFFREPO"
+cp "$(extract spechub-diff)" "$DIFFBIN/spechub-diff"
+# The stub keeps what it was handed, which is the whole point of the check.
+cat > "$DIFFBIN/diffnav" <<'STUB'
+#!/bin/sh
+cat > "$SPECHUB_TEST_SEEN"
+STUB
+chmod +x "$DIFFBIN/diffnav"
+
+if command -v git >/dev/null 2>&1; then
+  (
+    cd "$DIFFREPO" || exit 1
+    git init -q . && git config user.email t@example.com && git config user.name t
+    printf 'one\n' > small.txt
+    printf 'x\n' > big.map
+    git add -A && git commit -qm first
+    printf 'two\n' > small.txt
+    # 30000 characters on one line: over the 20000 default, under the size
+    # that makes delta abort, so the check needs no huge fixture.
+    awk 'BEGIN { s = ""; while (length(s) < 30000) s = s "abcdefghij"; print s }' > big.map
+  ) >/dev/null 2>&1
+  SEEN="$WORK/diff-seen"
+  env -i PATH="$DIFFBIN:/usr/bin:/bin" HOME="$WORK" SPECHUB_TEST_SEEN="$SEEN" \
+    sh -c "cd '$DIFFREPO' && spechub-diff auto" >/dev/null 2>&1
+  if [ -s "$SEEN" ] \
+     && grep -q '^diff --git a/small.txt' "$SEEN" \
+     && ! grep -q '^diff --git a/big.map' "$SEEN" \
+     && grep -qE '^skipped  big\.map  \(one line is 3000[0-9] chars' "$SEEN"; then
+    ok "a file with a 30000-character line is dropped, named, and the rest is drawn"
+  else
+    no "a file with a 30000-character line is dropped, named, and the rest is drawn"
+  fi
+
+  # Nothing left to draw is not the same as nothing changed. The old code said
+  # "No difference between these two", which is a claim about the repository
+  # rather than about diffnav, and the file that was dropped went unmentioned.
+  ( cd "$DIFFREPO" && git checkout -q -- small.txt ) >/dev/null 2>&1
+  ALL=$(env -i PATH="$DIFFBIN:/usr/bin:/bin" HOME="$WORK" SPECHUB_TEST_SEEN="$SEEN" \
+    sh -c "cd '$DIFFREPO' && printf x | spechub-diff auto" 2>&1)
+  if printf '%s' "$ALL" | grep -q 'skipped  big.map' \
+     && printf '%s' "$ALL" | grep -q 'too long for diffnav' \
+     && ! printf '%s' "$ALL" | grep -q 'No difference between these two'; then
+    ok "a diff of nothing but long-lined files says so instead of claiming no change"
+  else
+    no "a diff of nothing but long-lined files says so instead of claiming no change"
+  fi
+  # A limit that is not a positive whole number reaches awk as a string, and
+  # awk then compares every line length against text: never true, so the guard
+  # silently switches itself off and the abort it exists to prevent comes back.
+  ( cd "$DIFFREPO" && printf 'three\n' > small.txt ) >/dev/null 2>&1
+  BAD=$(env -i PATH="$DIFFBIN:/usr/bin:/bin" HOME="$WORK" SPECHUB_TEST_SEEN="$SEEN" \
+    SPECHUB_DIFF_LINE_LIMIT=abc \
+    sh -c "cd '$DIFFREPO' && spechub-diff auto" 2>&1 >/dev/null)
+  if printf '%s' "$BAD" | grep -q 'not a' \
+     && ! grep -q '^diff --git a/big.map' "$SEEN"; then
+    ok "a non-numeric line limit is refused out loud and the guard stays on"
+  else
+    no "a non-numeric line limit is refused out loud and the guard stays on"
+  fi
+else
+  skip "spechub-diff long-line checks (git not installed)"
+  skip "spechub-diff all-skipped check (git not installed)"
+  skip "spechub-diff line limit validation (git not installed)"
 fi
 
 echo "spechub-view"

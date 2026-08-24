@@ -170,6 +170,57 @@ tip() {  # tip <ref> -> "1b298bd . 4 hours ago . Merge pull request ..."
   git log -1 --format='%h  %ar  %s' "$1" 2>/dev/null | cut -c1-70
 }
 
+# ---- what diffnav cannot draw ---------------------------------------------
+# diffnav hands each file to delta, and delta dies on SIGABRT when one line
+# runs to hundreds of kilobytes. diffnav reports the child's death as
+# "FATA signal: aborted (core dumped)" and quits, so one such file takes the
+# whole diff down with it. A committed build artifact is what does it: this
+# project's own cli/dist/index.js.map holds a single 982,428-character line,
+# and the merge commit touching it aborted diffnav in 1.7 seconds.
+#
+# So the file goes, not the diff. Any file whose patch holds a line over the
+# limit is dropped and named in the banner, and the rest is drawn as usual.
+# 20000 is far above any line a person writes and far below where delta gives
+# out. Raise or lower it with SPECHUB_DIFF_LINE_LIMIT.
+LINE_LIMIT_DEFAULT=20000
+LINE_LIMIT="${SPECHUB_DIFF_LINE_LIMIT:-$LINE_LIMIT_DEFAULT}"
+# awk compares a length against whatever this holds. Hand it "abc" and every
+# comparison is a string comparison that is never true, so the guard turns
+# itself off and the abort comes back with nothing on screen to explain it.
+# Hand it 0 and every file is dropped instead. Refuse both, out loud.
+case "$LINE_LIMIT" in
+  ''|0|*[!0-9]*)
+    echo "spechub-diff: SPECHUB_DIFF_LINE_LIMIT is \"$LINE_LIMIT\", which is not a" >&2
+    echo "  positive whole number. Using $LINE_LIMIT_DEFAULT." >&2
+    LINE_LIMIT=$LINE_LIMIT_DEFAULT ;;
+esac
+drop_unrenderable() {  # drop_unrenderable <skipped-file>  ; diff in, diff out
+  # One file at a time: a patch has to be held whole before its longest line
+  # is known. Everything before the first "diff --git" is a header, so it goes
+  # straight through. Written for gawk, mawk and busybox awk alike.
+  awk -v lim="$LINE_LIMIT" -v skip="$1" '
+    function flush() {
+      if (path == "") return
+      # A tab between the two fields. banner reads this file back and splits
+      # on the same tab, so the two have to move together.
+      if (long) printf "%s\t%d\n", path, maxlen > skip
+      else for (i = 1; i <= n; i++) print buf[i]
+    }
+    /^diff --git / {
+      flush()
+      split("", buf); n = 0; long = 0; maxlen = 0
+      path = $0; sub(/^diff --git a\//, "", path); sub(/ b\/.*$/, "", path)
+      if (path == "") path = "?"
+    }
+    {
+      if (path == "") { print; next }
+      if (length($0) > maxlen) maxlen = length($0)
+      if (length($0) > lim) long = 1
+      buf[++n] = $0
+    }
+    END { flush() }'
+}
+
 # ---- banner ---------------------------------------------------------------
 banner() {  # banner <source-label> <change-label> <what> <command>
   # No line may start with a space: diffnav strips leading whitespace, so any
@@ -180,11 +231,18 @@ banner() {  # banner <source-label> <change-label> <what> <command>
   [ -n "${CHG_TIP:-}" ] && printf 'compare  %s\n' "$(printf '%s  %s' "$2" "$CHG_TIP" | cut -c1-70)"
   printf 'showing  %s\n' "$3"
   printf 'command  %s\n' "$4"
+  # A dropped file is named here rather than left to be noticed as missing.
+  # The tab is what drop_unrenderable writes between the two fields.
+  [ -s "${SKIP:-}" ] && while IFS="$(printf '\t')" read -r p len; do
+    printf 'skipped  %s  (one line is %s chars, and diffnav aborts on it)\n' "$p" "$len"
+  done < "$SKIP"
+  return 0
 }
 launch() {  # launch <source> <change> <what> <git-args...>
   local src="$1" chg="$2" what="$3"; shift 3
   local cmd="git $*"
-  local tmp; tmp=$(mktemp); git "$@" > "$tmp" 2>/dev/null
+  local tmp; tmp=$(mktemp); SKIP=$(mktemp)
+  git "$@" 2>/dev/null | drop_unrenderable "$SKIP" > "$tmp"
   if grep -q '^diff --git' "$tmp"; then
     # diffnav puts the line after "commit <sha>" in its status bar, and the bar
     # stays put while you walk the file tree. A git show stream carries its own
@@ -192,18 +250,27 @@ launch() {  # launch <source> <change> <what> <git-args...>
     { [ "${1:-}" = diff ] && printf 'commit %s\n' "$(git rev-parse HEAD 2>/dev/null)"
       banner "$src" "$chg" "$what" "$cmd"; echo; cat "$tmp"; } | diffnav
   else
+    # Nothing for diffnav to draw, for one of two different reasons. The
+    # banner and the wait for a keypress are the same either way, so only the
+    # explanation sits inside the branch.
     banner "$src" "$chg" "$what" "$cmd"
-    echo; echo "  No difference between these two. Nothing to show."
-    local dirty; dirty=$(git status --porcelain 2>/dev/null | grep -cv '^??')
-    if [ "${dirty:-0}" -gt 0 ]; then
-      echo "  You do have $dirty file(s) changed but not committed."
-      echo "  Press alt+x and pick \"my uncommitted changes\" to see them."
+    echo
+    if [ -s "$SKIP" ]; then
+      echo "  Every file that changed carries a line too long for diffnav."
+      echo "  They are named above, and nothing else differs between these two."
     else
-      echo "  Press alt+x to compare something else."
+      echo "  No difference between these two. Nothing to show."
+      local dirty; dirty=$(git status --porcelain 2>/dev/null | grep -cv '^??')
+      if [ "${dirty:-0}" -gt 0 ]; then
+        echo "  You do have $dirty file(s) changed but not committed."
+        echo "  Press alt+x and pick \"my uncommitted changes\" to see them."
+      else
+        echo "  Press alt+x to compare something else."
+      fi
     fi
     echo; echo "Press any key..."; read -rsn1
   fi
-  rm -f "$tmp"
+  rm -f "$tmp" "$SKIP"
 }
 
 # ---- comparisons ----------------------------------------------------------
@@ -2369,24 +2436,37 @@ apply_ghdash() {
   SPECHUB_CFG="$CFG" py "$GHDASH_CFG" <<'PY'
 import os, sys, yaml
 src, dst = os.environ["SPECHUB_CFG"], sys.argv[1]
-tw = (yaml.safe_load(open(src)) or {}).get("gh_dash", {}) if os.path.isfile(src) else {}
+# `or {}` on the section as well as the file. A bare "gh_dash:" with nothing
+# under it, which is what commenting the block out leaves behind, parses to
+# None, and every tw.get below then raises AttributeError. apply_ghdash died
+# on that with a traceback and wrote no config at all. The keybindings and
+# remote lookups below already guard the same way.
+tw = ((yaml.safe_load(open(src)) or {}).get("gh_dash") or {}) if os.path.isfile(src) else {}
 cfg = yaml.safe_load(open(dst)) or {} if os.path.isfile(dst) else {}
 if tw.get("sections"):
     cfg["prSections"] = [{"title": s["title"], "filters": s["filters"]} for s in tw["sections"]]
 if tw.get("repo_paths"):
     cfg["repoPaths"] = tw["repo_paths"]
 kb = tw.get("keybindings", {}) or {}
+# Every other setting reaches this script through cfg_get, which carries its
+# own default. This block reads the yaml itself, so a machine with no
+# terminal-workspace config used to land here with an empty dict: the prune
+# below dropped the review and agent keys, and nothing was written back. D
+# and S went silently dead while o, which already defaulted, kept working.
+# Defaults here, matching config.example.yaml. An empty string still disables.
+review = kb.get("review", "D")
+agent_review = kb.get("agent_review", "S")
 # "tree diff" is the old name for the review key, kept here so re-applying
 # over a config written before the rename drops it rather than leaving two
 # bindings on the same key.
 MANAGED = ("review (tuicr)", "tree diff", "agent review", "open in browser")
 prs = [k for k in (cfg.get("keybindings", {}) or {}).get("prs", [])
        if k.get("name") not in MANAGED]
-if kb.get("review"):
-    prs.append({"key": kb["review"], "name": "review (tuicr)",
+if review:
+    prs.append({"key": review, "name": "review (tuicr)",
                 "command": "cd {{.RepoPath}} && tuicr pr {{.PrNumber}}\n"})
-if kb.get("agent_review"):
-    prs.append({"key": kb["agent_review"], "name": "agent review",
+if agent_review:
+    prs.append({"key": agent_review, "name": "agent review",
                 "command": 'cd {{.RepoPath}} && claude "/code-review {{.PrNumber}}"\n'})
 kbs = cfg.setdefault("keybindings", {})
 # o built into gh-dash opens through $BROWSER, whose output it discards. That
@@ -2469,6 +2549,10 @@ case "$ACTION" in
   apply)
     require_yaml
     arch_supported || exit 1
+    # Every setting has a default, so a missing config is a working setup and
+    # not an error. Say so anyway: the alternative is a run that looks like it
+    # read your settings and did not.
+    [ -f "$CFG" ] || say "no config at $CFG, so every setting takes its default"
     [ "$(cfg_get enabled true)" = "true" ] || { echo "terminal workspace disabled in config"; exit 0; }
     if [ "$(cfg_get herdr.enabled true)" = "true" ] && ! have herdr; then
       # herdr ships an installer that picks the right build and verifies a

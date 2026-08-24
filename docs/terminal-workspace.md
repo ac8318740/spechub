@@ -99,6 +99,10 @@ The `/spechub:terminal-workspace` skill runs `assets/terminal-workspace/setup.sh
 
 The script reads `~/.config/spechub/terminal-workspace.yaml`, which the skill copies from `assets/terminal-workspace/config.example.yaml`. The config holds eight components, each with its own `enabled` key, so you turn a part off there and run `apply` again. Six components name a tool: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr` and `yazi`. The other two name a feature. `markdown` covers `spechub-md` with mermaid-ascii and glow, and `remote` covers the clipboard and browser helpers. Config keys use underscores, so gh-dash's key is `gh_dash`.
 
+Every setting has a default. `apply` therefore works with no config file, and says so when it finds none. The two gh-dash review keys used to be the exception. That writer read `review` and `agent_review` straight from the yaml, with no default of its own. A machine with no config had both pruned and neither written back. `o` already defaulted, so it kept working and the config looked healthy. Both keys now default like everything else. An empty string still turns one off.
+
+A `gh_dash:` heading with nothing under it is what commenting the block out leaves behind. That now falls back to the defaults too. It used to abort the gh-dash step with a traceback.
+
 The script edits between its own marker comments, so hand-written config around it survives. gh-dash is the exception. Python rewrites that config whole, and no comment survives the round trip, so the script tracks its own keybindings there by name.
 
 ### 3.1. What `apply` installs, and how to do it by hand
@@ -778,6 +782,29 @@ The comparison also reaches diffnav's status bar, which stays visible while you 
 
 No banner line may start with a space. diffnav strips leading whitespace, so any indentation collapses and the columns stop lining up.
 
+#### A file diffnav cannot draw
+
+*One committed source map used to abort the whole diff. The helper drops that file and names it.*
+
+diffnav hands each file to delta, and delta dies on `SIGABRT` when one line runs to hundreds of kilobytes. diffnav reports its child's death and quits:
+
+```
+Error: signal: aborted (core dumped)
+2026/08/24 02:04:25 FATA signal: aborted (core dumped)
+```
+
+A committed build artifact is what does it. SpecHub's own `cli/dist/index.js.map` carries a single 982,428-character line, so `alt+f` on `main` aborted in 1.7 seconds and showed none of the other 51 files.
+
+So the file goes, not the diff. The helper drops any file whose patch holds a line over 20,000 characters, and names it in the banner:
+
+```
+skipped  cli/dist/index.js.map  (one line is 982428 chars, and diffnav aborts on it)
+```
+
+20,000 is far above any line a person writes and far below where delta gives out. `SPECHUB_DIFF_LINE_LIMIT` changes it. The helper refuses anything that is not a positive whole number. awk compares each line length against that value. A value like `abc` makes every comparison a string comparison, which is never true. A typo would otherwise switch the guard off and bring the abort back, with nothing on screen to explain it.
+
+Where the helper drops every changed file, it says so. The old code said "No difference between these two", which claimed nothing had changed in a repository that had.
+
 #### Picking a different comparison
 
 *`alt+x` opens an fzf menu of seven comparisons. Every row reads left to right as base, then compare.*
@@ -1175,3 +1202,6 @@ would report success, and you would never see it.
   - Approving your own pull request is the one you will hit
 - **A dev machine has no clipboard and no browser.** The `o`, `y` and `Y` keys in gh-dash all fail there until `apply` installs `spechub-clip` and `spechub-open`
   - The `setup.sh status` command says which browser route a machine ended up with
+- **diffnav aborts on one very long line.** delta dies on `SIGABRT`, and diffnav quits with `FATA signal: aborted (core dumped)`, showing none of the diff
+  - `spechub-diff` drops any file whose patch holds a line over 20,000 characters and names it in the banner
+  - A committed source map is the usual culprit, so the file is worth keeping out of git in the first place

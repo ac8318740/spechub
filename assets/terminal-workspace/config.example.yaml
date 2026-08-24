@@ -59,6 +59,9 @@ gh_dash:
   # ctrl+d by default, which is fine in vim and awkward everywhere else.
   page_keys: true
   keybindings:
+    # Both keys below are what apply binds anyway with no config file present.
+    # Change either to move it, or set it to "" to leave the key unbound.
+    #
     # Open the selected pull request in tuicr, which reviews it in place.
     review: "D"
     # Hand the selected pull request to an agent. Empty disables it.
