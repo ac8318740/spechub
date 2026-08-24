@@ -201,6 +201,8 @@ drop_unrenderable() {  # drop_unrenderable <skipped-file>  ; diff in, diff out
   awk -v lim="$LINE_LIMIT" -v skip="$1" '
     function flush() {
       if (path == "") return
+      # A tab between the two fields. banner reads this file back and splits
+      # on the same tab, so the two have to move together.
       if (long) printf "%s\t%d\n", path, maxlen > skip
       else for (i = 1; i <= n; i++) print buf[i]
     }
@@ -230,6 +232,7 @@ banner() {  # banner <source-label> <change-label> <what> <command>
   printf 'showing  %s\n' "$3"
   printf 'command  %s\n' "$4"
   # A dropped file is named here rather than left to be noticed as missing.
+  # The tab is what drop_unrenderable writes between the two fields.
   [ -s "${SKIP:-}" ] && while IFS="$(printf '\t')" read -r p len; do
     printf 'skipped  %s  (one line is %s chars, and diffnav aborts on it)\n' "$p" "$len"
   done < "$SKIP"
@@ -246,20 +249,24 @@ launch() {  # launch <source> <change> <what> <git-args...>
     # header, so only a plain diff needs one synthesised.
     { [ "${1:-}" = diff ] && printf 'commit %s\n' "$(git rev-parse HEAD 2>/dev/null)"
       banner "$src" "$chg" "$what" "$cmd"; echo; cat "$tmp"; } | diffnav
-  elif [ -s "$SKIP" ]; then
-    banner "$src" "$chg" "$what" "$cmd"
-    echo; echo "  Every file that changed carries a line too long for diffnav."
-    echo "  They are named above, and nothing else differs between these two."
-    echo; echo "Press any key..."; read -rsn1
   else
+    # Nothing for diffnav to draw, for one of two different reasons. The
+    # banner and the wait for a keypress are the same either way, so only the
+    # explanation sits inside the branch.
     banner "$src" "$chg" "$what" "$cmd"
-    echo; echo "  No difference between these two. Nothing to show."
-    local dirty; dirty=$(git status --porcelain 2>/dev/null | grep -cv '^??')
-    if [ "${dirty:-0}" -gt 0 ]; then
-      echo "  You do have $dirty file(s) changed but not committed."
-      echo "  Press alt+x and pick \"my uncommitted changes\" to see them."
+    echo
+    if [ -s "$SKIP" ]; then
+      echo "  Every file that changed carries a line too long for diffnav."
+      echo "  They are named above, and nothing else differs between these two."
     else
-      echo "  Press alt+x to compare something else."
+      echo "  No difference between these two. Nothing to show."
+      local dirty; dirty=$(git status --porcelain 2>/dev/null | grep -cv '^??')
+      if [ "${dirty:-0}" -gt 0 ]; then
+        echo "  You do have $dirty file(s) changed but not committed."
+        echo "  Press alt+x and pick \"my uncommitted changes\" to see them."
+      else
+        echo "  Press alt+x to compare something else."
+      fi
     fi
     echo; echo "Press any key..."; read -rsn1
   fi
