@@ -2369,24 +2369,37 @@ apply_ghdash() {
   SPECHUB_CFG="$CFG" py "$GHDASH_CFG" <<'PY'
 import os, sys, yaml
 src, dst = os.environ["SPECHUB_CFG"], sys.argv[1]
-tw = (yaml.safe_load(open(src)) or {}).get("gh_dash", {}) if os.path.isfile(src) else {}
+# `or {}` on the section as well as the file. A bare "gh_dash:" with nothing
+# under it, which is what commenting the block out leaves behind, parses to
+# None, and every tw.get below then raises AttributeError. apply_ghdash died
+# on that with a traceback and wrote no config at all. The keybindings and
+# remote lookups below already guard the same way.
+tw = ((yaml.safe_load(open(src)) or {}).get("gh_dash") or {}) if os.path.isfile(src) else {}
 cfg = yaml.safe_load(open(dst)) or {} if os.path.isfile(dst) else {}
 if tw.get("sections"):
     cfg["prSections"] = [{"title": s["title"], "filters": s["filters"]} for s in tw["sections"]]
 if tw.get("repo_paths"):
     cfg["repoPaths"] = tw["repo_paths"]
 kb = tw.get("keybindings", {}) or {}
+# Every other setting reaches this script through cfg_get, which carries its
+# own default. This block reads the yaml itself, so a machine with no
+# terminal-workspace config used to land here with an empty dict: the prune
+# below dropped the review and agent keys, and nothing was written back. D
+# and S went silently dead while o, which already defaulted, kept working.
+# Defaults here, matching config.example.yaml. An empty string still disables.
+review = kb.get("review", "D")
+agent_review = kb.get("agent_review", "S")
 # "tree diff" is the old name for the review key, kept here so re-applying
 # over a config written before the rename drops it rather than leaving two
 # bindings on the same key.
 MANAGED = ("review (tuicr)", "tree diff", "agent review", "open in browser")
 prs = [k for k in (cfg.get("keybindings", {}) or {}).get("prs", [])
        if k.get("name") not in MANAGED]
-if kb.get("review"):
-    prs.append({"key": kb["review"], "name": "review (tuicr)",
+if review:
+    prs.append({"key": review, "name": "review (tuicr)",
                 "command": "cd {{.RepoPath}} && tuicr pr {{.PrNumber}}\n"})
-if kb.get("agent_review"):
-    prs.append({"key": kb["agent_review"], "name": "agent review",
+if agent_review:
+    prs.append({"key": agent_review, "name": "agent review",
                 "command": 'cd {{.RepoPath}} && claude "/code-review {{.PrNumber}}"\n'})
 kbs = cfg.setdefault("keybindings", {})
 # o built into gh-dash opens through $BROWSER, whose output it discards. That
@@ -2469,6 +2482,10 @@ case "$ACTION" in
   apply)
     require_yaml
     arch_supported || exit 1
+    # Every setting has a default, so a missing config is a working setup and
+    # not an error. Say so anyway: the alternative is a run that looks like it
+    # read your settings and did not.
+    [ -f "$CFG" ] || say "no config at $CFG, so every setting takes its default"
     [ "$(cfg_get enabled true)" = "true" ] || { echo "terminal workspace disabled in config"; exit 0; }
     if [ "$(cfg_get herdr.enabled true)" = "true" ] && ! have herdr; then
       # herdr ships an installer that picks the right build and verifies a

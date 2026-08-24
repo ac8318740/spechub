@@ -806,6 +806,66 @@ else
   ok "tree diff prune check skipped (no PyYAML)"
 fi
 
+# A machine with no terminal-workspace yaml still gets D and S. Every other
+# setting reaches setup.sh through cfg_get, which defaults; this block reads
+# the yaml itself, and without defaults of its own an absent file pruned both
+# managed bindings and wrote nothing back. o kept working, so the dashboard
+# looked configured while the two review keys were dead.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  printf 'prSections:\n- {title: Mine, filters: "is:open"}\n' > "$WORK/gh-dash-nocfg.yml"
+  SPECHUB_CFG="$WORK/does-not-exist.yaml" python3 "$GHKB" "$WORK/gh-dash-nocfg.yml" >/dev/null 2>&1
+  if python3 - "$WORK/gh-dash-nocfg.yml" <<'GHCHK'
+import sys, yaml
+kb = (yaml.safe_load(open(sys.argv[1])) or {}).get("keybindings", {})
+by_name = {k.get("name"): k for k in kb.get("prs", [])}
+assert by_name["review (tuicr)"]["key"] == "D", kb.get("prs")
+assert by_name["agent review"]["key"] == "S", kb.get("prs")
+GHCHK
+  then ok "with no terminal-workspace config, D and S still bind to their defaults"
+  else no "with no terminal-workspace config, D and S still bind to their defaults"; fi
+else
+  ok "gh-dash default keybinding check skipped (no PyYAML)"
+fi
+
+# An empty string is how the config turns one of those keys off, so a default
+# must not put it back. config.example.yaml says so about agent_review.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  printf 'gh_dash:\n  keybindings:\n    agent_review: ""\n' > "$WORK/gh-tw-noagent.yaml"
+  printf 'prSections:\n- {title: Mine, filters: "is:open"}\n' > "$WORK/gh-dash-noagent.yml"
+  SPECHUB_CFG="$WORK/gh-tw-noagent.yaml" python3 "$GHKB" "$WORK/gh-dash-noagent.yml" >/dev/null 2>&1
+  if python3 - "$WORK/gh-dash-noagent.yml" <<'GHCHK'
+import sys, yaml
+kb = (yaml.safe_load(open(sys.argv[1])) or {}).get("keybindings", {})
+names = [k.get("name") for k in kb.get("prs", [])]
+assert "agent review" not in names, names
+assert "review (tuicr)" in names, names
+GHCHK
+  then ok "an empty keybinding in the config disables it rather than taking the default"
+  else no "an empty keybinding in the config disables it rather than taking the default"; fi
+else
+  ok "gh-dash empty keybinding check skipped (no PyYAML)"
+fi
+
+# "gh_dash:" with nothing under it is what commenting the block out leaves
+# behind, and yaml parses it to None. Every tw.get then raised AttributeError,
+# so apply_ghdash died with a traceback and wrote no config at all.
+if python3 -c 'import yaml' 2>/dev/null && [ -s "$GHKB" ]; then
+  printf 'gh_dash:\n' > "$WORK/gh-tw-null.yaml"
+  printf 'prSections:\n- {title: Mine, filters: "is:open"}\n' > "$WORK/gh-dash-null.yml"
+  nullerr=$(SPECHUB_CFG="$WORK/gh-tw-null.yaml" python3 "$GHKB" "$WORK/gh-dash-null.yml" 2>&1 >/dev/null)
+  if [ -z "$nullerr" ] && python3 - "$WORK/gh-dash-null.yml" <<'GHCHK'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1])) or {}
+names = [k.get("name") for k in cfg.get("keybindings", {}).get("prs", [])]
+assert "review (tuicr)" in names, names
+assert [s["title"] for s in cfg.get("prSections", [])] == ["Mine"], cfg.get("prSections")
+GHCHK
+  then ok "an empty gh_dash section falls back to defaults instead of raising"
+  else no "an empty gh_dash section falls back to defaults instead of raising"; fi
+else
+  ok "gh-dash null section check skipped (no PyYAML)"
+fi
+
 # The route that always works: a terminal, and nothing else. script gives the
 # helper a pty, which is what tells it to draw a link rather than give up.
 screen=$(printf x | bare script -qec 'SPECHUB_OPEN_BRIDGE=off spechub-open https://example.com/pr/9' /dev/null 2>/dev/null)

@@ -99,6 +99,10 @@ The `/spechub:terminal-workspace` skill runs `assets/terminal-workspace/setup.sh
 
 The script reads `~/.config/spechub/terminal-workspace.yaml`, which the skill copies from `assets/terminal-workspace/config.example.yaml`. The config holds eight components, each with its own `enabled` key, so you turn a part off there and run `apply` again. Six components name a tool: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr` and `yazi`. The other two name a feature. `markdown` covers `spechub-md` with mermaid-ascii and glow, and `remote` covers the clipboard and browser helpers. Config keys use underscores, so gh-dash's key is `gh_dash`.
 
+Every setting has a default. `apply` therefore works with no config file, and says so when it finds none. The two gh-dash review keys used to be the exception. That writer read `review` and `agent_review` straight from the yaml, with no default of its own. A machine with no config had both pruned and neither written back. `o` already defaulted, so it kept working and the config looked healthy. Both keys now default like everything else. An empty string still turns one off.
+
+A `gh_dash:` heading with nothing under it is what commenting the block out leaves behind. That now falls back to the defaults too. It used to abort the gh-dash step with a traceback.
+
 The script edits between its own marker comments, so hand-written config around it survives. gh-dash is the exception. Python rewrites that config whole, and no comment survives the round trip, so the script tracks its own keybindings there by name.
 
 ### 3.1. What `apply` installs, and how to do it by hand
