@@ -170,6 +170,55 @@ tip() {  # tip <ref> -> "1b298bd . 4 hours ago . Merge pull request ..."
   git log -1 --format='%h  %ar  %s' "$1" 2>/dev/null | cut -c1-70
 }
 
+# ---- what diffnav cannot draw ---------------------------------------------
+# diffnav hands each file to delta, and delta dies on SIGABRT when one line
+# runs to hundreds of kilobytes. diffnav reports the child's death as
+# "FATA signal: aborted (core dumped)" and quits, so one such file takes the
+# whole diff down with it. A committed build artifact is what does it: this
+# project's own cli/dist/index.js.map holds a single 982,428-character line,
+# and the merge commit touching it aborted diffnav in 1.7 seconds.
+#
+# So the file goes, not the diff. Any file whose patch holds a line over the
+# limit is dropped and named in the banner, and the rest is drawn as usual.
+# 20000 is far above any line a person writes and far below where delta gives
+# out. Raise or lower it with SPECHUB_DIFF_LINE_LIMIT.
+LINE_LIMIT_DEFAULT=20000
+LINE_LIMIT="${SPECHUB_DIFF_LINE_LIMIT:-$LINE_LIMIT_DEFAULT}"
+# awk compares a length against whatever this holds. Hand it "abc" and every
+# comparison is a string comparison that is never true, so the guard turns
+# itself off and the abort comes back with nothing on screen to explain it.
+# Hand it 0 and every file is dropped instead. Refuse both, out loud.
+case "$LINE_LIMIT" in
+  ''|0|*[!0-9]*)
+    echo "spechub-diff: SPECHUB_DIFF_LINE_LIMIT is \"$LINE_LIMIT\", which is not a" >&2
+    echo "  positive whole number. Using $LINE_LIMIT_DEFAULT." >&2
+    LINE_LIMIT=$LINE_LIMIT_DEFAULT ;;
+esac
+drop_unrenderable() {  # drop_unrenderable <skipped-file>  ; diff in, diff out
+  # One file at a time: a patch has to be held whole before its longest line
+  # is known. Everything before the first "diff --git" is a header, so it goes
+  # straight through. Written for gawk, mawk and busybox awk alike.
+  awk -v lim="$LINE_LIMIT" -v skip="$1" '
+    function flush() {
+      if (path == "") return
+      if (long) printf "%s\t%d\n", path, maxlen > skip
+      else for (i = 1; i <= n; i++) print buf[i]
+    }
+    /^diff --git / {
+      flush()
+      split("", buf); n = 0; long = 0; maxlen = 0
+      path = $0; sub(/^diff --git a\//, "", path); sub(/ b\/.*$/, "", path)
+      if (path == "") path = "?"
+    }
+    {
+      if (path == "") { print; next }
+      if (length($0) > maxlen) maxlen = length($0)
+      if (length($0) > lim) long = 1
+      buf[++n] = $0
+    }
+    END { flush() }'
+}
+
 # ---- banner ---------------------------------------------------------------
 banner() {  # banner <source-label> <change-label> <what> <command>
   # No line may start with a space: diffnav strips leading whitespace, so any
@@ -180,17 +229,28 @@ banner() {  # banner <source-label> <change-label> <what> <command>
   [ -n "${CHG_TIP:-}" ] && printf 'compare  %s\n' "$(printf '%s  %s' "$2" "$CHG_TIP" | cut -c1-70)"
   printf 'showing  %s\n' "$3"
   printf 'command  %s\n' "$4"
+  # A dropped file is named here rather than left to be noticed as missing.
+  [ -s "${SKIP:-}" ] && while IFS="$(printf '\t')" read -r p len; do
+    printf 'skipped  %s  (one line is %s chars, and diffnav aborts on it)\n' "$p" "$len"
+  done < "$SKIP"
+  return 0
 }
 launch() {  # launch <source> <change> <what> <git-args...>
   local src="$1" chg="$2" what="$3"; shift 3
   local cmd="git $*"
-  local tmp; tmp=$(mktemp); git "$@" > "$tmp" 2>/dev/null
+  local tmp; tmp=$(mktemp); SKIP=$(mktemp)
+  git "$@" 2>/dev/null | drop_unrenderable "$SKIP" > "$tmp"
   if grep -q '^diff --git' "$tmp"; then
     # diffnav puts the line after "commit <sha>" in its status bar, and the bar
     # stays put while you walk the file tree. A git show stream carries its own
     # header, so only a plain diff needs one synthesised.
     { [ "${1:-}" = diff ] && printf 'commit %s\n' "$(git rev-parse HEAD 2>/dev/null)"
       banner "$src" "$chg" "$what" "$cmd"; echo; cat "$tmp"; } | diffnav
+  elif [ -s "$SKIP" ]; then
+    banner "$src" "$chg" "$what" "$cmd"
+    echo; echo "  Every file that changed carries a line too long for diffnav."
+    echo "  They are named above, and nothing else differs between these two."
+    echo; echo "Press any key..."; read -rsn1
   else
     banner "$src" "$chg" "$what" "$cmd"
     echo; echo "  No difference between these two. Nothing to show."
@@ -203,7 +263,7 @@ launch() {  # launch <source> <change> <what> <git-args...>
     fi
     echo; echo "Press any key..."; read -rsn1
   fi
-  rm -f "$tmp"
+  rm -f "$tmp" "$SKIP"
 }
 
 # ---- comparisons ----------------------------------------------------------
