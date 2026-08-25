@@ -20,16 +20,57 @@ session across a context compaction instead, use `compact-and-continue`.
 
 ## Only the lead session runs this
 
-Run `[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" ]` before anything else. If the
-variable holds a value, you are a subagent or a teammate. Stop, and tell whoever
-launched you that this skill runs only in the lead session. A subagent or a
-teammate reports its state to the lead instead – in its final message, or by
-`SendMessage`. The lead then hands off or compacts.
+An agent that another agent launched stops here. One Bash call tells you
+whether you are one. Replace `<nonce>` with eight random hex characters, picked
+fresh, and never with a value already used in this session:
 
-The reason is the quiet marker. This skill's last step writes that marker, which
-silences the lead's context-pressure nudge. In a child session
-`CLAUDE_CODE_SESSION_ID` names the lead, so a child would write a marker that
-only the lead may write.
+<!-- lead-check: tests/test-skill-gates.sh extracts and runs the block below -->
+
+```bash
+n=spechub-whoami-<nonce>
+s="${CLAUDE_CODE_SESSION_ID:-none}"
+p="$HOME/.claude/projects"
+for _ in $(seq 1 20); do
+  m=$(grep -lF "$n" "$p"/*/"$s"/subagents/agent-*.jsonl 2>/dev/null </dev/null | head -1)
+  [ -n "$m" ] && { echo "child: $m"; exit 0; }
+  grep -qF "$n" "$p"/*/"$s".jsonl 2>/dev/null </dev/null && { echo "lead"; exit 0; }
+  sleep 0.5
+done
+echo "lead"
+```
+
+`lead` means carry on. `child: <path>` means stop, and tell whoever launched
+you that this skill runs only in the lead session. Report your state upward
+instead – in your final message, or by `SendMessage`. The lead then hands off
+or compacts.
+
+The reason to stop is the quiet marker. This skill's last step writes that
+marker, which silences the lead's context-pressure nudge. Inside a child
+session `CLAUDE_CODE_SESSION_ID` names the lead, so its marker silences a nudge
+the lead still needs.
+
+Five facts sit behind that command, measured on Claude Code 2.1.241. Each one
+names a way the command has already been got wrong:
+
+- **No environment variable answers this.** `CLAUDE_CODE_CHILD_SESSION` holds
+  `1` in every Bash subprocess, lead or child. It marks "spawned by Claude
+  Code", nothing more. An in-process child session shares the lead's
+  `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID` and `CLAUDE_CODE_ENTRYPOINT`.
+- **The command hunts for its own record, so it waits.** The host writes that
+  record while the command runs, roughly four seconds in. One grep with no loop
+  runs too early, finds nothing and answers `lead` for everyone. Never flatten
+  the loop.
+- **The nonce must be yours alone.** Reuse one, or take one from a prompt, and
+  another agent's transcript answers for you. The angle brackets make an
+  unsubstituted copy a bash syntax error. That beats a silent match on whatever
+  agent read this file before you, so never soften `<nonce>` to a bare word.
+- **`<session>.jsonl` can only ever say `lead`.** Your own mark lands there
+  whether you are the lead or not. So the loop reads the agent transcripts
+  first, and treats that file as an early exit rather than evidence of a child.
+- **No evidence means lead.** The old gate read a variable that is always set.
+  It answered `child` in every session, and neither skill could run (#146). Ten
+  seconds with no matching transcript answers `lead` instead. A teammate running
+  as its own top-level session lands here, and rightly: it owns its own marker.
 
 ## First: is this yours to invoke?
 
@@ -616,8 +657,8 @@ d="${SPECHUB_CONTEXT_PRESSURE_DIR:-${TMPDIR:-/tmp}/spechub-context-pressure}"
 [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && mkdir -p "$d" && : > "$d/${CLAUDE_CODE_SESSION_ID}.quiet" || true
 ```
 
-`CLAUDE_CODE_SESSION_ID` is this session's own id. The gate at the top ruled out
-the child sessions where it would name the parent instead. So the marker lands
+`CLAUDE_CODE_SESSION_ID` is this session's own id. The lead check at the top
+ruled out the child sessions, where it names the lead instead. So the marker lands
 exactly where the hook looks for it.
 
 If the variable holds nothing, skip this step and say so in the report. The hook

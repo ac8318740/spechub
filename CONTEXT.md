@@ -12,6 +12,8 @@
 
 **checkout owner** – The orchestrator whose path root holds a checkout, which the owner removes. Orca owns `~/orca/workspaces/<repo>/`. Herdr owns its worktree root, `~/.herdr/worktrees/<repo>/` by default, and anything else is plain git.
 
+**child session** – A subagent or a teammate, launched by another agent rather than by a person. It runs inside the **lead session**'s own process and shares that session's id, so no environment variable separates the two. A child reports its state to the lead, and never writes what the lead owns.
+
 **dev setup** – The machine-level tools a SpecHub session runs inside. It names the orchestrator that hosts terminal panes and git worktrees. It also names the browser-verification modes that work on the machine, plus optional extras such as publishing the dev server to a private network. A host declares its dev setup, and a project does not.
 
 **durable artifact** – Any text an agent writes that someone reads later without the conversation that produced it. It covers architecture decision records, glossary entries, living specs and their functional requirements, map nodes, handoff files, READMEs and docs, and pull request bodies. Chat replies and commit subject lines are not durable artifacts.
@@ -19,6 +21,8 @@
 **engaged** – A handoff watcher outcome: the receiving agent has not acknowledged, but has read the handoff file or started using work tools. The work is underway. Never relaunch it elsewhere.
 
 **host** – One developer machine, as distinct from the project it works in. The SpecHub global config declares its dev setup, including which orchestrators the developer installed.
+
+**lead session** – The session a person talks to, at the top of the agent tree. It alone hands work over or compacts, because it alone owns the context-pressure quiet marker and the `spechub/HANDOFF.md` anchor. A **child session** finds out it is not the lead by looking for its own transcript – see ADR 0007.
 
 **opener** – A small HTTP service on the user's laptop. It stores a page rendered on a development virtual machine and serves it on an address only the laptop can reach (the loopback interface). It hands that address to the user's default browser, so a person sees the page – see **bridge** for the agent's route instead.
 

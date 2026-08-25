@@ -1404,6 +1404,34 @@ check "warn nudge says to wait until the current run of work wraps up"    'print
 check "severe nudge says to wait until the current run of work wraps up"  'printf %s "$SEVERE_REASON" | grep -qi "once the current run of work wraps up"'
 
 # ---------------------------------------------------------------------------
+# Case 32b: every tier leaves the decision to the agent
+#
+# The question tool is the fallback for an agent that cannot tell, never a
+# standing order. A tier that reinstated "ask the user and let them choose"
+# would still name the question tool and still pass the checks above, so the
+# agency clause is asserted on its own: an unattended run must be able to
+# resolve a nudge without a person.
+# ---------------------------------------------------------------------------
+echo "Case 32b: every tier leaves the handoff decision to the agent"
+for tier in WARN SEVERE LADDER; do
+  case "$tier" in
+    WARN)   TIER_REASON="$WARN_REASON_NO_HERDR" ;;
+    SEVERE) TIER_REASON="$SEVERE_REASON" ;;
+    LADDER) TIER_REASON="$LADDER_REASON" ;;
+  esac
+  export TIER_REASON
+  check "$tier nudge gives the agent the call"          'printf %s "$TIER_REASON" | grep -qi "the call is yours"'
+  check "$tier nudge lets a strong view act unasked"    'printf %s "$TIER_REASON" | grep -qi "act on it without asking"'
+  check "$tier nudge makes the ask conditional"         'printf %s "$TIER_REASON" | grep -qi "if you don.t know"'
+  check "$tier nudge never orders an unconditional ask" '! printf %s "$TIER_REASON" | grep -qiE "ask the user first|do not decide that alone|let them choose"'
+done
+
+# Severe recommends handing over, but an agent one step from the finish line
+# has nothing worth handing over. Assert the exception survives, so a future
+# edit cannot harden the recommendation back into an order.
+check "severe nudge still allows finishing work in flight"  'printf %s "$SEVERE_REASON" | grep -qi "finishing what you are already on"'
+
+# ---------------------------------------------------------------------------
 # Case 33: nothing in this suite made the hook write to stderr
 # ---------------------------------------------------------------------------
 echo "Case 33: no hook run in this suite wrote to stderr"

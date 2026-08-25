@@ -4,3 +4,4 @@
 - [0004](0004-dev-setup-per-host.md) – Dev setup is declared per host, not per project
 - [0005](0005-two-orchestrators-per-host.md) – Two orchestrators coexist on one host, and a checkout's path names its owner
 - [0006](0006-document-opener-service.md) – A document opener service on the laptop, separate from the Playwriter bridge
+- [0007](0007-lead-check-reads-the-transcript.md) – A session's own transcript decides lead or child, not the environment
