@@ -126,25 +126,37 @@ WINDOW_DEFAULT = 1000000
 # 1,000,000 default.
 SMALL_WINDOW_MODEL = re.compile(r"haiku|-4-\d|-4\b")
 
-# The ~40-word escape hatch is identical across tiers: the load-bearing
-# instruction most likely to be tuned, kept in one place so warn and severe
-# can never drift into authorising different behaviour.
-ESCAPE_HATCH = (
-    "Go ahead without asking only if you feel strongly it is right, or if "
-    "you are partway through a long run of tasks and the user already "
-    "agreed to a handoff earlier in this session, including in a handoff "
-    "or compaction summary you resumed from."
+# The agency clause is the load-bearing instruction, and it is identical
+# across tiers: handing over or carrying on is the agent's own call, and the
+# question tool is for the case where it genuinely cannot tell. Only the head
+# above it differs, and only in how hard it leans towards handing over - so a
+# severe nudge never halts an unattended run that the agent could have
+# resolved itself.
+AGENCY = (
+    "The call is yours. If you have a strong view either way, act on it "
+    "without asking. Either hand over, or say in one line what you found "
+    "and carry on. Ask the user with the host's question tool if you don't "
+    "know if handing off or continuing in this session would be better."
 )
 
-# Shared tail appended after each tier's head: the escape hatch, plus the
-# fallback instruction for when neither exception applies. Both tiers render
-# the same tail so a future edit to either sentence cannot drift between
-# warn and severe.
-ASK_TAIL = (
-    ESCAPE_HATCH
-    + " If neither holds, say what you found and carry on."
-    + " If the user would rather keep going, drop it for now and raise the"
-    + " handoff again once the current run of work wraps up."
+# The standing-agreement clause settles the one case the agent cannot read
+# off its own context: a handoff the user already agreed to, which needs no
+# second ask.
+STANDING_AGREEMENT = (
+    "If you are partway through a long run of tasks and the user already "
+    "agreed to a handoff earlier in this session, including in a handoff "
+    "or compaction summary you resumed from, hand over without asking."
+)
+
+# Shared tail appended after each tier's head: the agency clause, the
+# standing agreement, and what to do when an answer does come back. Both
+# tiers render the same tail, so a future edit to any of it cannot drift
+# between warn and severe.
+DECIDE_TAIL = (
+    AGENCY
+    + " " + STANDING_AGREEMENT
+    + " If you do ask and the user would rather keep going, drop it for now"
+    + " and raise the handoff again once the current run of work wraps up."
 )
 
 
@@ -546,21 +558,21 @@ limit = "{:,}".format(rung)
 if rung >= severe_at:
     head = (
         "Context check (urgent): this session has used about {used} tokens, "
-        "past the {limit} severe mark, so it is close to the wall. Finish the "
-        "step you are on, then hand the work over with {route} instead of "
-        "starting anything new. Ask the user first, using the host's question "
-        "tool, and say plainly that context is nearly gone so they can decide "
-        "quickly."
+        "past the {limit} severe mark, so it is close to the wall. Handing "
+        "the work over with {route} is usually right this late, and starting "
+        "something new rarely is. Finishing what you are already on can be "
+        "the better call though: wrap it up and there may be nothing left "
+        "worth handing over. If you do put it to the user, say plainly that "
+        "context is nearly gone so they can decide quickly."
     ).format(used=used, limit=limit, route=route)
 else:
     head = (
         "Context check: this session has used about {used} tokens, past the "
-        "{limit} mark. Think about whether now is a good moment to hand the "
-        "work over with {route}. Do not decide that alone: ask the user with "
-        "the host's question tool and let them choose."
+        "{limit} mark. Decide whether now is a good moment to hand the work "
+        "over with {route}."
     ).format(used=used, limit=limit, route=route)
 
-reason = head + " " + ASK_TAIL
+reason = head + " " + DECIDE_TAIL
 
 print(json.dumps({"decision": "block", "reason": reason}))
 PY
