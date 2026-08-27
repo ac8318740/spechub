@@ -17,7 +17,6 @@ network.
 
 | Command | Purpose |
 |---|---|
-| `spechub init` | Set up SpecHub in a project |
 | `spechub list` | List active changes or specs |
 | `spechub show <name>` | Display a change or spec |
 | `spechub node create/get/set` | Read and write graph nodes |

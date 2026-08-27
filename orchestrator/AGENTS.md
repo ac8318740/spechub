@@ -21,7 +21,7 @@ You are a **coordinator**, not an implementer. Your job is to:
 5. **VERIFY BUILD before marking tasks complete** – See Build verification below
 6. **VERIFY FRONTEND VISUALLY for UI changes** – See Frontend visual verification below
 7. **PLANNING AND VERIFICATION SHOULD TAKE ~4X THE EFFORT OF IMPLEMENTATION** – Subagents are often wrong, because they lack full context. Launch ~4x as many planning and verification subagents as executor subagents.
-8. **ALL implementation follows the Implementation discipline** – Every feature goes through test-writer -> task-executor -> task-checker. No exceptions.
+8. **ALL implementation follows the Implementation discipline** – Every feature goes through test-writer, task-executor and task-checker. One key changes their order. `workflow.tdd.strict: false` runs the task-executor before the test-writer. No setting drops a phase.
 
 ### Opting out of strict orchestrator mode
 
@@ -45,7 +45,7 @@ If `~/.claude/spechub/bin/spechub` is missing, the SessionStart hook did not run
 
 ## Project configuration
 
-All project-specific commands and paths come from `spechub/project.yaml`. Read this file before you run any build, test or lint command. If it doesn't exist, prompt the user to run `/spechub:init`.
+All project-specific commands and paths come from `spechub/project.yaml`. Read this file before you run any build, test or lint command. If it doesn't exist, prompt the user to run `/spechub:setup`.
 
 Key fields:
 - `commands.test` – run tests
@@ -53,12 +53,14 @@ Key fields:
 - `commands.build` – verify build
 - `commands.lint` – lint and fix
 - `commands.typecheck` – type checking
+- `commands.format` – format the touched files, between the executor and the checker
 - `directories.source` – source code root
 - `directories.tests` – test directory root
 - `venv.activate` – virtual environment activation (prefix for commands)
 - `frontend` – frontend config (if present, enables visual verification)
 - `test_markers.exclude` – test markers to exclude from default runs
 - `workflow` – workflow settings, spec sync, TDD config
+- `workflow.tdd.strict` – `false` runs the task-executor before the test-writer; all three phases still run
 
 Before you run a command, check for `venv.activate`. Prefix the command with it when the file has one.
 
@@ -114,7 +116,13 @@ That reader was not in the conversation. Write for that reader. Invoke the
 
 ## Implementation discipline
 
-This pipeline applies to all implementation work. No exceptions.
+This pipeline applies to all implementation work. One key changes the order of
+two phases. When `spechub/project.yaml` sets `workflow.tdd.strict: false`,
+relaxed TDD, the order is task-executor, then test-writer, then task-checker.
+
+Relaxed TDD means nobody writes the tests first. It never means the work goes
+unverified, and it drops no phase. All three agents run under both settings.
+Rule 3 above holds either way. A task-checker runs after every executor.
 
 ### The four-phase pipeline
 
@@ -127,6 +135,16 @@ DELEGATE to test-writer subagent
 '- Verify: tests exist AND all fail (feature not yet implemented)
 ```
 
+`workflow.tdd.strict: false` runs this phase after Phase 2, not before it.
+Tell the test-writer to write its tests from the requirements, and to leave
+the implementation in the working tree unread. Its independence is weaker
+than under strict, where no implementation exists for it to read. That is the
+cost of relaxed TDD.
+
+The verify line changes with the order. Under `false` the implementation is
+already there, so check that the new tests pass rather than fail. A new test
+that fails means the implementation is wrong. Route that back to Phase 2.
+
 **Phase 2: task-executor** – Make the tests pass
 
 ```
@@ -135,6 +153,10 @@ DELEGATE to task-executor subagent
 |- Executor implements in source code ONLY
 '- Executor CANNOT modify any files in the test directory
 ```
+
+Under relaxed TDD this phase runs first, and no tests exist yet. Provide the
+requirements alone. The ban on writing in the test directory holds under both
+settings, so the executor never writes its own tests.
 
 **Phase 3: task-checker** – Verify everything
 
@@ -147,6 +169,13 @@ DELEGATE to task-checker subagent
 |- TDD isolation (executor didn't modify test files)
 '- Integration wired (reachable from UI/API)
 ```
+
+The checker's gate follows `workflow.tdd.strict`. Under `true` it holds the
+task's new tests to failing before the executor and passing after. Under
+`false` the implementation came first, so nothing can show the tests failing
+without it. The checker then holds the new tests to existing and passing, the
+full suite to passing, and the test count to not dropping. It reports which
+mode it ran in.
 
 **Phase 4: frontend-verifier** – Browser verification, when `spechub/project.yaml` configures a frontend
 
@@ -162,11 +191,25 @@ DELEGATE to frontend-verifier subagent
 If Phase 3 fails -> route back to the appropriate phase with feedback.
 If Phase 4 fails -> route back to Phase 2 with the UI bug details.
 
+### Formatting before the checker
+
+`commands.format` in `spechub/project.yaml` names the formatter. Run it
+immediately before you delegate to the task-checker, over the files the work
+touched. One rule covers both settings. Under relaxed TDD the format step
+therefore falls after the test-writer, so the new tests get formatted too. A
+`commands.format` of `null` means this project has no format step.
+
+Report a non-zero exit from the formatter. Never treat one as a failed
+implementation, because formatting is not correctness. Then delegate to the
+task-checker as usual.
+
 ### When to skip phases
 
+- **No setting skips the test-writer** – `workflow.tdd.strict: false` moves it after the executor, and runs it just the same
 - **You may skip the test-writer** for pure config, infra or docs changes with no testable behavior
+- **The format step runs** only when `commands.format` names a command
 - **Frontend-verifier only runs** when `spechub/project.yaml` sets `frontend` AND the change touched frontend files AND `workflow.frontend_verification` is `true`
-- **Never skip** the task-checker – verification always runs
+- **Never skip** the task-checker – verification always runs, under strict TDD and under relaxed
 - **Never skip** the frontend-verifier when the change touched frontend files and the project configures it – it's non-negotiable
 
 ---
@@ -300,7 +343,7 @@ The frontend-verifier agent:
 
 ### Browser setup
 
-Run `/spechub:init` or `/spechub:config check` to set up browser verification. This creates:
+Run `/spechub:setup` to set up browser verification. This creates:
 
 - **agent-browser.json** – CDP connection config in the project root
 - **VERIFICATION-KNOWLEDGE.md** – Evolving knowledge base of element patterns, gotchas, and proven verification sequences

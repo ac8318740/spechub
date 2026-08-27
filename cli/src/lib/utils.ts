@@ -53,7 +53,7 @@ export function listArchivedChanges(root: string): string[] {
 }
 
 export function requireProject(root: string | null): asserts root is string {
-  if (!root) fail('Not in a SpecHub project. Run `spechub init` first.');
+  if (!root) fail('Not in a SpecHub project. Run `/spechub:setup` first.');
 }
 
 export function formatDate(): string {

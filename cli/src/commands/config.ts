@@ -1,7 +1,21 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { GLOBAL_CONFIG_FILE, PROJECT_FILE, SPECHUB_DIR } from '../lib/constants.js';
+import {
+  AGENT_BROWSER_BIN,
+  AGENT_BROWSER_JSON_FILE,
+  CLAUDE_DIR,
+  CLAUDE_LOCAL_SETTINGS_FILE,
+  CLAUDE_SETTINGS_FILE,
+  DOMAIN_MAP_FILE,
+  GLOBAL_CONFIG_FILE,
+  PROJECT_FILE,
+  SPECHUB_DIR,
+  SPECHUB_OUTPUT_STYLE,
+  VERIFICATION_KNOWLEDGE_FILE,
+} from '../lib/constants.js';
 import {
   ConfigFileError,
   ConfigValidationError,
@@ -17,12 +31,16 @@ import {
   type GlobalConfig,
 } from '../lib/global-config.js';
 import {
+  agentBrowserCdpPort,
   BROWSER_AXIS_KEYS,
   BROWSER_MODE_PRIORITY,
   CHROMIUM_BINARIES,
   declaredBrowserModes,
+  domainCount,
   FALLBACK_FORBIDDEN,
+  frontendHelpersDir,
   isBrowserAxis,
+  outputStyleOf,
   ORCHESTRATOR_AXIS_KEYS,
   ORCHESTRATOR_PROBES,
   ORCHESTRATORS,
@@ -30,6 +48,7 @@ import {
   projectSettings,
   requiredHostAxisKeys,
   resolveBrowserMode,
+  workflowFlag,
   type BrowserMode,
   type BrowserModeProblem,
   type ProjectHostContext,
@@ -37,6 +56,16 @@ import {
   type ResolvedBrowserMode,
 } from '../lib/host-status.js';
 import { cdpPortAnswers, firstBinaryOnPath, runCommand } from '../lib/host-probe.js';
+import {
+  getProjectKey,
+  listProjectKeys,
+  parseProjectValue,
+  PROJECT_KEY_LIST,
+  projectKeyDefault,
+  projectKeySpec,
+  setProjectKey,
+  unsetProjectKey,
+} from '../lib/project-config.js';
 import { findProjectRoot } from '../lib/project.js';
 import { readYaml } from '../lib/utils.js';
 
@@ -87,16 +116,66 @@ function qualifier(key: string, required: boolean): string {
  * never disagree about the same file.
  */
 interface LoadedProject {
+  /**
+   * The `workflow` flags the checks branch on, resolved against their
+   * defaults. Held here rather than on either type above: they say nothing
+   * about what the host has to provide and nothing `show` reports, but they
+   * decide what two of the check rows conclude.
+   */
+  workflow: ProjectWorkflow;
+  /**
+   * The directory holding spechub/, or null when there is no project here.
+   * Carried so the checks that stat the project's own files have somewhere to
+   * stat them from.
+   */
+  root: string | null;
   context: ProjectHostContext;
   settings: ProjectSettings | null;
+  /** `frontend.helpers_dir` as stated, or null. Neither of the two above holds it. */
+  helpersDir: string | null;
+}
+
+/** What the project's `workflow` block says about the two rows that read it. */
+interface ProjectWorkflow {
+  /** Whether spec sync runs, and so whether this project owes a domain map. */
+  specSync: boolean;
+  /** Whether a UI change gets verified in a real browser before it lands. */
+  frontendVerification: boolean;
+}
+
+/**
+ * The two `workflow` flags, each against its own default: spec sync runs
+ * unless a project turns it off, and frontend verification stays off until a
+ * project turns it on. `undefined` is a project.yaml nobody found, which
+ * takes both defaults like a file that states neither key.
+ */
+function projectWorkflow(projectYaml: unknown): ProjectWorkflow {
+  return {
+    specSync: workflowFlag(projectYaml, 'spec_sync', true),
+    frontendVerification: workflowFlag(projectYaml, 'frontend_verification', false),
+  };
 }
 
 function loadProject(): LoadedProject {
   const root = findProjectRoot();
-  if (!root) return { context: projectHostContext(undefined, false), settings: null };
+  if (!root) {
+    return {
+      root: null,
+      context: projectHostContext(undefined, false),
+      settings: null,
+      helpersDir: null,
+      workflow: projectWorkflow(undefined),
+    };
+  }
 
   const yaml = readYaml(join(root, SPECHUB_DIR, PROJECT_FILE));
-  return { context: projectHostContext(yaml, true), settings: projectSettings(yaml, true) };
+  return {
+    root,
+    context: projectHostContext(yaml, true),
+    settings: projectSettings(yaml, true),
+    helpersDir: frontendHelpersDir(yaml),
+    workflow: projectWorkflow(yaml),
+  };
 }
 
 /**
@@ -252,44 +331,89 @@ function printProject(settings: ProjectSettings | null): void {
 type CheckOutcome = 'pass' | 'fail' | 'info';
 
 /**
- * Collects the numbered checks `spechub config check` prints, and the two
+ * One line of the report.
+ *
+ * `id` is the stable handle `--json` callers branch on, and every row carries
+ * one - a contract with identifiers on some rows and not others would leave a
+ * caller matching prose for the rest. `message` is the sentence a human
+ * reads, and is deliberately not the machine-readable part: it can be
+ * reworded without breaking anyone.
+ */
+interface CheckRow {
+  id: string;
+  status: CheckOutcome;
+  message: string;
+}
+
+/** One numbered section of the report, and the rows printed under it. */
+interface CheckSection {
+  title: string;
+  rows: CheckRow[];
+}
+
+const OUTCOME_LABELS: Readonly<Record<CheckOutcome, string>> = {
+  pass: chalk.green('PASS'),
+  fail: chalk.red('FAIL'),
+  info: chalk.dim('INFO'),
+};
+
+/**
+ * Collects the numbered checks `spechub config check` reports, and the two
  * facts that decide its exit code: whether anything required is unset (which
  * outranks everything, because nothing else can be trusted until it is set)
  * and whether anything else failed.
+ *
+ * Nothing is printed as it is collected. The whole report is buffered and
+ * rendered at `finish`, because the same rows have to come out either as
+ * numbered sections or as one JSON object, and a check that printed as it
+ * went could only ever produce the first.
  */
 class CheckReport {
-  private number = 0;
+  private sections: CheckSection[] = [];
   private failed = false;
   private missingRequired = false;
-  private counts = { pass: 0, fail: 0, info: 0 };
 
   heading(title: string): void {
-    this.number += 1;
-    console.log(chalk.bold(`\n${this.number}. ${title}`));
+    this.sections.push({ title, rows: [] });
   }
 
-  line(outcome: CheckOutcome, message: string): void {
-    this.counts[outcome] += 1;
-    if (outcome === 'fail') this.failed = true;
-    const label =
-      outcome === 'pass'
-        ? chalk.green('PASS')
-        : outcome === 'fail'
-          ? chalk.red('FAIL')
-          : chalk.dim('INFO');
-    console.log(`   ${label} ${message}`);
+  line(status: CheckOutcome, id: string, message: string): void {
+    if (status === 'fail') this.failed = true;
+    this.sections[this.sections.length - 1].rows.push({ id, status, message });
   }
 
   /** A required axis is unset: reported like any failure, but it sets exit 2. */
-  missing(message: string): void {
+  missing(id: string, message: string): void {
     this.missingRequired = true;
-    this.line('fail', message);
+    this.line('fail', id, message);
   }
 
-  finish(): void {
-    console.log(
-      `\n${this.counts.pass} passed, ${this.counts.fail} failed, ${this.counts.info} informational`
-    );
+  private rows(): CheckRow[] {
+    return this.sections.flatMap(section => section.rows);
+  }
+
+  private printText(): void {
+    this.sections.forEach((section, index) => {
+      console.log(chalk.bold(`\n${index + 1}. ${section.title}`));
+      for (const row of section.rows) {
+        console.log(`   ${OUTCOME_LABELS[row.status]} ${row.message}`);
+      }
+    });
+
+    const counts = { pass: 0, fail: 0, info: 0 };
+    for (const row of this.rows()) counts[row.status] += 1;
+    console.log(`\n${counts.pass} passed, ${counts.fail} failed, ${counts.info} informational`);
+  }
+
+  finish(asJson: boolean): void {
+    if (asJson) {
+      // The section numbers are a reading aid for a human and carry no
+      // meaning a caller could use, so JSON gets the flat list of rows and
+      // the identifiers that actually name them.
+      console.log(JSON.stringify({ checks: this.rows() }, null, 2));
+    } else {
+      this.printText();
+    }
     // Not process.exit: the report has just been written to what may be a
     // pipe, and exiting outright can drop buffered output on its way out.
     process.exitCode = this.missingRequired ? 2 : this.failed ? 1 : 0;
@@ -311,11 +435,15 @@ function checkRequiredAxes(
 
   for (const key of requiredHostAxisKeys({ hasFrontend: project.hasFrontend })) {
     const result = getKey(config, key);
+    const id = `required-axis:${key}`;
     if (result.status === 'set') {
-      report.line('pass', `${key} = ${JSON.stringify(result.value)}`);
+      report.line('pass', id, `${key} = ${JSON.stringify(result.value)}`);
     } else {
       const note = isBrowserAxis(key) ? why : '';
-      report.missing(`${key} is unset${note} - set it with \`spechub config set ${key} <value>\``);
+      report.missing(
+        id,
+        `${key} is unset${note} - set it with \`spechub config set ${key} <value>\``
+      );
     }
   }
 
@@ -327,7 +455,11 @@ function checkRequiredAxes(
     return result.status === 'set' && result.value === false;
   };
   if (ORCHESTRATORS.every(name => declaredFalse(ORCHESTRATOR_AXIS_KEYS[name]))) {
-    report.line('info', 'neither orchestrator is on this host - plain git worktrees will be used');
+    report.line(
+      'info',
+      'no-orchestrator',
+      'neither orchestrator is on this host - plain git worktrees will be used'
+    );
   }
 }
 
@@ -355,6 +487,7 @@ function checkOrchestrators(report: CheckReport, config: GlobalConfig): void {
     if (result.value !== true) continue;
 
     probed = true;
+    const id = `orchestrator:${name}`;
     const probe = ORCHESTRATOR_PROBES[name];
     // Where a failed probe sends the user, when this orchestrator has a page
     // worth reading. Attached to every failure, because a probe that did not
@@ -365,6 +498,7 @@ function checkOrchestrators(report: CheckReport, config: GlobalConfig): void {
     if (!binary) {
       report.line(
         'fail',
+        id,
         `${probe.binaries.join(' or ')} is not on PATH (${axisKey} is true)${hint}`
       );
       continue;
@@ -375,10 +509,10 @@ function checkOrchestrators(report: CheckReport, config: GlobalConfig): void {
     const command = [binary, ...probe.args].join(' ');
     const outcome = runCommand(binary, probe.args);
     if (!outcome.exitedZero || !probe.answered(outcome.stdout)) {
-      report.line('fail', `\`${command}\` did not answer (${axisKey} is true)${hint}`);
+      report.line('fail', id, `\`${command}\` did not answer (${axisKey} is true)${hint}`);
       continue;
     }
-    report.line('pass', `\`${command}\` answered`);
+    report.line('pass', id, `\`${command}\` answered`);
   }
 
   // Nothing to probe passes only once every orchestrator has actually been
@@ -387,6 +521,7 @@ function checkOrchestrators(report: CheckReport, config: GlobalConfig): void {
   if (!probed) {
     report.line(
       anyUndeclared ? 'info' : 'pass',
+      'orchestrator:none',
       'no orchestrator is declared true - nothing to probe'
     );
   }
@@ -434,10 +569,12 @@ async function checkDeclaredBrowserModes(
 
     probed = true;
     const { ok, detail } = await browserModeWorks(mode, project);
-    report.line(ok ? 'pass' : 'fail', `${key} is true and ${detail}`);
+    report.line(ok ? 'pass' : 'fail', `browser-mode:${mode}`, `${key} is true and ${detail}`);
   }
 
-  if (!probed) report.line('info', 'no browser mode is declared true - nothing to probe');
+  if (!probed) {
+    report.line('info', 'browser-mode:none', 'no browser mode is declared true - nothing to probe');
+  }
 }
 
 /** The three `host.browser.*` axis keys, in priority order, as one readable list. */
@@ -450,12 +587,20 @@ function checkPreferredBrowserMode(
 ): void {
   report.heading("Project's preferred browser mode is available");
 
-  // A project that named no mode has nothing to check here, whatever the host
-  // can do - this check is about a preference being honoured, and there is no
+  // A project that configures no frontend asked for nothing, so there is no
+  // row rather than a row saying so. The status is what a caller branches on,
+  // and an informational row here would be indistinguishable from the case
+  // below - which is the opposite situation, a real gap worth offering to
+  // fill. The frontend file rows already work this way.
+  const id = 'preferred-browser-mode';
+  if (!project.hasFrontend) return;
+
+  // A project that named no mode has nothing to weigh here, whatever the host
+  // can do: this check is about a preference being honoured, and there is no
   // preference. `browser-mode` treats the same situation as an answerable
   // question, which is why the two part company before the shared resolver.
-  if (!project.hasFrontend || !project.preferredMode) {
-    report.line('info', 'this project states no browser mode preference');
+  if (!project.preferredMode) {
+    report.line('info', id, 'this project states no browser mode preference');
     return;
   }
 
@@ -465,6 +610,7 @@ function checkPreferredBrowserMode(
   if (resolution.status === 'resolved') {
     report.line(
       'pass',
+      id,
       resolution.fallback
         ? `project prefers ${preferred}, which this host does not declare; ` +
             `falling back to ${resolution.mode}`
@@ -479,6 +625,7 @@ function checkPreferredBrowserMode(
   if (resolution.problem.kind === 'fallback-forbidden') {
     report.line(
       'fail',
+      id,
       `project prefers ${preferred}, which this host does not declare, and this project ` +
         `sets frontend.browser.fallback to "${FALLBACK_FORBIDDEN}" - so no other mode may ` +
         `stand in (set ${BROWSER_AXIS_KEYS[preferred]} to true, or change the project's ` +
@@ -489,6 +636,7 @@ function checkPreferredBrowserMode(
 
   report.line(
     'fail',
+    id,
     `project prefers ${preferred}, but this host declares no browser mode available ` +
       `(set one of ${BROWSER_AXIS_LIST} to true)`
   );
@@ -507,12 +655,12 @@ function browserModeProblemMessage(problem: BrowserModeProblem): string {
     case 'no-project':
       return (
         'No SpecHub project here, so there is no frontend to drive a browser for - ' +
-        'run `/spechub:init` in the project you want to set up.'
+        'run `/spechub:setup` in the project you want to set up.'
       );
     case 'no-frontend':
       return (
         'This project configures no frontend, so it drives no browser - ' +
-        'run `/spechub:init` if it should have one.'
+        'run `/spechub:setup` if it should have one.'
       );
     case 'host-undescribed':
       return (
@@ -557,9 +705,10 @@ function checkOptionalAxes(report: CheckReport, config: GlobalConfig): void {
   report.heading('Optional axes (informational only)');
 
   for (const axis of HOST_AXES.filter(a => !a.required)) {
+    const id = `optional-axis:${axis.key}`;
     const result = getKey(config, axis.key);
     if (result.status !== 'set') {
-      report.line('info', `${axis.key} is unset`);
+      report.line('info', id, `${axis.key} is unset`);
       continue;
     }
 
@@ -567,14 +716,509 @@ function checkOptionalAxes(report: CheckReport, config: GlobalConfig): void {
     const note = dependency
       ? ` - inert unless ${dependency.key} is ${String(dependency.value)}`
       : '';
-    report.line('info', `${axis.key} = ${JSON.stringify(result.value)}${note}`);
+    report.line('info', id, `${axis.key} = ${JSON.stringify(result.value)}${note}`);
   }
+}
+
+/**
+ * The first line of whatever a parser threw.
+ *
+ * A YAML parse error carries a source excerpt on the lines after its message,
+ * and the report prints one line per outcome, so only the first line of the
+ * complaint is ever shown. The file name is already in the sentence around
+ * it, which is the half the user needs to act.
+ */
+function firstLineOf(err: unknown): string {
+  return (err instanceof Error ? err.message : String(err)).split('\n')[0];
+}
+
+/** What came of trying to read a JSON file. */
+type JsonFileRead =
+  | { status: 'missing' }
+  | { status: 'unreadable'; detail: string }
+  | { status: 'read'; value: unknown };
+
+/**
+ * Read and parse a JSON file without ever throwing.
+ *
+ * There is no shared JSON reader in the CLI, and a check that crashed on a
+ * file the user has broken would be reporting the one thing it exists to
+ * report as a stack trace. Every parse here is guarded for that reason.
+ */
+function readJsonFile(path: string): JsonFileRead {
+  if (!existsSync(path)) return { status: 'missing' };
+  try {
+    return { status: 'read', value: JSON.parse(readFileSync(path, 'utf-8')) as unknown };
+  } catch (err) {
+    return { status: 'unreadable', detail: firstLineOf(err) };
+  }
+}
+
+/** Whether `path` is a file, as opposed to absent or a directory of that name. */
+function isFile(path: string): boolean {
+  return existsSync(path) && statSync(path).isFile();
+}
+
+/** The domain map's path within a project, as the user would write it. */
+const DOMAIN_MAP_PATH = join(SPECHUB_DIR, DOMAIN_MAP_FILE);
+
+/** Where the install instructions for the browser driver send the user. */
+const AGENT_BROWSER_INSTALL = `npm install -g ${AGENT_BROWSER_BIN}`;
+
+/**
+ * The domain map, which every project needs whether or not it has a UI.
+ *
+ * A missing map is a failure rather than a note because of how it fails: spec
+ * sync finds no domains, updates nothing and says nothing, so the living
+ * specs quietly stop tracking the code while everything still looks fine.
+ *
+ * `specSync` is what makes that a failure. A project that set
+ * `workflow.spec_sync` to false has nothing reading the map, so a missing one
+ * is the state it asked for rather than a problem found - the row still says
+ * the map is absent, because that is the cost of turning spec sync back on,
+ * but it says it as a note. The row keeps its identifier either way, so one
+ * caller branch reads both outcomes.
+ */
+function checkDomainMap(report: CheckReport, root: string, specSync: boolean): void {
+  const id = 'domain-map';
+  const consequence =
+    'spec sync then skips silently and the living specs stop being updated';
+  const path = join(root, DOMAIN_MAP_PATH);
+
+  if (!existsSync(path)) {
+    report.line(
+      specSync ? 'fail' : 'info',
+      id,
+      specSync
+        ? `${DOMAIN_MAP_PATH} is missing - ${consequence}`
+        : `${DOMAIN_MAP_PATH} is missing, and workflow.spec_sync is false - nothing reads the ` +
+          'map, so it is only owed if spec sync goes back on'
+    );
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = readYaml(path);
+  } catch (err) {
+    report.line('fail', id, `${DOMAIN_MAP_PATH} is not valid YAML: ${firstLineOf(err)}`);
+    return;
+  }
+
+  // A map naming nothing is a missing map with extra steps. Spec sync opens
+  // it, finds no domains to update, updates none and says nothing - which is
+  // the failure this row exists to report, whether the `domains` mapping is
+  // absent or present and empty. "maps 0 domains" reported as a pass is that
+  // failure described accurately and then filed as success.
+  const domains = domainCount(parsed);
+  if (domains === null || domains === 0) {
+    report.line('fail', id, `${DOMAIN_MAP_PATH} names no domains - ${consequence}`);
+    return;
+  }
+  report.line(
+    'pass',
+    id,
+    `${DOMAIN_MAP_PATH} maps ${domains} ${domains === 1 ? 'domain' : 'domains'}`
+  );
+}
+
+/**
+ * The three things a project needs before its frontend can be verified: the
+ * driver on PATH, a config file pointing it at the right port, and somewhere
+ * for the verifier to keep what it learns.
+ *
+ * Only asked of a project that configures a frontend. A project that drives
+ * no browser is not missing any of this; it simply has no use for it.
+ */
+function checkFrontendFiles(
+  report: CheckReport,
+  root: string,
+  project: ProjectHostContext,
+  helpersDir: string | null,
+  verification: boolean
+): void {
+  if (firstBinaryOnPath([AGENT_BROWSER_BIN])) {
+    report.line('pass', 'agent-browser', `${AGENT_BROWSER_BIN} is on PATH`);
+  } else {
+    report.line(
+      'fail',
+      'agent-browser',
+      `${AGENT_BROWSER_BIN} is not on PATH - install it with \`${AGENT_BROWSER_INSTALL}\``
+    );
+  }
+
+  checkAgentBrowserJson(report, root, project.cdpPort);
+  checkVerificationKnowledge(report, root, helpersDir);
+  checkFrontendVerification(report, verification);
+}
+
+/**
+ * `agent-browser.json` names the port the driver dials, and project.yaml
+ * names the port the browser is expected on. The two disagreeing is a
+ * verifier that connects to nothing, so both numbers go in the message: which
+ * file to change to which value is the whole of the fix.
+ *
+ * `expected` is the port the rest of the CLI resolves to, defaults included,
+ * so a project stating no `cdp_port` is still held to the default its browser
+ * mode implies rather than let off the check.
+ */
+function checkAgentBrowserJson(report: CheckReport, root: string, expected: number): void {
+  const id = 'agent-browser-json';
+  const read = readJsonFile(join(root, AGENT_BROWSER_JSON_FILE));
+
+  if (read.status === 'missing') {
+    report.line(
+      'fail',
+      id,
+      `${AGENT_BROWSER_JSON_FILE} is missing from the project root - ` +
+        `${AGENT_BROWSER_BIN} needs one naming CDP port ${expected}`
+    );
+    return;
+  }
+  if (read.status === 'unreadable') {
+    report.line('fail', id, `${AGENT_BROWSER_JSON_FILE} is not valid JSON: ${read.detail}`);
+    return;
+  }
+
+  const port = agentBrowserCdpPort(read.value);
+  if (port === null) {
+    report.line('fail', id, `${AGENT_BROWSER_JSON_FILE} names no cdp port - it should name ${expected}`);
+    return;
+  }
+  if (port !== expected) {
+    report.line(
+      'fail',
+      id,
+      `${AGENT_BROWSER_JSON_FILE} names CDP port ${port} but this project uses ${expected} - ` +
+        'set both to the same port'
+    );
+    return;
+  }
+  report.line('pass', id, `${AGENT_BROWSER_JSON_FILE} names CDP port ${port}, matching this project`);
+}
+
+/**
+ * The verification knowledge base, which is a file and not the directory
+ * holding it: an empty `helpers_dir` left behind by a half-finished setup
+ * would pass a check that only looked for the directory, and the verifier
+ * would then have nowhere to write what it learns.
+ */
+function checkVerificationKnowledge(
+  report: CheckReport,
+  root: string,
+  helpersDir: string | null
+): void {
+  const id = 'verification-knowledge';
+  if (helpersDir === null) {
+    report.line(
+      'fail',
+      id,
+      `frontend.helpers_dir is unset, so there is nowhere for ${VERIFICATION_KNOWLEDGE_FILE} to live`
+    );
+    return;
+  }
+
+  const relative = join(helpersDir, VERIFICATION_KNOWLEDGE_FILE);
+  if (!isFile(join(root, relative))) {
+    report.line(
+      'fail',
+      id,
+      `${relative} is missing - the frontend verifier keeps what it learns there`
+    );
+    return;
+  }
+  report.line('pass', id, `${relative} is present`);
+}
+
+/**
+ * Whether this project verifies a UI change in a real browser before it
+ * lands, which is the last thing the three rows above are all for.
+ *
+ * Off is a choice and not a problem, so the row is informational rather than
+ * a failure - but it names the key, because "verification is off" is only
+ * actionable next to where to turn it on. Only a project that configures a
+ * frontend gets the row at all: with no UI there is nothing to verify, so
+ * there is no setting to be off.
+ */
+function checkFrontendVerification(report: CheckReport, enabled: boolean): void {
+  const id = 'frontend-verification';
+  const key = 'workflow.frontend_verification';
+
+  if (!enabled) {
+    report.line(
+      'info',
+      id,
+      `${key} is not true, so a UI change lands unverified - set it to true to run the ` +
+        'frontend verifier'
+    );
+    return;
+  }
+  report.line('pass', id, `${key} is true, so a UI change is verified in a browser before it lands`);
+}
+
+/** The project's own files: the map every project needs, and the frontend's three. */
+function checkProjectFiles(report: CheckReport, project: LoadedProject): void {
+  report.heading("This project's files");
+
+  if (!project.root) {
+    // Nothing here is this directory's business: without spechub/ there is no
+    // map to want and no frontend to configure. One line saying so beats a
+    // column of failures about files a non-project was never going to have.
+    report.line('info', 'no-project', 'No SpecHub project here, so there are no project files to check');
+    return;
+  }
+
+  checkDomainMap(report, project.root, project.workflow.specSync);
+  if (project.context.hasFrontend) {
+    checkFrontendFiles(
+      report,
+      project.root,
+      project.context,
+      project.helpersDir,
+      project.workflow.frontendVerification
+    );
+  }
+}
+
+/** One Claude Code settings file, named the way the user would refer to it. */
+interface SettingsFile {
+  label: string;
+  path: string;
+}
+
+/**
+ * Claude Code's settings files, highest precedence first.
+ *
+ * `homedir()` is read here rather than at module load so that HOME is the one
+ * the process was actually given.
+ */
+function settingsFiles(root: string): SettingsFile[] {
+  return [
+    {
+      label: join(CLAUDE_DIR, CLAUDE_LOCAL_SETTINGS_FILE),
+      path: join(root, CLAUDE_DIR, CLAUDE_LOCAL_SETTINGS_FILE),
+    },
+    {
+      label: join(CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
+      path: join(root, CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
+    },
+    {
+      label: join('~', CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
+      path: join(homedir(), CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
+    },
+  ];
+}
+
+/**
+ * Which output style is in force, and which file put it there.
+ *
+ * The status carries the answer rather than only the prose: a caller deciding
+ * whether to offer the writing style reads `pass` as "already selected" and
+ * `info` as "not selected", without matching a sentence. The plugin never
+ * forces its own style on, so someone else's style and no style at all are
+ * both notes rather than problems. A settings file that will not parse is the
+ * one failure here: it breaks Claude Code itself, not just this row, so the
+ * user needs to see it in red.
+ *
+ * The file that wins is named, because "which style is on" is only actionable
+ * alongside "where to go and change it".
+ */
+function checkOutputStyle(report: CheckReport, root: string): void {
+  const id = 'output-style';
+  report.heading('Writing style');
+
+  for (const file of settingsFiles(root)) {
+    const read = readJsonFile(file.path);
+    if (read.status === 'missing') continue;
+    if (read.status === 'unreadable') {
+      report.line(
+        'fail',
+        id,
+        `${file.label} is not valid JSON, so the outputStyle it selects cannot be read: ${read.detail}`
+      );
+      return;
+    }
+
+    const style = outputStyleOf(read.value);
+    if (style === null) continue;
+    report.line(
+      style === SPECHUB_OUTPUT_STYLE ? 'pass' : 'info',
+      id,
+      `outputStyle is ${style}, selected by ${file.label}`
+    );
+    return;
+  }
+
+  report.line('info', id, 'outputStyle is not set by any settings file, so Claude Code uses its default');
+}
+
+/**
+ * Which file a key belongs in. A `host.*` key describes the machine, so it
+ * goes to the global config; every other key SpecHub knows describes the
+ * project, so it goes to `spechub/project.yaml`. Bare `host` counts as a host
+ * key so the "that is a section" message keeps coming from the host schema.
+ */
+function isHostKey(key: string): boolean {
+  return key === 'host' || key.startsWith('host.');
+}
+
+/** Refuse `key`, naming the keys `spechub config set` does know. */
+function unknownConfigKey(key: string): ConfigValidationError {
+  return new ConfigValidationError(
+    `Unknown config key "${key}".\n` +
+      `Project keys (${join(SPECHUB_DIR, PROJECT_FILE)}): ${PROJECT_KEY_LIST.join(', ')}\n` +
+      'Host keys start with host. and are listed in docs/dev-setups.md.'
+  );
+}
+
+/** Write one `host.*` axis to the global config. */
+function setHostKey(key: string, value: string): void {
+  const parsed = parseValue(key, value);
+  const config = setKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key, parsed);
+  writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
+  console.log(chalk.green(`Set ${key} = ${JSON.stringify(parsed)}`));
+
+  // The value is stored either way; the user just deserves to know when
+  // nothing will read it yet.
+  const dependency = inertDependency(config, key);
+  if (dependency) {
+    console.error(
+      chalk.yellow(
+        `Warning: ${key} has no effect unless ${dependency.key} is ${String(dependency.value)}`
+      )
+    );
+  }
+}
+
+/**
+ * Where the project.yaml holding `key` is, refusing the two ways a project key
+ * can have nowhere to live: a key neither schema knows, and a directory that
+ * is not a SpecHub project. `purpose` says what the key was wanted for, so the
+ * refusal reads as the sentence the command was in the middle of.
+ *
+ * Every project-key command asks this first, so all three refuse the same two
+ * things in the same words, and none of them opens a file before it has.
+ */
+function projectFileFor(key: string, purpose: string): string {
+  if (!projectKeySpec(key)) throw unknownConfigKey(key);
+
+  const root = findProjectRoot();
+  if (!root) {
+    throw new ConfigValidationError(
+      `There is no SpecHub project here, so ${key} ${purpose}. Run /spechub:setup first.`
+    );
+  }
+  return join(root, SPECHUB_DIR, PROJECT_FILE);
+}
+
+/**
+ * Write one key to the project's `spechub/project.yaml`.
+ *
+ * The value is validated before the file is opened, so a value the schema
+ * refuses leaves the file exactly as it was.
+ */
+function setProjectFileKey(key: string, value: string): void {
+  const file = projectFileFor(key, 'has nowhere to go');
+  const parsed = parseProjectValue(key, value);
+  setProjectKey(file, key, parsed);
+  console.log(chalk.green(`Set ${key} = ${JSON.stringify(parsed)}`));
+}
+
+/**
+ * One config value on stdout: a string as written, anything else as JSON.
+ *
+ * A string is printed raw because the caller is usually a shell wanting the
+ * path or the command itself, and quotes it would have to strip are worse than
+ * no quotes at all. Everything else needs a spelling, and JSON is the one
+ * every reader of this output already parses.
+ */
+function printConfigValue(value: unknown): void {
+  console.log(typeof value === 'string' ? value : JSON.stringify(value));
+}
+
+/** Print one `host.*` axis, exiting 2 when the config states no value for it. */
+function getHostKey(key: string): void {
+  const result = getKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
+  if (result.status === 'unset') {
+    console.error(chalk.yellow(`${key} is unset${qualifier(key, result.required)}`));
+    process.exit(2);
+  }
+  printConfigValue(result.value);
+}
+
+/** Remove one `host.*` axis from the global config. */
+function unsetHostKey(key: string): void {
+  const { config, removed } = unsetKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
+  if (!removed) {
+    console.log(chalk.dim(`${key} was not set`));
+    return;
+  }
+  writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
+  console.log(chalk.green(`Removed ${key}`));
+}
+
+/**
+ * Print one key of the project's `spechub/project.yaml`, exiting 2 when the
+ * file states no value for it.
+ *
+ * Exit 2 is the code the host axes use for the same answer, so a caller
+ * branches on "no value here" without knowing which file the key lives in.
+ *
+ * Where the reference gives the key a literal default, the message names it.
+ * The default is what the project actually gets, so a reader told only that
+ * the key is unset would still have to go and look the answer up.
+ */
+function getProjectFileKey(key: string): void {
+  const result = getProjectKey(projectFileFor(key, 'has no value to read'), key);
+  if (result.status === 'unset') {
+    const fallback = projectKeyDefault(key);
+    const note = fallback === undefined ? '' : ` - the documented default is ${fallback}`;
+    console.error(chalk.yellow(`${key} is unset${note}`));
+    process.exit(2);
+  }
+  printConfigValue(result.value);
+}
+
+/** Remove one key from the project's `spechub/project.yaml`. */
+function unsetProjectFileKey(key: string): void {
+  const file = projectFileFor(key, 'has nothing to remove');
+  if (!unsetProjectKey(file, key)) {
+    // Not an error: the state the user asked for is the state the file is
+    // already in, which is what an unset host axis reports too.
+    console.log(chalk.dim(`${key} was not set`));
+    return;
+  }
+  console.log(chalk.green(`Removed ${key}`));
+}
+
+/**
+ * Print what the project's `spechub/project.yaml` states, above the host lines.
+ *
+ * Each side is headed by the file it came out of. The two sets of keys are
+ * edited in completely different places, so a listing that ran them together
+ * without saying which is which would leave the reader guessing which file to
+ * open to change one.
+ */
+function printProjectKeys(root: string | null): void {
+  if (!root) {
+    console.log(chalk.dim('No SpecHub project here.'));
+    return;
+  }
+
+  const file = join(root, SPECHUB_DIR, PROJECT_FILE);
+  console.log(chalk.bold(file));
+  const rows = listProjectKeys(file);
+  if (rows.length === 0) {
+    console.log(chalk.dim('This project states no configuration.'));
+    return;
+  }
+  for (const [key, value] of rows) console.log(`${key} = ${JSON.stringify(value)}`);
 }
 
 export function register(program: Command): void {
   const configCmd = program
     .command('config')
-    .description('Manage global configuration');
+    .description('Read and change the host and project configuration');
 
   configCmd
     .command('path')
@@ -585,15 +1229,29 @@ export function register(program: Command): void {
 
   configCmd
     .command('list')
-    .description('Show all settings')
+    .description('Show every setting the two config files state')
     .option('--json', 'output as JSON')
     .action((opts: { json?: boolean }) => {
       reportingUserErrors(() => {
         const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+        // No key argument, so there is no project key to refuse: outside a
+        // project the host axes are still the machine's, and still readable.
+        const root = findProjectRoot();
+
         if (opts.json) {
-          console.log(JSON.stringify(config, null, 2));
+          // The host side keeps the shape it has always had - the config's own
+          // `host` object, at the top level, byte for byte. The project keys
+          // arrive beside it rather than around it.
+          const project = root
+            ? Object.fromEntries(listProjectKeys(join(root, SPECHUB_DIR, PROJECT_FILE)))
+            : null;
+          console.log(JSON.stringify({ ...config, project }, null, 2));
           return;
         }
+
+        printProjectKeys(root);
+        console.log('');
+        console.log(chalk.bold(GLOBAL_CONFIG_FILE));
         if (Object.keys(config).length === 0) {
           console.log(chalk.dim('No configuration set.'));
           return;
@@ -638,10 +1296,12 @@ export function register(program: Command): void {
   configCmd
     .command('check')
     .description('Check the host setup against what this machine can actually do')
-    .action(async () => {
+    .option('--json', 'output as JSON')
+    .action(async (opts: { json?: boolean }) => {
       await reportingUserErrorsAsync(async () => {
         const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-        const project = loadProject().context;
+        const loaded = loadProject();
+        const project = loaded.context;
         const report = new CheckReport();
 
         checkRequiredAxes(report, config, project);
@@ -649,8 +1309,14 @@ export function register(program: Command): void {
         await checkDeclaredBrowserModes(report, config, project);
         checkPreferredBrowserMode(report, config, project);
         checkOptionalAxes(report, config);
+        checkProjectFiles(report, loaded);
+        // The output style lives in Claude Code's settings rather than in the
+        // project, so it gets its own section rather than sitting among files
+        // the project owns. Without a project root the settings files are
+        // still looked for from where the user ran the command.
+        checkOutputStyle(report, loaded.root ?? process.cwd());
 
-        report.finish();
+        report.finish(opts.json === true);
       });
     });
 
@@ -698,14 +1364,8 @@ export function register(program: Command): void {
     .argument('<key>', 'config key')
     .action((key: string) => {
       reportingUserErrors(() => {
-        const result = getKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
-        if (result.status === 'unset') {
-          console.error(chalk.yellow(`${key} is unset${qualifier(key, result.required)}`));
-          process.exit(2);
-        }
-        console.log(
-          typeof result.value === 'string' ? result.value : JSON.stringify(result.value)
-        );
+        if (isHostKey(key)) getHostKey(key);
+        else getProjectFileKey(key);
       });
     });
 
@@ -714,23 +1374,17 @@ export function register(program: Command): void {
     .description('Set a config value')
     .argument('<key>', 'config key')
     .argument('<value>', 'config value')
+    // The keys outlive any help string, so the help names where they are
+    // written down rather than trying to list them.
+    .addHelpText(
+      'after',
+      '\nReference: docs/dev-setups.md for the host.* axes, ' +
+        'docs/config-reference.md for the spechub/project.yaml keys.\n'
+    )
     .action((key: string, value: string) => {
       reportingUserErrors(() => {
-        const parsed = parseValue(key, value);
-        const config = setKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key, parsed);
-        writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
-        console.log(chalk.green(`Set ${key} = ${JSON.stringify(parsed)}`));
-
-        // The value is stored either way; the user just deserves to know when
-        // nothing will read it yet.
-        const dependency = inertDependency(config, key);
-        if (dependency) {
-          console.error(
-            chalk.yellow(
-              `Warning: ${key} has no effect unless ${dependency.key} is ${String(dependency.value)}`
-            )
-          );
-        }
+        if (isHostKey(key)) setHostKey(key, value);
+        else setProjectFileKey(key, value);
       });
     });
 
@@ -740,13 +1394,8 @@ export function register(program: Command): void {
     .argument('<key>', 'config key')
     .action((key: string) => {
       reportingUserErrors(() => {
-        const { config, removed } = unsetKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
-        if (!removed) {
-          console.log(chalk.dim(`${key} was not set`));
-          return;
-        }
-        writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
-        console.log(chalk.green(`Removed ${key}`));
+        if (isHostKey(key)) unsetHostKey(key);
+        else unsetProjectFileKey(key);
       });
     });
 }

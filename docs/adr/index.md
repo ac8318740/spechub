@@ -5,3 +5,5 @@
 - [0005](0005-two-orchestrators-per-host.md) – Two orchestrators coexist on one host, and a checkout's path names its owner
 - [0006](0006-document-opener-service.md) – A document opener service on the laptop, separate from the Playwriter bridge
 - [0007](0007-lead-check-reads-the-transcript.md) – A session's own transcript decides lead or child, not the environment
+- [0008](0008-cli-audits-skill-interviews.md) – The CLI audits, the skill interviews
+- [0009](0009-verify-the-write-not-the-writer.md) – The config writer verifies its result instead of predicting it

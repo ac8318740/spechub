@@ -81,8 +81,15 @@ The test-driven development (TDD) pipeline of section 4 runs to completion insid
 
 ```mermaid
 flowchart LR
-    W["test-writer<br/>(requirements only)"] --> E["task-executor<br/>(cannot edit tests)"]
-    E --> K["task-checker<br/>(PASS / FAIL)"]
+    subgraph P["Order set by workflow.tdd.strict"]
+        direction LR
+        W["test-writer<br/>(requirements only)"]
+        E["task-executor<br/>(cannot edit tests)"]
+        W -.->|"strict: tests first"| E
+        E -.->|"relaxed: code first"| W
+    end
+    P --> Fm["format<br/>(commands.format)"]
+    Fm --> K["task-checker<br/>(PASS / FAIL)"]
     K -->|FAIL| E
     K -->|PASS| V["frontend-verifier<br/>(real browser)"]
     V -->|FAIL| E
@@ -96,6 +103,12 @@ The separation is the mechanism, not a formality:
 - **frontend-verifier** drives a real browser over the Chrome DevTools Protocol (CDP), takes before and after screenshots, and reports on the evidence.
 
 A FAIL routes back to the executor with the reason. Phases 1 and 4 are conditional. You can skip test-writer for config or docs changes with no testable behaviour. The frontend-verifier runs only under three conditions: `spechub/project.yaml` configures a frontend, frontend files changed, and verification is on.
+
+`workflow.tdd.strict: false` reverses phase 1 and phase 2. The order becomes task-executor, then test-writer, then task-checker. It drops no phase, and all three agents run. Relaxed TDD means nobody writes the tests first, never that the work goes unverified.
+
+Relaxed weakens one wall, the one this section calls the important one. Under `false` the test-writer works beside an implementation it must not read, rather than one that does not exist yet. Its independence then rests on its instructions instead of on context isolation. That is the cost of relaxed TDD. The checker pays for it too. No run can show the new tests failing without the implementation, so it holds them to existing and passing instead.
+
+Immediately before phase 3 the pipeline runs `commands.format` over the files the work touched. Under relaxed that puts the format step after the test-writer, so the new tests get formatted too. A project whose `commands.format` is `null` gets no format step. A non-zero exit gets reported, and never counts as a failed implementation.
 
 ## 5. Commit and sync specs
 
@@ -111,7 +124,7 @@ A FAIL routes back to the executor with the reason. Phases 1 and 4 are condition
 
 Four cases stop sync: `workflow.spec_sync` set to `false`, no domain map, no file matching a domain, and a change that touches only docs and config.
 
-**Without `spechub/domain-map.yaml` this step does nothing, silently.** `/spechub:init` generates that file, and `/spechub:config check` reports it as missing on projects initialised before that existed.
+**Without `spechub/domain-map.yaml` this step does nothing, silently.** `/spechub:setup` generates that file, and `spechub config check` reports it as missing on projects set up before that existed.
 
 ## 6. Archive
 

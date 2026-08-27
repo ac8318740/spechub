@@ -182,7 +182,7 @@ if [ -n "$plugin_root" ]; then
 fi
 
 if [ ! -f spechub/project.yaml ]; then
-  echo 'spechub: no project config found. Run /spechub:init to set up.' >&2
+  echo 'spechub: no project config found. Run /spechub:setup to set up.' >&2
   exit 0
 fi
 

@@ -79,6 +79,24 @@ export class ConfigFileError extends Error {
 const TRUE_VALUES = ['true', 'yes', 'on'];
 const FALSE_VALUES = ['false', 'no', 'off'];
 
+/**
+ * Read `raw` as a boolean, case-insensitively, or throw naming every spelling
+ * that would have worked.
+ *
+ * Both schemas share this. A `host.*` axis and a `project.yaml` boolean are
+ * the same yes/no typed by hand, so `on` meaning true in one file and nothing
+ * in the other would be a distinction the user has no way to remember.
+ */
+export function parseBooleanWord(key: string, raw: string): boolean {
+  const normalized = raw.toLowerCase();
+  if (TRUE_VALUES.includes(normalized)) return true;
+  if (FALSE_VALUES.includes(normalized)) return false;
+  throw new ConfigValidationError(
+    `Invalid value "${raw}" for ${key}. Expected a boolean: ` +
+      `${TRUE_VALUES.join('/')} or ${FALSE_VALUES.join('/')}`
+  );
+}
+
 /** The axis `key` names, or undefined when it names no axis. */
 export function hostAxis(key: string): HostAxis | undefined {
   return HOST_AXES.find(axis => axis.key === key);
@@ -151,13 +169,7 @@ export function parseValue(key: string, raw: string): unknown {
     return raw;
   }
 
-  const normalized = raw.toLowerCase();
-  if (TRUE_VALUES.includes(normalized)) return true;
-  if (FALSE_VALUES.includes(normalized)) return false;
-  throw new ConfigValidationError(
-    `Invalid value "${raw}" for ${key}. Expected a boolean: ` +
-      `${TRUE_VALUES.join('/')} or ${FALSE_VALUES.join('/')}`
-  );
+  return parseBooleanWord(key, raw);
 }
 
 /**
