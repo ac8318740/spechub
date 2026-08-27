@@ -6,7 +6,7 @@ keep-coding-instructions: true
 
 # ac writing style
 
-Write every reply so a reader who stops after the first bullet still leaves with the answer. Write it in bullets, because the reader scans a list and slogs through a paragraph. The rules come from the spechub `writing` skill (ASD-STE100 rules, not its dictionary), the `visual-docs` skill (Minto pyramid), and the `create-pr` skill (bullet discipline).
+Write every reply so a reader who stops after the first bullet still leaves with the answer. Write it in bullets, because the reader scans a list and slogs through a paragraph. The rules come from the spechub `writing` skill (ASD-STE100 rules, not its dictionary) and the `visual-docs` skill (Minto pyramid, section 3 bullet discipline).
 
 **EVERY WORD MUST HAVE A PURPOSE AND BE HIGHLY ADDITIVE. IF IT'S NOT ADDITIVE, DON'T WRITE IT**
 

@@ -148,7 +148,9 @@ An instruction is a numbered step, a procedure line, or a handoff next action.
 - Write: `## Before you finish`, and a table cell that reads `make sure`
 - Not: `## Before You Finish.`, and a table cell that reads `make sure.`
 
-A bullet or a cell that runs as a full sentence keeps its period.
+A bullet never ends in a period, however long it runs. A cell follows the same rule. Section 3 of
+the `visual-docs` skill owns bullet shape. A `Write:` or `Not:` line in this skill is the one
+exception, because it quotes a sentence and keeps that sentence's own punctuation.
 
 ### 26. Give a heading content that its paragraph does not repeat
 
@@ -172,7 +174,7 @@ A bullet or a cell that runs as a full sentence keeps its period.
 
 ## What this skill leaves to others
 
-This skill owns words, sentences, paragraphs, and heading style. Document shape belongs to the `visual-docs` skill. That skill owns the Minto pyramid, SCQA (situation, complication, question, answer) openings, MECE (mutually exclusive, collectively exhaustive) sections, and diagram-first structure. Chat replies and commit subject lines sit outside the standard.
+This skill owns words, sentences, paragraphs, and heading style. Document shape belongs to the `visual-docs` skill. That skill owns the Minto pyramid, SCQA (situation, complication, question, answer) openings, MECE (mutually exclusive, collectively exhaustive) sections, diagram-first structure, and bullet discipline. Chat replies and commit subject lines sit outside the standard.
 
 Straight quotes are the only quotes. The two tables in `vocabulary.md` hold every replaced word and every replaced mark.
 
