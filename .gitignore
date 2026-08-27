@@ -1,0 +1,2 @@
+# The CLI test run writes a vitest cache here, and no package.json lives at the root.
+node_modules/
