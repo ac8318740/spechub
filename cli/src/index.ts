@@ -9,7 +9,6 @@ const program = new Command()
 
 // Commands are registered by their own modules
 const commands = await Promise.all([
-  import('./commands/init.js'),
   import('./commands/list.js'),
   import('./commands/show.js'),
   import('./commands/archive.js'),
