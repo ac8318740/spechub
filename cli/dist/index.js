@@ -3464,6 +3464,586 @@ var require_commander = __commonJS({
   }
 });
 
+// node_modules/chalk/source/vendor/ansi-styles/index.js
+function assembleStyles() {
+  const codes = /* @__PURE__ */ new Map();
+  for (const [groupName, group] of Object.entries(styles)) {
+    for (const [styleName, style] of Object.entries(group)) {
+      styles[styleName] = {
+        open: `\x1B[${style[0]}m`,
+        close: `\x1B[${style[1]}m`
+      };
+      group[styleName] = styles[styleName];
+      codes.set(style[0], style[1]);
+    }
+    Object.defineProperty(styles, groupName, {
+      value: group,
+      enumerable: false
+    });
+  }
+  Object.defineProperty(styles, "codes", {
+    value: codes,
+    enumerable: false
+  });
+  styles.color.close = "\x1B[39m";
+  styles.bgColor.close = "\x1B[49m";
+  styles.color.ansi = wrapAnsi16();
+  styles.color.ansi256 = wrapAnsi256();
+  styles.color.ansi16m = wrapAnsi16m();
+  styles.bgColor.ansi = wrapAnsi16(ANSI_BACKGROUND_OFFSET);
+  styles.bgColor.ansi256 = wrapAnsi256(ANSI_BACKGROUND_OFFSET);
+  styles.bgColor.ansi16m = wrapAnsi16m(ANSI_BACKGROUND_OFFSET);
+  Object.defineProperties(styles, {
+    rgbToAnsi256: {
+      value(red, green, blue) {
+        if (red === green && green === blue) {
+          if (red < 8) {
+            return 16;
+          }
+          if (red > 248) {
+            return 231;
+          }
+          return Math.round((red - 8) / 247 * 24) + 232;
+        }
+        return 16 + 36 * Math.round(red / 255 * 5) + 6 * Math.round(green / 255 * 5) + Math.round(blue / 255 * 5);
+      },
+      enumerable: false
+    },
+    hexToRgb: {
+      value(hex) {
+        const matches = /[a-f\d]{6}|[a-f\d]{3}/i.exec(hex.toString(16));
+        if (!matches) {
+          return [0, 0, 0];
+        }
+        let [colorString] = matches;
+        if (colorString.length === 3) {
+          colorString = [...colorString].map((character) => character + character).join("");
+        }
+        const integer = Number.parseInt(colorString, 16);
+        return [
+          /* eslint-disable no-bitwise */
+          integer >> 16 & 255,
+          integer >> 8 & 255,
+          integer & 255
+          /* eslint-enable no-bitwise */
+        ];
+      },
+      enumerable: false
+    },
+    hexToAnsi256: {
+      value: (hex) => styles.rgbToAnsi256(...styles.hexToRgb(hex)),
+      enumerable: false
+    },
+    ansi256ToAnsi: {
+      value(code) {
+        if (code < 8) {
+          return 30 + code;
+        }
+        if (code < 16) {
+          return 90 + (code - 8);
+        }
+        let red;
+        let green;
+        let blue;
+        if (code >= 232) {
+          red = ((code - 232) * 10 + 8) / 255;
+          green = red;
+          blue = red;
+        } else {
+          code -= 16;
+          const remainder = code % 36;
+          red = Math.floor(code / 36) / 5;
+          green = Math.floor(remainder / 6) / 5;
+          blue = remainder % 6 / 5;
+        }
+        const value = Math.max(red, green, blue) * 2;
+        if (value === 0) {
+          return 30;
+        }
+        let result = 30 + (Math.round(blue) << 2 | Math.round(green) << 1 | Math.round(red));
+        if (value === 2) {
+          result += 60;
+        }
+        return result;
+      },
+      enumerable: false
+    },
+    rgbToAnsi: {
+      value: (red, green, blue) => styles.ansi256ToAnsi(styles.rgbToAnsi256(red, green, blue)),
+      enumerable: false
+    },
+    hexToAnsi: {
+      value: (hex) => styles.ansi256ToAnsi(styles.hexToAnsi256(hex)),
+      enumerable: false
+    }
+  });
+  return styles;
+}
+var ANSI_BACKGROUND_OFFSET, wrapAnsi16, wrapAnsi256, wrapAnsi16m, styles, modifierNames, foregroundColorNames, backgroundColorNames, colorNames, ansiStyles, ansi_styles_default;
+var init_ansi_styles = __esm({
+  "node_modules/chalk/source/vendor/ansi-styles/index.js"() {
+    ANSI_BACKGROUND_OFFSET = 10;
+    wrapAnsi16 = (offset = 0) => (code) => `\x1B[${code + offset}m`;
+    wrapAnsi256 = (offset = 0) => (code) => `\x1B[${38 + offset};5;${code}m`;
+    wrapAnsi16m = (offset = 0) => (red, green, blue) => `\x1B[${38 + offset};2;${red};${green};${blue}m`;
+    styles = {
+      modifier: {
+        reset: [0, 0],
+        // 21 isn't widely supported and 22 does the same thing
+        bold: [1, 22],
+        dim: [2, 22],
+        italic: [3, 23],
+        underline: [4, 24],
+        overline: [53, 55],
+        inverse: [7, 27],
+        hidden: [8, 28],
+        strikethrough: [9, 29]
+      },
+      color: {
+        black: [30, 39],
+        red: [31, 39],
+        green: [32, 39],
+        yellow: [33, 39],
+        blue: [34, 39],
+        magenta: [35, 39],
+        cyan: [36, 39],
+        white: [37, 39],
+        // Bright color
+        blackBright: [90, 39],
+        gray: [90, 39],
+        // Alias of `blackBright`
+        grey: [90, 39],
+        // Alias of `blackBright`
+        redBright: [91, 39],
+        greenBright: [92, 39],
+        yellowBright: [93, 39],
+        blueBright: [94, 39],
+        magentaBright: [95, 39],
+        cyanBright: [96, 39],
+        whiteBright: [97, 39]
+      },
+      bgColor: {
+        bgBlack: [40, 49],
+        bgRed: [41, 49],
+        bgGreen: [42, 49],
+        bgYellow: [43, 49],
+        bgBlue: [44, 49],
+        bgMagenta: [45, 49],
+        bgCyan: [46, 49],
+        bgWhite: [47, 49],
+        // Bright color
+        bgBlackBright: [100, 49],
+        bgGray: [100, 49],
+        // Alias of `bgBlackBright`
+        bgGrey: [100, 49],
+        // Alias of `bgBlackBright`
+        bgRedBright: [101, 49],
+        bgGreenBright: [102, 49],
+        bgYellowBright: [103, 49],
+        bgBlueBright: [104, 49],
+        bgMagentaBright: [105, 49],
+        bgCyanBright: [106, 49],
+        bgWhiteBright: [107, 49]
+      }
+    };
+    modifierNames = Object.keys(styles.modifier);
+    foregroundColorNames = Object.keys(styles.color);
+    backgroundColorNames = Object.keys(styles.bgColor);
+    colorNames = [...foregroundColorNames, ...backgroundColorNames];
+    ansiStyles = assembleStyles();
+    ansi_styles_default = ansiStyles;
+  }
+});
+
+// node_modules/chalk/source/vendor/supports-color/index.js
+import process2 from "node:process";
+import os from "node:os";
+import tty from "node:tty";
+function hasFlag(flag, argv = globalThis.Deno ? globalThis.Deno.args : process2.argv) {
+  const prefix = flag.startsWith("-") ? "" : flag.length === 1 ? "-" : "--";
+  const position = argv.indexOf(prefix + flag);
+  const terminatorPosition = argv.indexOf("--");
+  return position !== -1 && (terminatorPosition === -1 || position < terminatorPosition);
+}
+function envForceColor() {
+  if ("FORCE_COLOR" in env) {
+    if (env.FORCE_COLOR === "true") {
+      return 1;
+    }
+    if (env.FORCE_COLOR === "false") {
+      return 0;
+    }
+    return env.FORCE_COLOR.length === 0 ? 1 : Math.min(Number.parseInt(env.FORCE_COLOR, 10), 3);
+  }
+}
+function translateLevel(level) {
+  if (level === 0) {
+    return false;
+  }
+  return {
+    level,
+    hasBasic: true,
+    has256: level >= 2,
+    has16m: level >= 3
+  };
+}
+function _supportsColor(haveStream, { streamIsTTY, sniffFlags = true } = {}) {
+  const noFlagForceColor = envForceColor();
+  if (noFlagForceColor !== void 0) {
+    flagForceColor = noFlagForceColor;
+  }
+  const forceColor = sniffFlags ? flagForceColor : noFlagForceColor;
+  if (forceColor === 0) {
+    return 0;
+  }
+  if (sniffFlags) {
+    if (hasFlag("color=16m") || hasFlag("color=full") || hasFlag("color=truecolor")) {
+      return 3;
+    }
+    if (hasFlag("color=256")) {
+      return 2;
+    }
+  }
+  if ("TF_BUILD" in env && "AGENT_NAME" in env) {
+    return 1;
+  }
+  if (haveStream && !streamIsTTY && forceColor === void 0) {
+    return 0;
+  }
+  const min = forceColor || 0;
+  if (env.TERM === "dumb") {
+    return min;
+  }
+  if (process2.platform === "win32") {
+    const osRelease = os.release().split(".");
+    if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
+      return Number(osRelease[2]) >= 14931 ? 3 : 2;
+    }
+    return 1;
+  }
+  if ("CI" in env) {
+    if (["GITHUB_ACTIONS", "GITEA_ACTIONS", "CIRCLECI"].some((key) => key in env)) {
+      return 3;
+    }
+    if (["TRAVIS", "APPVEYOR", "GITLAB_CI", "BUILDKITE", "DRONE"].some((sign) => sign in env) || env.CI_NAME === "codeship") {
+      return 1;
+    }
+    return min;
+  }
+  if ("TEAMCITY_VERSION" in env) {
+    return /^(9\.(0*[1-9]\d*)\.|\d{2,}\.)/.test(env.TEAMCITY_VERSION) ? 1 : 0;
+  }
+  if (env.COLORTERM === "truecolor") {
+    return 3;
+  }
+  if (env.TERM === "xterm-kitty") {
+    return 3;
+  }
+  if (env.TERM === "xterm-ghostty") {
+    return 3;
+  }
+  if (env.TERM === "wezterm") {
+    return 3;
+  }
+  if ("TERM_PROGRAM" in env) {
+    const version = Number.parseInt((env.TERM_PROGRAM_VERSION || "").split(".")[0], 10);
+    switch (env.TERM_PROGRAM) {
+      case "iTerm.app": {
+        return version >= 3 ? 3 : 2;
+      }
+      case "Apple_Terminal": {
+        return 2;
+      }
+    }
+  }
+  if (/-256(color)?$/i.test(env.TERM)) {
+    return 2;
+  }
+  if (/^screen|^xterm|^vt100|^vt220|^rxvt|color|ansi|cygwin|linux/i.test(env.TERM)) {
+    return 1;
+  }
+  if ("COLORTERM" in env) {
+    return 1;
+  }
+  return min;
+}
+function createSupportsColor(stream, options = {}) {
+  const level = _supportsColor(stream, {
+    streamIsTTY: stream && stream.isTTY,
+    ...options
+  });
+  return translateLevel(level);
+}
+var env, flagForceColor, supportsColor, supports_color_default;
+var init_supports_color = __esm({
+  "node_modules/chalk/source/vendor/supports-color/index.js"() {
+    ({ env } = process2);
+    if (hasFlag("no-color") || hasFlag("no-colors") || hasFlag("color=false") || hasFlag("color=never")) {
+      flagForceColor = 0;
+    } else if (hasFlag("color") || hasFlag("colors") || hasFlag("color=true") || hasFlag("color=always")) {
+      flagForceColor = 1;
+    }
+    supportsColor = {
+      stdout: createSupportsColor({ isTTY: tty.isatty(1) }),
+      stderr: createSupportsColor({ isTTY: tty.isatty(2) })
+    };
+    supports_color_default = supportsColor;
+  }
+});
+
+// node_modules/chalk/source/utilities.js
+function stringReplaceAll(string, substring, replacer) {
+  let index = string.indexOf(substring);
+  if (index === -1) {
+    return string;
+  }
+  const substringLength = substring.length;
+  let endIndex = 0;
+  let returnValue = "";
+  do {
+    returnValue += string.slice(endIndex, index) + substring + replacer;
+    endIndex = index + substringLength;
+    index = string.indexOf(substring, endIndex);
+  } while (index !== -1);
+  returnValue += string.slice(endIndex);
+  return returnValue;
+}
+function stringEncaseCRLFWithFirstIndex(string, prefix, postfix, index) {
+  let endIndex = 0;
+  let returnValue = "";
+  do {
+    const gotCR = string[index - 1] === "\r";
+    returnValue += string.slice(endIndex, gotCR ? index - 1 : index) + prefix + (gotCR ? "\r\n" : "\n") + postfix;
+    endIndex = index + 1;
+    index = string.indexOf("\n", endIndex);
+  } while (index !== -1);
+  returnValue += string.slice(endIndex);
+  return returnValue;
+}
+var init_utilities = __esm({
+  "node_modules/chalk/source/utilities.js"() {
+  }
+});
+
+// node_modules/chalk/source/index.js
+function createChalk(options) {
+  return chalkFactory(options);
+}
+var stdoutColor, stderrColor, GENERATOR, STYLER, IS_EMPTY, levelMapping, styles2, applyOptions, chalkFactory, getModelAnsi, usedModels, proto, createStyler, createBuilder, applyStyle, chalk, chalkStderr, source_default;
+var init_source = __esm({
+  "node_modules/chalk/source/index.js"() {
+    init_ansi_styles();
+    init_supports_color();
+    init_utilities();
+    ({ stdout: stdoutColor, stderr: stderrColor } = supports_color_default);
+    GENERATOR = Symbol("GENERATOR");
+    STYLER = Symbol("STYLER");
+    IS_EMPTY = Symbol("IS_EMPTY");
+    levelMapping = [
+      "ansi",
+      "ansi",
+      "ansi256",
+      "ansi16m"
+    ];
+    styles2 = /* @__PURE__ */ Object.create(null);
+    applyOptions = (object, options = {}) => {
+      if (options.level && !(Number.isInteger(options.level) && options.level >= 0 && options.level <= 3)) {
+        throw new Error("The `level` option should be an integer from 0 to 3");
+      }
+      const colorLevel = stdoutColor ? stdoutColor.level : 0;
+      object.level = options.level === void 0 ? colorLevel : options.level;
+    };
+    chalkFactory = (options) => {
+      const chalk2 = (...strings) => strings.join(" ");
+      applyOptions(chalk2, options);
+      Object.setPrototypeOf(chalk2, createChalk.prototype);
+      return chalk2;
+    };
+    Object.setPrototypeOf(createChalk.prototype, Function.prototype);
+    for (const [styleName, style] of Object.entries(ansi_styles_default)) {
+      styles2[styleName] = {
+        get() {
+          const builder = createBuilder(this, createStyler(style.open, style.close, this[STYLER]), this[IS_EMPTY]);
+          Object.defineProperty(this, styleName, { value: builder });
+          return builder;
+        }
+      };
+    }
+    styles2.visible = {
+      get() {
+        const builder = createBuilder(this, this[STYLER], true);
+        Object.defineProperty(this, "visible", { value: builder });
+        return builder;
+      }
+    };
+    getModelAnsi = (model, level, type, ...arguments_) => {
+      if (model === "rgb") {
+        if (level === "ansi16m") {
+          return ansi_styles_default[type].ansi16m(...arguments_);
+        }
+        if (level === "ansi256") {
+          return ansi_styles_default[type].ansi256(ansi_styles_default.rgbToAnsi256(...arguments_));
+        }
+        return ansi_styles_default[type].ansi(ansi_styles_default.rgbToAnsi(...arguments_));
+      }
+      if (model === "hex") {
+        return getModelAnsi("rgb", level, type, ...ansi_styles_default.hexToRgb(...arguments_));
+      }
+      return ansi_styles_default[type][model](...arguments_);
+    };
+    usedModels = ["rgb", "hex", "ansi256"];
+    for (const model of usedModels) {
+      styles2[model] = {
+        get() {
+          const { level } = this;
+          return function(...arguments_) {
+            const styler = createStyler(getModelAnsi(model, levelMapping[level], "color", ...arguments_), ansi_styles_default.color.close, this[STYLER]);
+            return createBuilder(this, styler, this[IS_EMPTY]);
+          };
+        }
+      };
+      const bgModel = "bg" + model[0].toUpperCase() + model.slice(1);
+      styles2[bgModel] = {
+        get() {
+          const { level } = this;
+          return function(...arguments_) {
+            const styler = createStyler(getModelAnsi(model, levelMapping[level], "bgColor", ...arguments_), ansi_styles_default.bgColor.close, this[STYLER]);
+            return createBuilder(this, styler, this[IS_EMPTY]);
+          };
+        }
+      };
+    }
+    proto = Object.defineProperties(() => {
+    }, {
+      ...styles2,
+      level: {
+        enumerable: true,
+        get() {
+          return this[GENERATOR].level;
+        },
+        set(level) {
+          this[GENERATOR].level = level;
+        }
+      }
+    });
+    createStyler = (open, close, parent) => {
+      let openAll;
+      let closeAll;
+      if (parent === void 0) {
+        openAll = open;
+        closeAll = close;
+      } else {
+        openAll = parent.openAll + open;
+        closeAll = close + parent.closeAll;
+      }
+      return {
+        open,
+        close,
+        openAll,
+        closeAll,
+        parent
+      };
+    };
+    createBuilder = (self, _styler, _isEmpty) => {
+      const builder = (...arguments_) => applyStyle(builder, arguments_.length === 1 ? "" + arguments_[0] : arguments_.join(" "));
+      Object.setPrototypeOf(builder, proto);
+      builder[GENERATOR] = self;
+      builder[STYLER] = _styler;
+      builder[IS_EMPTY] = _isEmpty;
+      return builder;
+    };
+    applyStyle = (self, string) => {
+      if (self.level <= 0 || !string) {
+        return self[IS_EMPTY] ? "" : string;
+      }
+      let styler = self[STYLER];
+      if (styler === void 0) {
+        return string;
+      }
+      const { openAll, closeAll } = styler;
+      if (string.includes("\x1B")) {
+        while (styler !== void 0) {
+          string = stringReplaceAll(string, styler.close, styler.open);
+          styler = styler.parent;
+        }
+      }
+      const lfIndex = string.indexOf("\n");
+      if (lfIndex !== -1) {
+        string = stringEncaseCRLFWithFirstIndex(string, closeAll, openAll, lfIndex);
+      }
+      return openAll + string + closeAll;
+    };
+    Object.defineProperties(createChalk.prototype, styles2);
+    chalk = createChalk();
+    chalkStderr = createChalk({ level: stderrColor ? stderrColor.level : 0 });
+    source_default = chalk;
+  }
+});
+
+// src/lib/constants.ts
+import { join as join2 } from "node:path";
+import { homedir } from "node:os";
+var SPECHUB_DIR, CHANGES_DIR, MAPS_DIR, SPECS_DIR, ARCHIVE_DIR, PROJECT_FILE, DOMAIN_MAP_FILE, PROFILES_DIR, AGENT_BROWSER_JSON_FILE, VERIFICATION_KNOWLEDGE_FILE, AGENT_BROWSER_BIN, CLAUDE_DIR, CLAUDE_SETTINGS_FILE, CLAUDE_LOCAL_SETTINGS_FILE, SPECHUB_OUTPUT_STYLE, VOCABULARY_PATH, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE, GLOBAL_DATA_DIR;
+var init_constants = __esm({
+  "src/lib/constants.ts"() {
+    "use strict";
+    SPECHUB_DIR = "spechub";
+    CHANGES_DIR = "changes";
+    MAPS_DIR = "maps";
+    SPECS_DIR = "specs";
+    ARCHIVE_DIR = "archive";
+    PROJECT_FILE = "project.yaml";
+    DOMAIN_MAP_FILE = "domain-map.yaml";
+    PROFILES_DIR = "profiles";
+    AGENT_BROWSER_JSON_FILE = "agent-browser.json";
+    VERIFICATION_KNOWLEDGE_FILE = "VERIFICATION-KNOWLEDGE.md";
+    AGENT_BROWSER_BIN = "agent-browser";
+    CLAUDE_DIR = ".claude";
+    CLAUDE_SETTINGS_FILE = "settings.json";
+    CLAUDE_LOCAL_SETTINGS_FILE = "settings.local.json";
+    SPECHUB_OUTPUT_STYLE = "spechub:ac-writing-style";
+    VOCABULARY_PATH = join2("skills", "writing", "vocabulary.md");
+    GLOBAL_CONFIG_DIR = join2(
+      process.env.XDG_CONFIG_HOME ?? join2(homedir(), ".config"),
+      "spechub"
+    );
+    GLOBAL_CONFIG_FILE = join2(GLOBAL_CONFIG_DIR, "config.json");
+    GLOBAL_DATA_DIR = join2(
+      process.env.XDG_DATA_HOME ?? join2(homedir(), ".local", "share"),
+      "spechub"
+    );
+  }
+});
+
+// src/lib/project.ts
+import { existsSync } from "node:fs";
+import { dirname as dirname2, join as join3, resolve } from "node:path";
+function findUp(startDir, marker) {
+  let dir = resolve(startDir);
+  while (true) {
+    if (existsSync(join3(dir, marker))) return dir;
+    const parent = dirname2(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+function findProjectRoot(from = process.cwd()) {
+  return findUp(from, SPECHUB_DIR);
+}
+function findPluginRoot(startDir = import.meta.dirname) {
+  const fromEnv = process.env.CLAUDE_PLUGIN_ROOT;
+  if (fromEnv && existsSync(join3(fromEnv, PLUGIN_MARKER))) return resolve(fromEnv);
+  return findUp(startDir, PLUGIN_MARKER);
+}
+var PLUGIN_MARKER;
+var init_project = __esm({
+  "src/lib/project.ts"() {
+    "use strict";
+    init_constants();
+    PLUGIN_MARKER = join3(".claude-plugin", "plugin.json");
+  }
+});
+
 // node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS({
   "node_modules/yaml/dist/nodes/identity.js"(exports) {
@@ -3477,10 +4057,10 @@ var require_identity = __commonJS({
     var NODE_TYPE = Symbol.for("yaml.node.type");
     var isAlias = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === ALIAS;
     var isDocument = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === DOC;
-    var isMap = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === MAP;
+    var isMap2 = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === MAP;
     var isPair = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === PAIR;
-    var isScalar = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SCALAR;
-    var isSeq = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SEQ;
+    var isScalar2 = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SCALAR;
+    var isSeq2 = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SEQ;
     function isCollection(node) {
       if (node && typeof node === "object")
         switch (node[NODE_TYPE]) {
@@ -3501,7 +4081,7 @@ var require_identity = __commonJS({
         }
       return false;
     }
-    var hasAnchor = (node) => (isScalar(node) || isCollection(node)) && !!node.anchor;
+    var hasAnchor = (node) => (isScalar2(node) || isCollection(node)) && !!node.anchor;
     exports.ALIAS = ALIAS;
     exports.DOC = DOC;
     exports.MAP = MAP;
@@ -3513,11 +4093,11 @@ var require_identity = __commonJS({
     exports.isAlias = isAlias;
     exports.isCollection = isCollection;
     exports.isDocument = isDocument;
-    exports.isMap = isMap;
+    exports.isMap = isMap2;
     exports.isNode = isNode;
     exports.isPair = isPair;
-    exports.isScalar = isScalar;
-    exports.isSeq = isSeq;
+    exports.isScalar = isScalar2;
+    exports.isSeq = isSeq2;
   }
 });
 
@@ -4562,8 +5142,8 @@ var require_stringifyString = __commonJS({
     "use strict";
     var Scalar = require_Scalar();
     var foldFlowLines = require_foldFlowLines();
-    var getFoldOptions = (ctx, isBlock) => ({
-      indentAtStart: isBlock ? ctx.indent.length : ctx.indentAtStart,
+    var getFoldOptions = (ctx, isBlock2) => ({
+      indentAtStart: isBlock2 ? ctx.indent.length : ctx.indentAtStart,
       lineWidth: ctx.options.lineWidth,
       minContentWidth: ctx.options.minContentWidth
     });
@@ -5452,7 +6032,7 @@ var require_YAMLMap = __commonJS({
       }
       return void 0;
     }
-    var YAMLMap = class extends Collection.Collection {
+    var YAMLMap2 = class extends Collection.Collection {
       static get tagName() {
         return "tag:yaml.org,2002:map";
       }
@@ -5569,7 +6149,7 @@ var require_YAMLMap = __commonJS({
         });
       }
     };
-    exports.YAMLMap = YAMLMap;
+    exports.YAMLMap = YAMLMap2;
     exports.findPair = findPair;
   }
 });
@@ -5579,18 +6159,18 @@ var require_map = __commonJS({
   "node_modules/yaml/dist/schema/common/map.js"(exports) {
     "use strict";
     var identity = require_identity();
-    var YAMLMap = require_YAMLMap();
+    var YAMLMap2 = require_YAMLMap();
     var map = {
       collection: "map",
       default: true,
-      nodeClass: YAMLMap.YAMLMap,
+      nodeClass: YAMLMap2.YAMLMap,
       tag: "tag:yaml.org,2002:map",
       resolve(map2, onError) {
         if (!identity.isMap(map2))
           onError("Expected a mapping for this tag");
         return map2;
       },
-      createNode: (schema, obj, ctx) => YAMLMap.YAMLMap.from(schema, obj, ctx)
+      createNode: (schema, obj, ctx) => YAMLMap2.YAMLMap.from(schema, obj, ctx)
     };
     exports.map = map;
   }
@@ -6158,17 +6738,17 @@ var require_omap = __commonJS({
     "use strict";
     var identity = require_identity();
     var toJS = require_toJS();
-    var YAMLMap = require_YAMLMap();
+    var YAMLMap2 = require_YAMLMap();
     var YAMLSeq = require_YAMLSeq();
     var pairs = require_pairs();
     var YAMLOMap = class _YAMLOMap extends YAMLSeq.YAMLSeq {
       constructor() {
         super();
-        this.add = YAMLMap.YAMLMap.prototype.add.bind(this);
-        this.delete = YAMLMap.YAMLMap.prototype.delete.bind(this);
-        this.get = YAMLMap.YAMLMap.prototype.get.bind(this);
-        this.has = YAMLMap.YAMLMap.prototype.has.bind(this);
-        this.set = YAMLMap.YAMLMap.prototype.set.bind(this);
+        this.add = YAMLMap2.YAMLMap.prototype.add.bind(this);
+        this.delete = YAMLMap2.YAMLMap.prototype.delete.bind(this);
+        this.get = YAMLMap2.YAMLMap.prototype.get.bind(this);
+        this.has = YAMLMap2.YAMLMap.prototype.has.bind(this);
+        this.set = YAMLMap2.YAMLMap.prototype.set.bind(this);
         this.tag = _YAMLOMap.tag;
       }
       /**
@@ -6396,8 +6976,8 @@ var require_set = __commonJS({
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
-    var YAMLMap = require_YAMLMap();
-    var YAMLSet = class _YAMLSet extends YAMLMap.YAMLMap {
+    var YAMLMap2 = require_YAMLMap();
+    var YAMLSet = class _YAMLSet extends YAMLMap2.YAMLMap {
       constructor(schema) {
         super(schema);
         this.tag = _YAMLSet.tag;
@@ -6410,7 +6990,7 @@ var require_set = __commonJS({
           pair = new Pair.Pair(key.key, null);
         else
           pair = new Pair.Pair(key, null);
-        const prev = YAMLMap.findPair(this.items, pair.key);
+        const prev = YAMLMap2.findPair(this.items, pair.key);
         if (!prev)
           this.items.push(pair);
       }
@@ -6419,13 +6999,13 @@ var require_set = __commonJS({
        * Otherwise, returns the value of that Pair's key.
        */
       get(key, keepPair) {
-        const pair = YAMLMap.findPair(this.items, key);
+        const pair = YAMLMap2.findPair(this.items, key);
         return !keepPair && identity.isPair(pair) ? identity.isScalar(pair.key) ? pair.key.value : pair.key : pair;
       }
       set(key, value) {
         if (typeof value !== "boolean")
           throw new Error(`Expected boolean value for set(key, value) in a YAML set, not ${typeof value}`);
-        const prev = YAMLMap.findPair(this.items, key);
+        const prev = YAMLMap2.findPair(this.items, key);
         if (prev && !value) {
           this.items.splice(this.items.indexOf(prev), 1);
         } else if (!prev && value) {
@@ -7406,14 +7986,14 @@ var require_resolve_block_map = __commonJS({
   "node_modules/yaml/dist/compose/resolve-block-map.js"(exports) {
     "use strict";
     var Pair = require_Pair();
-    var YAMLMap = require_YAMLMap();
+    var YAMLMap2 = require_YAMLMap();
     var resolveProps = require_resolve_props();
     var utilContainsNewline = require_util_contains_newline();
     var utilFlowIndentCheck = require_util_flow_indent_check();
     var utilMapIncludes = require_util_map_includes();
     var startColMsg = "All mapping items must start at the same column";
     function resolveBlockMap({ composeNode, composeEmptyNode }, ctx, bm, onError, tag) {
-      const NodeClass = tag?.nodeClass ?? YAMLMap.YAMLMap;
+      const NodeClass = tag?.nodeClass ?? YAMLMap2.YAMLMap;
       const map = new NodeClass(ctx.schema);
       if (ctx.atRoot)
         ctx.atRoot = false;
@@ -7609,18 +8189,18 @@ var require_resolve_flow_collection = __commonJS({
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
-    var YAMLMap = require_YAMLMap();
+    var YAMLMap2 = require_YAMLMap();
     var YAMLSeq = require_YAMLSeq();
     var resolveEnd = require_resolve_end();
     var resolveProps = require_resolve_props();
     var utilContainsNewline = require_util_contains_newline();
     var utilMapIncludes = require_util_map_includes();
     var blockMsg = "Block collections are not allowed within flow collections";
-    var isBlock = (token) => token && (token.type === "block-map" || token.type === "block-seq");
+    var isBlock2 = (token) => token && (token.type === "block-map" || token.type === "block-seq");
     function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onError, tag) {
-      const isMap = fc.start.source === "{";
-      const fcName = isMap ? "flow map" : "flow sequence";
-      const NodeClass = tag?.nodeClass ?? (isMap ? YAMLMap.YAMLMap : YAMLSeq.YAMLSeq);
+      const isMap2 = fc.start.source === "{";
+      const fcName = isMap2 ? "flow map" : "flow sequence";
+      const NodeClass = tag?.nodeClass ?? (isMap2 ? YAMLMap2.YAMLMap : YAMLSeq.YAMLSeq);
       const coll = new NodeClass(ctx.schema);
       coll.flow = true;
       const atRoot = ctx.atRoot;
@@ -7656,7 +8236,7 @@ var require_resolve_flow_collection = __commonJS({
             offset = props.end;
             continue;
           }
-          if (!isMap && ctx.options.strict && utilContainsNewline.containsNewline(key))
+          if (!isMap2 && ctx.options.strict && utilContainsNewline.containsNewline(key))
             onError(
               key,
               // checked by containsNewline()
@@ -7696,17 +8276,17 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep && !props.found) {
+        if (!isMap2 && !sep && !props.found) {
           const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
-          if (isBlock(value))
+          if (isBlock2(value))
             onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
         } else {
           ctx.atKey = true;
           const keyStart = props.end;
           const keyNode = key ? composeNode(ctx, key, props, onError) : composeEmptyNode(ctx, keyStart, start, null, props, onError);
-          if (isBlock(key))
+          if (isBlock2(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
           const valueProps = resolveProps.resolveProps(sep ?? [], {
@@ -7719,7 +8299,7 @@ var require_resolve_flow_collection = __commonJS({
             startOnNewline: false
           });
           if (valueProps.found) {
-            if (!isMap && !props.found && ctx.options.strict) {
+            if (!isMap2 && !props.found && ctx.options.strict) {
               if (sep)
                 for (const st of sep) {
                   if (st === valueProps.found)
@@ -7740,7 +8320,7 @@ var require_resolve_flow_collection = __commonJS({
           }
           const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep, null, valueProps, onError) : null;
           if (valueNode) {
-            if (isBlock(value))
+            if (isBlock2(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
           } else if (valueProps.comment) {
             if (keyNode.comment)
@@ -7751,13 +8331,13 @@ var require_resolve_flow_collection = __commonJS({
           const pair = new Pair.Pair(keyNode, valueNode);
           if (ctx.options.keepSourceTokens)
             pair.srcToken = collItem;
-          if (isMap) {
+          if (isMap2) {
             const map = coll;
             if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
               onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
             map.items.push(pair);
           } else {
-            const map = new YAMLMap.YAMLMap(ctx.schema);
+            const map = new YAMLMap2.YAMLMap(ctx.schema);
             map.flow = true;
             map.items.push(pair);
             const endRange = (valueNode ?? keyNode).range;
@@ -7767,7 +8347,7 @@ var require_resolve_flow_collection = __commonJS({
           offset = valueNode ? valueNode.range[2] : valueProps.end;
         }
       }
-      const expectedEnd = isMap ? "}" : "]";
+      const expectedEnd = isMap2 ? "}" : "]";
       const [ce, ...ee] = fc.end;
       let cePos = offset;
       if (ce?.source === expectedEnd)
@@ -7803,7 +8383,7 @@ var require_compose_collection = __commonJS({
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
-    var YAMLMap = require_YAMLMap();
+    var YAMLMap2 = require_YAMLMap();
     var YAMLSeq = require_YAMLSeq();
     var resolveBlockMap = require_resolve_block_map();
     var resolveBlockSeq = require_resolve_block_seq();
@@ -7831,7 +8411,7 @@ var require_compose_collection = __commonJS({
         }
       }
       const expType = token.type === "block-map" ? "map" : token.type === "block-seq" ? "seq" : token.start.source === "{" ? "map" : "seq";
-      if (!tagToken || !tagName || tagName === "!" || tagName === YAMLMap.YAMLMap.tagName && expType === "map" || tagName === YAMLSeq.YAMLSeq.tagName && expType === "seq") {
+      if (!tagToken || !tagName || tagName === "!" || tagName === YAMLMap2.YAMLMap.tagName && expType === "map" || tagName === YAMLSeq.YAMLSeq.tagName && expType === "seq") {
         return resolveCollection(CN, ctx, token, onError, tagName);
       }
       let tag = ctx.schema.tags.find((t) => t.tag === tagName && t.collection === expType);
@@ -9050,7 +9630,7 @@ var require_cst = __commonJS({
     var FLOW_END = "";
     var SCALAR = "";
     var isCollection = (token) => !!token && "items" in token;
-    var isScalar = (token) => !!token && (token.type === "scalar" || token.type === "single-quoted-scalar" || token.type === "double-quoted-scalar" || token.type === "block-scalar");
+    var isScalar2 = (token) => !!token && (token.type === "scalar" || token.type === "single-quoted-scalar" || token.type === "double-quoted-scalar" || token.type === "block-scalar");
     function prettyToken(token) {
       switch (token) {
         case BOM:
@@ -9134,7 +9714,7 @@ var require_cst = __commonJS({
     exports.FLOW_END = FLOW_END;
     exports.SCALAR = SCALAR;
     exports.isCollection = isCollection;
-    exports.isScalar = isScalar;
+    exports.isScalar = isScalar2;
     exports.prettyToken = prettyToken;
     exports.tokenType = tokenType;
   }
@@ -10647,7 +11227,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument(source, options = {}) {
+    function parseDocument2(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -10673,7 +11253,7 @@ var require_public_api = __commonJS({
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument(src, options);
+      const doc = parseDocument2(src, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
@@ -10709,7 +11289,7 @@ var require_public_api = __commonJS({
     }
     exports.parse = parse2;
     exports.parseAllDocuments = parseAllDocuments;
-    exports.parseDocument = parseDocument;
+    exports.parseDocument = parseDocument2;
     exports.stringify = stringify;
   }
 });
@@ -10726,7 +11306,7 @@ var require_dist = __commonJS({
     var identity = require_identity();
     var Pair = require_Pair();
     var Scalar = require_Scalar();
-    var YAMLMap = require_YAMLMap();
+    var YAMLMap2 = require_YAMLMap();
     var YAMLSeq = require_YAMLSeq();
     var cst = require_cst();
     var lexer = require_lexer();
@@ -10751,7 +11331,7 @@ var require_dist = __commonJS({
     exports.isSeq = identity.isSeq;
     exports.Pair = Pair.Pair;
     exports.Scalar = Scalar.Scalar;
-    exports.YAMLMap = YAMLMap.YAMLMap;
+    exports.YAMLMap = YAMLMap2.YAMLMap;
     exports.YAMLSeq = YAMLSeq.YAMLSeq;
     exports.CST = cst;
     exports.Lexer = lexer.Lexer;
@@ -10766,580 +11346,37 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/chalk/source/vendor/ansi-styles/index.js
-function assembleStyles() {
-  const codes = /* @__PURE__ */ new Map();
-  for (const [groupName, group] of Object.entries(styles)) {
-    for (const [styleName, style] of Object.entries(group)) {
-      styles[styleName] = {
-        open: `\x1B[${style[0]}m`,
-        close: `\x1B[${style[1]}m`
-      };
-      group[styleName] = styles[styleName];
-      codes.set(style[0], style[1]);
-    }
-    Object.defineProperty(styles, groupName, {
-      value: group,
-      enumerable: false
-    });
-  }
-  Object.defineProperty(styles, "codes", {
-    value: codes,
-    enumerable: false
-  });
-  styles.color.close = "\x1B[39m";
-  styles.bgColor.close = "\x1B[49m";
-  styles.color.ansi = wrapAnsi16();
-  styles.color.ansi256 = wrapAnsi256();
-  styles.color.ansi16m = wrapAnsi16m();
-  styles.bgColor.ansi = wrapAnsi16(ANSI_BACKGROUND_OFFSET);
-  styles.bgColor.ansi256 = wrapAnsi256(ANSI_BACKGROUND_OFFSET);
-  styles.bgColor.ansi16m = wrapAnsi16m(ANSI_BACKGROUND_OFFSET);
-  Object.defineProperties(styles, {
-    rgbToAnsi256: {
-      value(red, green, blue) {
-        if (red === green && green === blue) {
-          if (red < 8) {
-            return 16;
-          }
-          if (red > 248) {
-            return 231;
-          }
-          return Math.round((red - 8) / 247 * 24) + 232;
-        }
-        return 16 + 36 * Math.round(red / 255 * 5) + 6 * Math.round(green / 255 * 5) + Math.round(blue / 255 * 5);
-      },
-      enumerable: false
-    },
-    hexToRgb: {
-      value(hex) {
-        const matches = /[a-f\d]{6}|[a-f\d]{3}/i.exec(hex.toString(16));
-        if (!matches) {
-          return [0, 0, 0];
-        }
-        let [colorString] = matches;
-        if (colorString.length === 3) {
-          colorString = [...colorString].map((character) => character + character).join("");
-        }
-        const integer = Number.parseInt(colorString, 16);
-        return [
-          /* eslint-disable no-bitwise */
-          integer >> 16 & 255,
-          integer >> 8 & 255,
-          integer & 255
-          /* eslint-enable no-bitwise */
-        ];
-      },
-      enumerable: false
-    },
-    hexToAnsi256: {
-      value: (hex) => styles.rgbToAnsi256(...styles.hexToRgb(hex)),
-      enumerable: false
-    },
-    ansi256ToAnsi: {
-      value(code) {
-        if (code < 8) {
-          return 30 + code;
-        }
-        if (code < 16) {
-          return 90 + (code - 8);
-        }
-        let red;
-        let green;
-        let blue;
-        if (code >= 232) {
-          red = ((code - 232) * 10 + 8) / 255;
-          green = red;
-          blue = red;
-        } else {
-          code -= 16;
-          const remainder = code % 36;
-          red = Math.floor(code / 36) / 5;
-          green = Math.floor(remainder / 6) / 5;
-          blue = remainder % 6 / 5;
-        }
-        const value = Math.max(red, green, blue) * 2;
-        if (value === 0) {
-          return 30;
-        }
-        let result = 30 + (Math.round(blue) << 2 | Math.round(green) << 1 | Math.round(red));
-        if (value === 2) {
-          result += 60;
-        }
-        return result;
-      },
-      enumerable: false
-    },
-    rgbToAnsi: {
-      value: (red, green, blue) => styles.ansi256ToAnsi(styles.rgbToAnsi256(red, green, blue)),
-      enumerable: false
-    },
-    hexToAnsi: {
-      value: (hex) => styles.ansi256ToAnsi(styles.hexToAnsi256(hex)),
-      enumerable: false
-    }
-  });
-  return styles;
-}
-var ANSI_BACKGROUND_OFFSET, wrapAnsi16, wrapAnsi256, wrapAnsi16m, styles, modifierNames, foregroundColorNames, backgroundColorNames, colorNames, ansiStyles, ansi_styles_default;
-var init_ansi_styles = __esm({
-  "node_modules/chalk/source/vendor/ansi-styles/index.js"() {
-    ANSI_BACKGROUND_OFFSET = 10;
-    wrapAnsi16 = (offset = 0) => (code) => `\x1B[${code + offset}m`;
-    wrapAnsi256 = (offset = 0) => (code) => `\x1B[${38 + offset};5;${code}m`;
-    wrapAnsi16m = (offset = 0) => (red, green, blue) => `\x1B[${38 + offset};2;${red};${green};${blue}m`;
-    styles = {
-      modifier: {
-        reset: [0, 0],
-        // 21 isn't widely supported and 22 does the same thing
-        bold: [1, 22],
-        dim: [2, 22],
-        italic: [3, 23],
-        underline: [4, 24],
-        overline: [53, 55],
-        inverse: [7, 27],
-        hidden: [8, 28],
-        strikethrough: [9, 29]
-      },
-      color: {
-        black: [30, 39],
-        red: [31, 39],
-        green: [32, 39],
-        yellow: [33, 39],
-        blue: [34, 39],
-        magenta: [35, 39],
-        cyan: [36, 39],
-        white: [37, 39],
-        // Bright color
-        blackBright: [90, 39],
-        gray: [90, 39],
-        // Alias of `blackBright`
-        grey: [90, 39],
-        // Alias of `blackBright`
-        redBright: [91, 39],
-        greenBright: [92, 39],
-        yellowBright: [93, 39],
-        blueBright: [94, 39],
-        magentaBright: [95, 39],
-        cyanBright: [96, 39],
-        whiteBright: [97, 39]
-      },
-      bgColor: {
-        bgBlack: [40, 49],
-        bgRed: [41, 49],
-        bgGreen: [42, 49],
-        bgYellow: [43, 49],
-        bgBlue: [44, 49],
-        bgMagenta: [45, 49],
-        bgCyan: [46, 49],
-        bgWhite: [47, 49],
-        // Bright color
-        bgBlackBright: [100, 49],
-        bgGray: [100, 49],
-        // Alias of `bgBlackBright`
-        bgGrey: [100, 49],
-        // Alias of `bgBlackBright`
-        bgRedBright: [101, 49],
-        bgGreenBright: [102, 49],
-        bgYellowBright: [103, 49],
-        bgBlueBright: [104, 49],
-        bgMagentaBright: [105, 49],
-        bgCyanBright: [106, 49],
-        bgWhiteBright: [107, 49]
-      }
-    };
-    modifierNames = Object.keys(styles.modifier);
-    foregroundColorNames = Object.keys(styles.color);
-    backgroundColorNames = Object.keys(styles.bgColor);
-    colorNames = [...foregroundColorNames, ...backgroundColorNames];
-    ansiStyles = assembleStyles();
-    ansi_styles_default = ansiStyles;
-  }
-});
-
-// node_modules/chalk/source/vendor/supports-color/index.js
-import process2 from "node:process";
-import os from "node:os";
-import tty from "node:tty";
-function hasFlag(flag, argv = globalThis.Deno ? globalThis.Deno.args : process2.argv) {
-  const prefix = flag.startsWith("-") ? "" : flag.length === 1 ? "-" : "--";
-  const position = argv.indexOf(prefix + flag);
-  const terminatorPosition = argv.indexOf("--");
-  return position !== -1 && (terminatorPosition === -1 || position < terminatorPosition);
-}
-function envForceColor() {
-  if ("FORCE_COLOR" in env) {
-    if (env.FORCE_COLOR === "true") {
-      return 1;
-    }
-    if (env.FORCE_COLOR === "false") {
-      return 0;
-    }
-    return env.FORCE_COLOR.length === 0 ? 1 : Math.min(Number.parseInt(env.FORCE_COLOR, 10), 3);
-  }
-}
-function translateLevel(level) {
-  if (level === 0) {
-    return false;
-  }
-  return {
-    level,
-    hasBasic: true,
-    has256: level >= 2,
-    has16m: level >= 3
-  };
-}
-function _supportsColor(haveStream, { streamIsTTY, sniffFlags = true } = {}) {
-  const noFlagForceColor = envForceColor();
-  if (noFlagForceColor !== void 0) {
-    flagForceColor = noFlagForceColor;
-  }
-  const forceColor = sniffFlags ? flagForceColor : noFlagForceColor;
-  if (forceColor === 0) {
-    return 0;
-  }
-  if (sniffFlags) {
-    if (hasFlag("color=16m") || hasFlag("color=full") || hasFlag("color=truecolor")) {
-      return 3;
-    }
-    if (hasFlag("color=256")) {
-      return 2;
-    }
-  }
-  if ("TF_BUILD" in env && "AGENT_NAME" in env) {
-    return 1;
-  }
-  if (haveStream && !streamIsTTY && forceColor === void 0) {
-    return 0;
-  }
-  const min = forceColor || 0;
-  if (env.TERM === "dumb") {
-    return min;
-  }
-  if (process2.platform === "win32") {
-    const osRelease = os.release().split(".");
-    if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
-      return Number(osRelease[2]) >= 14931 ? 3 : 2;
-    }
-    return 1;
-  }
-  if ("CI" in env) {
-    if (["GITHUB_ACTIONS", "GITEA_ACTIONS", "CIRCLECI"].some((key) => key in env)) {
-      return 3;
-    }
-    if (["TRAVIS", "APPVEYOR", "GITLAB_CI", "BUILDKITE", "DRONE"].some((sign) => sign in env) || env.CI_NAME === "codeship") {
-      return 1;
-    }
-    return min;
-  }
-  if ("TEAMCITY_VERSION" in env) {
-    return /^(9\.(0*[1-9]\d*)\.|\d{2,}\.)/.test(env.TEAMCITY_VERSION) ? 1 : 0;
-  }
-  if (env.COLORTERM === "truecolor") {
-    return 3;
-  }
-  if (env.TERM === "xterm-kitty") {
-    return 3;
-  }
-  if (env.TERM === "xterm-ghostty") {
-    return 3;
-  }
-  if (env.TERM === "wezterm") {
-    return 3;
-  }
-  if ("TERM_PROGRAM" in env) {
-    const version = Number.parseInt((env.TERM_PROGRAM_VERSION || "").split(".")[0], 10);
-    switch (env.TERM_PROGRAM) {
-      case "iTerm.app": {
-        return version >= 3 ? 3 : 2;
-      }
-      case "Apple_Terminal": {
-        return 2;
-      }
-    }
-  }
-  if (/-256(color)?$/i.test(env.TERM)) {
-    return 2;
-  }
-  if (/^screen|^xterm|^vt100|^vt220|^rxvt|color|ansi|cygwin|linux/i.test(env.TERM)) {
-    return 1;
-  }
-  if ("COLORTERM" in env) {
-    return 1;
-  }
-  return min;
-}
-function createSupportsColor(stream, options = {}) {
-  const level = _supportsColor(stream, {
-    streamIsTTY: stream && stream.isTTY,
-    ...options
-  });
-  return translateLevel(level);
-}
-var env, flagForceColor, supportsColor, supports_color_default;
-var init_supports_color = __esm({
-  "node_modules/chalk/source/vendor/supports-color/index.js"() {
-    ({ env } = process2);
-    if (hasFlag("no-color") || hasFlag("no-colors") || hasFlag("color=false") || hasFlag("color=never")) {
-      flagForceColor = 0;
-    } else if (hasFlag("color") || hasFlag("colors") || hasFlag("color=true") || hasFlag("color=always")) {
-      flagForceColor = 1;
-    }
-    supportsColor = {
-      stdout: createSupportsColor({ isTTY: tty.isatty(1) }),
-      stderr: createSupportsColor({ isTTY: tty.isatty(2) })
-    };
-    supports_color_default = supportsColor;
-  }
-});
-
-// node_modules/chalk/source/utilities.js
-function stringReplaceAll(string, substring, replacer) {
-  let index = string.indexOf(substring);
-  if (index === -1) {
-    return string;
-  }
-  const substringLength = substring.length;
-  let endIndex = 0;
-  let returnValue = "";
-  do {
-    returnValue += string.slice(endIndex, index) + substring + replacer;
-    endIndex = index + substringLength;
-    index = string.indexOf(substring, endIndex);
-  } while (index !== -1);
-  returnValue += string.slice(endIndex);
-  return returnValue;
-}
-function stringEncaseCRLFWithFirstIndex(string, prefix, postfix, index) {
-  let endIndex = 0;
-  let returnValue = "";
-  do {
-    const gotCR = string[index - 1] === "\r";
-    returnValue += string.slice(endIndex, gotCR ? index - 1 : index) + prefix + (gotCR ? "\r\n" : "\n") + postfix;
-    endIndex = index + 1;
-    index = string.indexOf("\n", endIndex);
-  } while (index !== -1);
-  returnValue += string.slice(endIndex);
-  return returnValue;
-}
-var init_utilities = __esm({
-  "node_modules/chalk/source/utilities.js"() {
-  }
-});
-
-// node_modules/chalk/source/index.js
-function createChalk(options) {
-  return chalkFactory(options);
-}
-var stdoutColor, stderrColor, GENERATOR, STYLER, IS_EMPTY, levelMapping, styles2, applyOptions, chalkFactory, getModelAnsi, usedModels, proto, createStyler, createBuilder, applyStyle, chalk, chalkStderr, source_default;
-var init_source = __esm({
-  "node_modules/chalk/source/index.js"() {
-    init_ansi_styles();
-    init_supports_color();
-    init_utilities();
-    ({ stdout: stdoutColor, stderr: stderrColor } = supports_color_default);
-    GENERATOR = Symbol("GENERATOR");
-    STYLER = Symbol("STYLER");
-    IS_EMPTY = Symbol("IS_EMPTY");
-    levelMapping = [
-      "ansi",
-      "ansi",
-      "ansi256",
-      "ansi16m"
-    ];
-    styles2 = /* @__PURE__ */ Object.create(null);
-    applyOptions = (object, options = {}) => {
-      if (options.level && !(Number.isInteger(options.level) && options.level >= 0 && options.level <= 3)) {
-        throw new Error("The `level` option should be an integer from 0 to 3");
-      }
-      const colorLevel = stdoutColor ? stdoutColor.level : 0;
-      object.level = options.level === void 0 ? colorLevel : options.level;
-    };
-    chalkFactory = (options) => {
-      const chalk2 = (...strings) => strings.join(" ");
-      applyOptions(chalk2, options);
-      Object.setPrototypeOf(chalk2, createChalk.prototype);
-      return chalk2;
-    };
-    Object.setPrototypeOf(createChalk.prototype, Function.prototype);
-    for (const [styleName, style] of Object.entries(ansi_styles_default)) {
-      styles2[styleName] = {
-        get() {
-          const builder = createBuilder(this, createStyler(style.open, style.close, this[STYLER]), this[IS_EMPTY]);
-          Object.defineProperty(this, styleName, { value: builder });
-          return builder;
-        }
-      };
-    }
-    styles2.visible = {
-      get() {
-        const builder = createBuilder(this, this[STYLER], true);
-        Object.defineProperty(this, "visible", { value: builder });
-        return builder;
-      }
-    };
-    getModelAnsi = (model, level, type, ...arguments_) => {
-      if (model === "rgb") {
-        if (level === "ansi16m") {
-          return ansi_styles_default[type].ansi16m(...arguments_);
-        }
-        if (level === "ansi256") {
-          return ansi_styles_default[type].ansi256(ansi_styles_default.rgbToAnsi256(...arguments_));
-        }
-        return ansi_styles_default[type].ansi(ansi_styles_default.rgbToAnsi(...arguments_));
-      }
-      if (model === "hex") {
-        return getModelAnsi("rgb", level, type, ...ansi_styles_default.hexToRgb(...arguments_));
-      }
-      return ansi_styles_default[type][model](...arguments_);
-    };
-    usedModels = ["rgb", "hex", "ansi256"];
-    for (const model of usedModels) {
-      styles2[model] = {
-        get() {
-          const { level } = this;
-          return function(...arguments_) {
-            const styler = createStyler(getModelAnsi(model, levelMapping[level], "color", ...arguments_), ansi_styles_default.color.close, this[STYLER]);
-            return createBuilder(this, styler, this[IS_EMPTY]);
-          };
-        }
-      };
-      const bgModel = "bg" + model[0].toUpperCase() + model.slice(1);
-      styles2[bgModel] = {
-        get() {
-          const { level } = this;
-          return function(...arguments_) {
-            const styler = createStyler(getModelAnsi(model, levelMapping[level], "bgColor", ...arguments_), ansi_styles_default.bgColor.close, this[STYLER]);
-            return createBuilder(this, styler, this[IS_EMPTY]);
-          };
-        }
-      };
-    }
-    proto = Object.defineProperties(() => {
-    }, {
-      ...styles2,
-      level: {
-        enumerable: true,
-        get() {
-          return this[GENERATOR].level;
-        },
-        set(level) {
-          this[GENERATOR].level = level;
-        }
-      }
-    });
-    createStyler = (open, close, parent) => {
-      let openAll;
-      let closeAll;
-      if (parent === void 0) {
-        openAll = open;
-        closeAll = close;
-      } else {
-        openAll = parent.openAll + open;
-        closeAll = close + parent.closeAll;
-      }
-      return {
-        open,
-        close,
-        openAll,
-        closeAll,
-        parent
-      };
-    };
-    createBuilder = (self, _styler, _isEmpty) => {
-      const builder = (...arguments_) => applyStyle(builder, arguments_.length === 1 ? "" + arguments_[0] : arguments_.join(" "));
-      Object.setPrototypeOf(builder, proto);
-      builder[GENERATOR] = self;
-      builder[STYLER] = _styler;
-      builder[IS_EMPTY] = _isEmpty;
-      return builder;
-    };
-    applyStyle = (self, string) => {
-      if (self.level <= 0 || !string) {
-        return self[IS_EMPTY] ? "" : string;
-      }
-      let styler = self[STYLER];
-      if (styler === void 0) {
-        return string;
-      }
-      const { openAll, closeAll } = styler;
-      if (string.includes("\x1B")) {
-        while (styler !== void 0) {
-          string = stringReplaceAll(string, styler.close, styler.open);
-          styler = styler.parent;
-        }
-      }
-      const lfIndex = string.indexOf("\n");
-      if (lfIndex !== -1) {
-        string = stringEncaseCRLFWithFirstIndex(string, closeAll, openAll, lfIndex);
-      }
-      return openAll + string + closeAll;
-    };
-    Object.defineProperties(createChalk.prototype, styles2);
-    chalk = createChalk();
-    chalkStderr = createChalk({ level: stderrColor ? stderrColor.level : 0 });
-    source_default = chalk;
-  }
-});
-
-// src/lib/constants.ts
-import { join as join2 } from "node:path";
-import { homedir } from "node:os";
-var SPECHUB_DIR, CHANGES_DIR, MAPS_DIR, SPECS_DIR, ARCHIVE_DIR, CONFIG_FILE, PROJECT_FILE, VOCABULARY_PATH, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE, GLOBAL_DATA_DIR;
-var init_constants = __esm({
-  "src/lib/constants.ts"() {
-    "use strict";
-    SPECHUB_DIR = "spechub";
-    CHANGES_DIR = "changes";
-    MAPS_DIR = "maps";
-    SPECS_DIR = "specs";
-    ARCHIVE_DIR = "archive";
-    CONFIG_FILE = "config.yaml";
-    PROJECT_FILE = "project.yaml";
-    VOCABULARY_PATH = join2("skills", "writing", "vocabulary.md");
-    GLOBAL_CONFIG_DIR = join2(
-      process.env.XDG_CONFIG_HOME ?? join2(homedir(), ".config"),
-      "spechub"
-    );
-    GLOBAL_CONFIG_FILE = join2(GLOBAL_CONFIG_DIR, "config.json");
-    GLOBAL_DATA_DIR = join2(
-      process.env.XDG_DATA_HOME ?? join2(homedir(), ".local", "share"),
-      "spechub"
-    );
-  }
-});
-
 // src/lib/utils.ts
-import { existsSync, mkdirSync, readFileSync as readFileSync2, readdirSync } from "node:fs";
-import { join as join3 } from "node:path";
+import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, readdirSync } from "node:fs";
+import { join as join4 } from "node:path";
 function fail(message, hint) {
   console.error(source_default.red(message));
   if (hint) console.error(source_default.dim(hint));
   process.exit(1);
 }
 function ensureDir(path) {
-  if (!existsSync(path)) mkdirSync(path, { recursive: true });
+  if (!existsSync2(path)) mkdirSync(path, { recursive: true });
 }
 function readYaml(path) {
-  if (!existsSync(path)) return null;
+  if (!existsSync2(path)) return null;
   return (0, import_yaml.parse)(readFileSync2(path, "utf-8"));
 }
 function readMarkdown(path) {
-  if (!existsSync(path)) return null;
+  if (!existsSync2(path)) return null;
   return readFileSync2(path, "utf-8");
 }
 function listChanges(root) {
-  const dir = join3(root, SPECHUB_DIR, CHANGES_DIR);
-  if (!existsSync(dir)) return [];
+  const dir = join4(root, SPECHUB_DIR, CHANGES_DIR);
+  if (!existsSync2(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== ARCHIVE_DIR).map((e) => e.name);
 }
 function listSpecs(root) {
-  const dir = join3(root, SPECHUB_DIR, SPECS_DIR);
-  if (!existsSync(dir)) return [];
+  const dir = join4(root, SPECHUB_DIR, SPECS_DIR);
+  if (!existsSync2(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 }
 function requireProject(root) {
-  if (!root) fail("Not in a SpecHub project. Run `spechub init` first.");
+  if (!root) fail("Not in a SpecHub project. Run `/spechub:setup` first.");
 }
 function formatDate() {
   return (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
@@ -11354,80 +11391,14 @@ var init_utils = __esm({
   }
 });
 
-// src/commands/init.ts
-var init_exports = {};
-__export(init_exports, {
-  register: () => register
-});
-import { existsSync as existsSync2, writeFileSync } from "node:fs";
-import { join as join4, resolve } from "node:path";
-function register(program3) {
-  program3.command("init").description("Initialize SpecHub in a project").argument("[path]", "project directory", ".").option("--force", "overwrite existing configuration").action((path, opts) => {
-    const root = resolve(path);
-    const dir = join4(root, SPECHUB_DIR);
-    if (existsSync2(dir) && !opts.force) {
-      console.error(source_default.yellow(`${SPECHUB_DIR}/ already exists. Use --force to overwrite.`));
-      process.exit(1);
-    }
-    ensureDir(join4(dir, SPECS_DIR));
-    const config = {
-      context: {}
-    };
-    writeFileSync(join4(dir, CONFIG_FILE), (0, import_yaml2.stringify)(config), "utf-8");
-    console.log(source_default.green("Initialized SpecHub project:"));
-    console.log(`  ${SPECHUB_DIR}/`);
-    console.log(`  ${SPECHUB_DIR}/${SPECS_DIR}/`);
-    console.log(`  ${SPECHUB_DIR}/${CONFIG_FILE}`);
-  });
-}
-var import_yaml2;
-var init_init = __esm({
-  "src/commands/init.ts"() {
-    "use strict";
-    import_yaml2 = __toESM(require_dist(), 1);
-    init_source();
-    init_constants();
-    init_utils();
-  }
-});
-
-// src/lib/project.ts
-import { existsSync as existsSync3 } from "node:fs";
-import { dirname as dirname2, join as join5, resolve as resolve2 } from "node:path";
-function findUp(startDir, marker) {
-  let dir = resolve2(startDir);
-  while (true) {
-    if (existsSync3(join5(dir, marker))) return dir;
-    const parent = dirname2(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-function findProjectRoot(from = process.cwd()) {
-  return findUp(from, SPECHUB_DIR);
-}
-function findPluginRoot(startDir = import.meta.dirname) {
-  const fromEnv = process.env.CLAUDE_PLUGIN_ROOT;
-  if (fromEnv && existsSync3(join5(fromEnv, PLUGIN_MARKER))) return resolve2(fromEnv);
-  return findUp(startDir, PLUGIN_MARKER);
-}
-var PLUGIN_MARKER;
-var init_project = __esm({
-  "src/lib/project.ts"() {
-    "use strict";
-    init_constants();
-    PLUGIN_MARKER = join5(".claude-plugin", "plugin.json");
-  }
-});
-
 // src/commands/list.ts
 var list_exports = {};
 __export(list_exports, {
-  register: () => register2
+  register: () => register
 });
-import { existsSync as existsSync4, readdirSync as readdirSync2, statSync } from "node:fs";
-import { join as join6 } from "node:path";
-function register2(program3) {
+import { existsSync as existsSync3, readdirSync as readdirSync2, statSync } from "node:fs";
+import { join as join5 } from "node:path";
+function register(program3) {
   program3.command("list").description("List active changes or specs").option("--specs", "list specs instead of changes").option("--changes", "list changes (default)").option("--json", "output as JSON").option("--sort <order>", "sort order: name or recent", "recent").action((opts) => {
     const root = findProjectRoot();
     requireProject(root);
@@ -11435,19 +11406,19 @@ function register2(program3) {
     const items = [];
     if (showSpecs) {
       for (const name of listSpecs(root)) {
-        const specDir = join6(root, SPECHUB_DIR, SPECS_DIR, name);
-        const specFile = join6(specDir, "spec.md");
+        const specDir = join5(root, SPECHUB_DIR, SPECS_DIR, name);
+        const specFile = join5(specDir, "spec.md");
         items.push({
           name,
           type: "spec",
           path: specDir,
-          modified: existsSync4(specFile) ? statSync(specFile).mtime.toISOString().split("T")[0] : void 0
+          modified: existsSync3(specFile) ? statSync(specFile).mtime.toISOString().split("T")[0] : void 0
         });
       }
     } else {
       for (const name of listChanges(root)) {
-        const changeDir = join6(root, SPECHUB_DIR, CHANGES_DIR, name);
-        const artifacts = existsSync4(changeDir) ? readdirSync2(changeDir).filter((f) => f.endsWith(".md")).map((f) => f.replace(".md", "")) : [];
+        const changeDir = join5(root, SPECHUB_DIR, CHANGES_DIR, name);
+        const artifacts = existsSync3(changeDir) ? readdirSync2(changeDir).filter((f) => f.endsWith(".md")).map((f) => f.replace(".md", "")) : [];
         items.push({
           name,
           type: "change",
@@ -11494,11 +11465,11 @@ var init_list = __esm({
 // src/commands/show.ts
 var show_exports = {};
 __export(show_exports, {
-  register: () => register3
+  register: () => register2
 });
-import { existsSync as existsSync5, readFileSync as readFileSync3, readdirSync as readdirSync3 } from "node:fs";
-import { join as join7 } from "node:path";
-function register3(program3) {
+import { existsSync as existsSync4, readFileSync as readFileSync3, readdirSync as readdirSync3 } from "node:fs";
+import { join as join6 } from "node:path";
+function register2(program3) {
   program3.command("show").description("Display a change or spec").argument("[name]", "change or spec name").option("--json", "output as JSON").option("--type <type>", "force type: change or spec").action((name, opts) => {
     const root = findProjectRoot();
     requireProject(root);
@@ -11506,17 +11477,17 @@ function register3(program3) {
       console.error(source_default.red("Provide a change or spec name."));
       process.exit(1);
     }
-    const changeDir = join7(root, SPECHUB_DIR, CHANGES_DIR, name);
-    const specDir = join7(root, SPECHUB_DIR, SPECS_DIR, name);
+    const changeDir = join6(root, SPECHUB_DIR, CHANGES_DIR, name);
+    const specDir = join6(root, SPECHUB_DIR, SPECS_DIR, name);
     let type;
     let targetDir;
-    if (opts.type === "spec" || !opts.type && !existsSync5(changeDir) && existsSync5(specDir)) {
+    if (opts.type === "spec" || !opts.type && !existsSync4(changeDir) && existsSync4(specDir)) {
       type = "spec";
       targetDir = specDir;
-    } else if (existsSync5(changeDir)) {
+    } else if (existsSync4(changeDir)) {
       type = "change";
       targetDir = changeDir;
-    } else if (existsSync5(specDir)) {
+    } else if (existsSync4(specDir)) {
       type = "spec";
       targetDir = specDir;
     } else {
@@ -11524,8 +11495,8 @@ function register3(program3) {
       process.exit(1);
     }
     if (type === "spec") {
-      const specFile = join7(targetDir, "spec.md");
-      if (!existsSync5(specFile)) {
+      const specFile = join6(targetDir, "spec.md");
+      if (!existsSync4(specFile)) {
         console.error(source_default.red(`Spec '${name}' has no spec.md file.`));
         process.exit(1);
       }
@@ -11540,7 +11511,7 @@ function register3(program3) {
     const files = readdirSync3(targetDir).filter((f) => f.endsWith(".md"));
     const artifacts = {};
     for (const file of files) {
-      artifacts[file.replace(".md", "")] = readFileSync3(join7(targetDir, file), "utf-8");
+      artifacts[file.replace(".md", "")] = readFileSync3(join6(targetDir, file), "utf-8");
     }
     if (opts.json) {
       console.log(JSON.stringify({ name, type: "change", artifacts }, null, 2));
@@ -11566,11 +11537,11 @@ var init_show = __esm({
 // src/commands/archive.ts
 var archive_exports = {};
 __export(archive_exports, {
-  register: () => register4
+  register: () => register3
 });
-import { existsSync as existsSync6, cpSync, rmSync } from "node:fs";
-import { join as join8 } from "node:path";
-function register4(program3) {
+import { existsSync as existsSync5, cpSync, rmSync } from "node:fs";
+import { join as join7 } from "node:path";
+function register3(program3) {
   program3.command("archive").description("Archive a completed change").argument("[name]", "change name").option("-y, --yes", "skip confirmation").option("--skip-specs", "skip living spec updates").action((name, opts) => {
     const root = findProjectRoot();
     requireProject(root);
@@ -11587,14 +11558,14 @@ function register4(program3) {
       console.log(source_default.dim("\nRun: spechub archive <name>"));
       return;
     }
-    const changeDir = join8(root, SPECHUB_DIR, CHANGES_DIR, name);
-    if (!existsSync6(changeDir)) {
+    const changeDir = join7(root, SPECHUB_DIR, CHANGES_DIR, name);
+    if (!existsSync5(changeDir)) {
       console.error(source_default.red(`Change '${name}' not found.`));
       process.exit(1);
     }
     const archiveName = `${formatDate()}-${name}`;
-    const archiveDir = join8(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR, archiveName);
-    ensureDir(join8(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR));
+    const archiveDir = join7(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR, archiveName);
+    ensureDir(join7(root, SPECHUB_DIR, CHANGES_DIR, ARCHIVE_DIR));
     cpSync(changeDir, archiveDir, { recursive: true });
     rmSync(changeDir, { recursive: true });
     console.log(source_default.green(`Archived: ${name}`));
@@ -15722,15 +15693,15 @@ var init_zod = __esm({
 });
 
 // src/lib/nodes.ts
-import { existsSync as existsSync7, readFileSync as readFileSync4, readdirSync as readdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join9 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync4, readdirSync as readdirSync4, writeFileSync } from "node:fs";
+import { join as join8 } from "node:path";
 function normalizeId(id) {
   const trimmed = id.trim();
   if (!/^\d+$/.test(trimmed)) return trimmed;
   return trimmed.padStart(3, "0");
 }
 function mapDir(root, map) {
-  return join9(root, SPECHUB_DIR, MAPS_DIR, map);
+  return join8(root, SPECHUB_DIR, MAPS_DIR, map);
 }
 function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/, "") || "node";
@@ -15749,12 +15720,12 @@ function compareIds(a, b) {
   return parseInt(a, 10) - parseInt(b, 10);
 }
 function parseNodeFile(dir, file) {
-  const raw = readFileSync4(join9(dir, file), "utf-8").replace(/\r\n/g, "\n");
+  const raw = readFileSync4(join8(dir, file), "utf-8").replace(/\r\n/g, "\n");
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
   }
-  const parsed = frontmatterSchema.safeParse((0, import_yaml3.parse)(match[1]));
+  const parsed = frontmatterSchema.safeParse((0, import_yaml2.parse)(match[1]));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new Error(`${file}: ${issue.path.join(".")} ${issue.message}`);
@@ -15786,7 +15757,7 @@ function parseNodeFile(dir, file) {
 }
 function loadNodes(root, map) {
   const dir = mapDir(root, map);
-  if (!existsSync7(dir)) return [];
+  if (!existsSync6(dir)) return [];
   const nodes = readdirSync4(dir).filter((f) => /^\d+.*\.md$/.test(f)).map((f) => parseNodeFile(dir, f)).sort((a, b) => compareIds(a.id, b.id));
   const seen = /* @__PURE__ */ new Map();
   for (const node of nodes) {
@@ -15822,7 +15793,7 @@ function serializeNode(node) {
 function writeNode(root, map, node) {
   const dir = mapDir(root, map);
   ensureDir(dir);
-  writeFileSync2(join9(dir, node.file), serializeNode(node), "utf-8");
+  writeFileSync(join8(dir, node.file), serializeNode(node), "utf-8");
 }
 function requireExisting(nodes, id, role) {
   if (!nodes.some((n) => n.id === id)) {
@@ -15980,11 +15951,11 @@ function walkTree(nodes) {
   visit(roots[0], 0);
   return out;
 }
-var import_yaml3, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
+var import_yaml2, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
 var init_nodes = __esm({
   "src/lib/nodes.ts"() {
     "use strict";
-    import_yaml3 = __toESM(require_dist(), 1);
+    import_yaml2 = __toESM(require_dist(), 1);
     init_zod();
     init_constants();
     init_utils();
@@ -16005,10 +15976,10 @@ var init_nodes = __esm({
 // src/commands/node.ts
 var node_exports = {};
 __export(node_exports, {
-  register: () => register5
+  register: () => register4
 });
 import { readFileSync as readFileSync5 } from "node:fs";
-import { join as join10 } from "node:path";
+import { join as join9 } from "node:path";
 function parseStatus(value) {
   if (!NODE_STATUSES.includes(value)) {
     fail(`Invalid status '${value}'. One of: ${NODE_STATUSES.join(", ")}`);
@@ -16056,7 +16027,7 @@ function printNode(node) {
     `${source_default.bold(node.id)}  ${node.status.padEnd(12)} ${node.mode.padEnd(4)} ${node.title}` + source_default.dim(`  (${links}${flags ? `; ${flags}` : ""})`)
   );
 }
-function register5(program3) {
+function register4(program3) {
   const nodeCmd = program3.command("node").description(
     "Map nodes: small markdown records, one file each, under spechub/maps/<name>/.\nStatus: fog (not yet stated precisely), open (ready), claimed (being worked),\nresolved (settled), out-of-scope (dropped)."
   );
@@ -16093,7 +16064,7 @@ function register5(program3) {
       if (opts.json) {
         console.log(JSON.stringify({ ...toJson(node), body: node.body }, null, 2));
       } else {
-        console.log(readFileSync5(join10(mapDir(root, opts.map), node.file), "utf-8"));
+        console.log(readFileSync5(join9(mapDir(root, opts.map), node.file), "utf-8"));
       }
     } catch (err) {
       fail(err.message);
@@ -16236,8 +16207,16 @@ var init_node = __esm({
 });
 
 // src/lib/global-config.ts
-import { existsSync as existsSync8, mkdirSync as mkdirSync2, readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
+import { existsSync as existsSync7, mkdirSync as mkdirSync2, readFileSync as readFileSync6, writeFileSync as writeFileSync2 } from "node:fs";
 import { dirname as dirname3 } from "node:path";
+function parseBooleanWord(key, raw) {
+  const normalized = raw.toLowerCase();
+  if (TRUE_VALUES.includes(normalized)) return true;
+  if (FALSE_VALUES.includes(normalized)) return false;
+  throw new ConfigValidationError(
+    `Invalid value "${raw}" for ${key}. Expected a boolean: ${TRUE_VALUES.join("/")} or ${FALSE_VALUES.join("/")}`
+  );
+}
 function hostAxis(key) {
   return HOST_AXES.find((axis) => axis.key === key);
 }
@@ -16258,7 +16237,7 @@ function assertSettableKey(key) {
   assertReadableKey(key);
 }
 function readGlobalConfig(file) {
-  if (!existsSync8(file)) return {};
+  if (!existsSync7(file)) return {};
   const raw = readFileSync6(file, "utf-8");
   try {
     return JSON.parse(raw);
@@ -16268,7 +16247,7 @@ function readGlobalConfig(file) {
 }
 function writeGlobalConfig(config, file) {
   mkdirSync2(dirname3(file), { recursive: true });
-  writeFileSync3(file, JSON.stringify(config, null, 2) + "\n", "utf-8");
+  writeFileSync2(file, JSON.stringify(config, null, 2) + "\n", "utf-8");
 }
 function parseValue(key, raw) {
   if (key !== "host" && !key.startsWith("host.")) {
@@ -16287,12 +16266,7 @@ function parseValue(key, raw) {
     }
     return raw;
   }
-  const normalized = raw.toLowerCase();
-  if (TRUE_VALUES.includes(normalized)) return true;
-  if (FALSE_VALUES.includes(normalized)) return false;
-  throw new ConfigValidationError(
-    `Invalid value "${raw}" for ${key}. Expected a boolean: ${TRUE_VALUES.join("/")} or ${FALSE_VALUES.join("/")}`
-  );
+  return parseBooleanWord(key, raw);
 }
 function setKey(config, key, value) {
   assertSettableKey(key);
@@ -16492,6 +16466,33 @@ function projectSettings(projectYaml, hasProject = true) {
     browser: hasFrontend ? { mode: statedString(browser?.mode), cdpPort, fallback: statedString(browser?.fallback) } : null
   };
 }
+function frontendHelpersDir(projectYaml) {
+  return statedString(record(record(projectYaml)?.frontend)?.helpers_dir);
+}
+function workflowFlag(projectYaml, key, whenUnstated) {
+  const value = record(record(projectYaml)?.workflow)?.[key];
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return whenUnstated;
+  try {
+    return parseBooleanWord(`workflow.${key}`, value);
+  } catch {
+    return whenUnstated;
+  }
+}
+function domainCount(domainMapYaml) {
+  const domains = record(record(domainMapYaml)?.domains);
+  return domains ? Object.keys(domains).length : null;
+}
+function agentBrowserCdpPort(agentBrowserJson) {
+  const cdp = record(agentBrowserJson)?.cdp;
+  if (typeof cdp === "number") return Number.isInteger(cdp) && cdp > 0 ? cdp : null;
+  if (typeof cdp !== "string") return null;
+  const port = Number(cdp.trim());
+  return Number.isInteger(port) && port > 0 ? port : null;
+}
+function outputStyleOf(settingsJson) {
+  return statedString(record(settingsJson)?.outputStyle);
+}
 var BROWSER_MODE_PRIORITY, BROWSER_AXIS_KEYS, BROWSER_AXIS_KEY_SET, ORCHESTRATORS, ORCHESTRATOR_AXIS_KEYS, ORCHESTRATOR_PROBES, CHROMIUM_BINARIES, DEFAULT_REMOTE_CDP_PORT, DEFAULT_CDP_PORT, FALLBACK_FORBIDDEN;
 var init_host_status = __esm({
   "src/lib/host-status.ts"() {
@@ -16536,12 +16537,12 @@ var init_host_status = __esm({
 import { spawnSync } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { request } from "node:http";
-import { delimiter, join as join11 } from "node:path";
+import { delimiter, join as join10 } from "node:path";
 function binaryOnPath(binary) {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (!dir) continue;
     try {
-      accessSync(join11(dir, binary), constants.X_OK);
+      accessSync(join10(dir, binary), constants.X_OK);
       return true;
     } catch {
     }
@@ -16562,14 +16563,14 @@ function runCommand(binary, args) {
   return { exitedZero: result.status === 0, stdout: result.stdout ?? "" };
 }
 function cdpPortAnswers(port, host = "127.0.0.1") {
-  return new Promise((resolve6) => {
+  return new Promise((resolve5) => {
     let settled = false;
     const finish = (answered) => {
       if (settled) return;
       settled = true;
       clearTimeout(deadline);
       req.destroy();
-      resolve6(answered);
+      resolve5(answered);
     };
     const req = request(
       { host, port, path: "/json/version", method: "GET", timeout: PROBE_TIMEOUT_MS },
@@ -16592,11 +16593,371 @@ var init_host_probe = __esm({
   }
 });
 
+// src/lib/project-config.ts
+import { existsSync as existsSync8, readFileSync as readFileSync7, readdirSync as readdirSync5, writeFileSync as writeFileSync3 } from "node:fs";
+import { basename, dirname as dirname4, join as join11 } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+function projectKeySpec(key) {
+  return PROJECT_KEYS[key];
+}
+function profileNames() {
+  const pluginRoot = findPluginRoot();
+  if (!pluginRoot) return [];
+  const dir = join11(pluginRoot, PROFILES_DIR);
+  if (!existsSync8(dir)) return [];
+  return readdirSync5(dir).filter((name) => name.endsWith(".yaml")).map((name) => basename(name, ".yaml")).sort();
+}
+function invalidValue(key, raw, expected) {
+  return new ConfigValidationError(`Invalid value "${raw}" for ${key}. ${expected}`);
+}
+function parseEnum(key, raw, values) {
+  if (values.includes(raw)) return raw;
+  throw invalidValue(key, raw, `Allowed values: ${values.join(", ")}`);
+}
+function numberRange(spec) {
+  const { min, max } = spec;
+  if (min !== void 0 && max !== void 0) return ` from ${min} to ${max}`;
+  if (min !== void 0) return `, ${min} or more`;
+  if (max !== void 0) return `, ${max} or less`;
+  return "";
+}
+function numberExpectation(spec) {
+  return `Expected a ${spec.integer ? "whole number" : "number"}${numberRange(spec)}.`;
+}
+function parseNumber(key, raw, spec) {
+  const value = Number(raw);
+  const expected = numberExpectation(spec);
+  if (raw.trim() === "" || !Number.isFinite(value)) throw invalidValue(key, raw, expected);
+  if (spec.integer && !Number.isInteger(value)) throw invalidValue(key, raw, expected);
+  if (spec.min !== void 0 && value < spec.min) throw invalidValue(key, raw, expected);
+  if (spec.max !== void 0 && value > spec.max) throw invalidValue(key, raw, expected);
+  return value;
+}
+function parseThresholdEntry(key, entry) {
+  if (typeof entry === "number" && Number.isFinite(entry)) return entry;
+  if (typeof entry === "string") {
+    const text = entry.trim();
+    if (PERCENTAGE.test(text)) return text;
+    if (text !== "" && Number.isFinite(Number(text))) return Number(text);
+  }
+  throw invalidValue(
+    key,
+    typeof entry === "string" ? entry.trim() : JSON.stringify(entry) ?? "",
+    "Every entry must be a number of tokens, such as 150000, or a percentage of the context window, such as 40%."
+  );
+}
+function parseThresholds(key, raw) {
+  const trimmed = raw.trim();
+  let entries;
+  if (trimmed.startsWith("[")) {
+    let flow;
+    try {
+      flow = (0, import_yaml3.parse)(trimmed);
+    } catch (err) {
+      throw invalidValue(key, raw, `Not a YAML list: ${err.message}`);
+    }
+    if (!Array.isArray(flow)) throw invalidValue(key, raw, "Expected a YAML list.");
+    entries = flow;
+  } else {
+    entries = trimmed.split(",");
+  }
+  if (entries.length === 0) throw invalidValue(key, raw, "Expected at least one entry.");
+  return entries.map((entry) => parseThresholdEntry(key, entry));
+}
+function parseProjectValue(key, raw) {
+  const spec = projectKeySpec(key);
+  if (!spec) throw new ConfigValidationError(`Unknown config key "${key}".`);
+  switch (spec.kind) {
+    case "boolean":
+      return parseBooleanWord(key, raw);
+    case "number":
+      return parseNumber(key, raw, spec);
+    case "string":
+      return raw;
+    case "enum":
+      return parseEnum(key, raw, spec.values);
+    case "profile": {
+      const names = profileNames();
+      return names.length === 0 ? raw : parseEnum(key, raw, names);
+    }
+    case "thresholds":
+      return parseThresholds(key, raw);
+  }
+}
+function scalarSource(value) {
+  return (0, import_yaml3.stringify)(value, { lineWidth: 0 }).trimEnd();
+}
+function splicedSource(src, doc, path, value) {
+  if (value !== null && typeof value === "object") return null;
+  const node = doc.getIn(path, true);
+  if (!(0, import_yaml3.isScalar)(node) || !node.range) return null;
+  const [start, end] = node.range;
+  if (end <= start) return null;
+  const source = scalarSource(value);
+  if (source.includes("\n")) return null;
+  return src.slice(0, start) + source + src.slice(end);
+}
+function holdsSameDataAs(candidate, expected) {
+  try {
+    const parsed = (0, import_yaml3.parseDocument)(candidate);
+    if (parsed.errors.length > 0) return false;
+    return isDeepStrictEqual(parsed.toJS(), expected.toJS());
+  } catch {
+    return false;
+  }
+}
+function lineEndingOf(src) {
+  const first2 = src.indexOf("\n");
+  return first2 > 0 && src[first2 - 1] === "\r" ? "\r\n" : "\n";
+}
+function withLineEnding(text, ending) {
+  const lf = text.replace(/\r\n/g, "\n");
+  return ending === "\n" ? lf : lf.replace(/\n/g, "\r\n");
+}
+function fsReason(err) {
+  const code = typeof err === "object" && err !== null ? err.code : void 0;
+  if (code !== void 0 && FS_REASONS[code] !== void 0) return FS_REASONS[code];
+  return err instanceof Error ? err.message.split("\n")[0] : String(err);
+}
+function readSource(file) {
+  if (!existsSync8(file)) return "";
+  let bytes;
+  try {
+    bytes = readFileSync7(file);
+  } catch (err) {
+    throw new ConfigFileError(`Could not read ${file}: ${fsReason(err)}`);
+  }
+  try {
+    return UTF8.decode(bytes);
+  } catch {
+    throw new ConfigValidationError(
+      `${file} is not valid UTF-8, so it cannot be rewritten without corrupting the bytes that did not decode. Re-save the file as UTF-8 and try again.`
+    );
+  }
+}
+function writeSource(file, text) {
+  try {
+    ensureDir(dirname4(file));
+    writeFileSync3(file, text, "utf-8");
+  } catch (err) {
+    throw new ConfigFileError(`Could not write ${file}: ${fsReason(err)}`);
+  }
+}
+function writeDocument(file, doc, ending) {
+  writeSource(file, withLineEnding(doc.toString(), ending));
+}
+function isNullScalar(node) {
+  return (0, import_yaml3.isScalar)(node) && node.value === null;
+}
+function emptyBlockFor(node, doc) {
+  const map = new import_yaml3.YAMLMap(doc.schema);
+  if ((0, import_yaml3.isScalar)(node)) {
+    if (node.comment != null) map.comment = node.comment;
+    if (node.commentBefore != null) map.commentBefore = node.commentBefore;
+  }
+  return map;
+}
+function ensureBlocksAbove(doc, path) {
+  if (isNullScalar(doc.contents)) doc.contents = emptyBlockFor(doc.contents, doc);
+  for (let depth = 1; depth < path.length; depth += 1) {
+    const above = path.slice(0, depth);
+    if (!doc.hasIn(above)) return;
+    const node = doc.getIn(above, true);
+    if ((0, import_yaml3.isMap)(node)) continue;
+    if (isNullScalar(node)) {
+      doc.setIn(above, emptyBlockFor(node, doc));
+      continue;
+    }
+    const blocked = above.join(".");
+    throw new ConfigValidationError(
+      `Cannot set ${path.join(".")}: ${blocked} holds ${(0, import_yaml3.isSeq)(node) ? "a list" : "a value"}, not a block. Change or remove ${blocked} first.`
+    );
+  }
+}
+function setProjectKey(file, key, value) {
+  const src = readSource(file);
+  const doc = parseProjectDocument(file, src);
+  const path = key.split(".");
+  ensureBlocksAbove(doc, path);
+  const spliced = splicedSource(src, doc, path, value);
+  doc.setIn(path, value);
+  if (spliced !== null && holdsSameDataAs(spliced, doc)) {
+    writeSource(file, spliced);
+    return;
+  }
+  writeDocument(file, doc, lineEndingOf(src));
+}
+function projectKeyDefault(key) {
+  return PROJECT_KEY_DEFAULTS[key];
+}
+function parseProjectDocument(file, src) {
+  const doc = (0, import_yaml3.parseDocument)(src);
+  if (doc.errors.length > 0) {
+    throw new ConfigValidationError(`Could not parse ${file}: ${doc.errors[0].message}`);
+  }
+  return doc;
+}
+function atPath(data, path) {
+  return path.reduce((node, part) => {
+    if (typeof node !== "object" || node === null) return void 0;
+    return node[part];
+  }, data);
+}
+function getProjectKey(file, key) {
+  const doc = parseProjectDocument(file, readSource(file));
+  const path = key.split(".");
+  if (!doc.hasIn(path)) return { status: "unset" };
+  return { status: "set", value: atPath(doc.toJS(), path) };
+}
+function isBlock(node) {
+  return typeof node === "object" && node !== null && !Array.isArray(node) && Object.keys(node).length > 0;
+}
+function listProjectKeys(file) {
+  const rows = [];
+  const walk = (node, path) => {
+    if (isBlock(node)) {
+      for (const [name, child] of Object.entries(node)) walk(child, [...path, name]);
+      return;
+    }
+    if (path.length > 0) rows.push([path.join("."), node]);
+  };
+  walk(parseProjectDocument(file, readSource(file)).toJS(), []);
+  return rows;
+}
+function nextLineStart(src, from) {
+  const at = src.indexOf("\n", from);
+  return at === -1 ? src.length : at + 1;
+}
+function removedSource(src, doc, path) {
+  const parent = path.length > 1 ? doc.getIn(path.slice(0, -1), true) : doc.contents;
+  if (!(0, import_yaml3.isMap)(parent)) return null;
+  const leaf = path[path.length - 1];
+  const pair = parent.items.find((item) => (0, import_yaml3.isScalar)(item.key) && item.key.value === leaf);
+  if (!pair || !(0, import_yaml3.isScalar)(pair.key) || !pair.key.range) return null;
+  const value = pair.value;
+  if (value != null && !(0, import_yaml3.isScalar)(value)) return null;
+  const keyStart = pair.key.range[0];
+  const lineStart = src.lastIndexOf("\n", keyStart - 1) + 1;
+  if (src.slice(lineStart, keyStart).trim() !== "") return null;
+  const contentEnd = value?.range ? value.range[1] : pair.key.range[1];
+  const end = src[contentEnd - 1] === "\n" ? contentEnd : nextLineStart(src, contentEnd);
+  return src.slice(0, lineStart) + src.slice(end);
+}
+function collapseEmptied(doc, path) {
+  for (let depth = path.length - 1; depth > 0; depth -= 1) {
+    const parentPath = path.slice(0, depth);
+    const parent = doc.getIn(parentPath, true);
+    if (!(0, import_yaml3.isMap)(parent) || parent.items.length > 0) return;
+    doc.setIn(parentPath, null);
+  }
+  if ((0, import_yaml3.isMap)(doc.contents) && doc.contents.items.length === 0) doc.contents = null;
+}
+function unsetProjectKey(file, key) {
+  const src = readSource(file);
+  const doc = parseProjectDocument(file, src);
+  const path = key.split(".");
+  if (!doc.hasIn(path)) return false;
+  const removed = removedSource(src, doc, path);
+  doc.deleteIn(path);
+  collapseEmptied(doc, path);
+  if (removed !== null && holdsSameDataAs(removed, doc)) {
+    writeSource(file, removed);
+    return true;
+  }
+  writeDocument(file, doc, lineEndingOf(src));
+  return true;
+}
+var import_yaml3, COUNT, PROJECT_KEYS, PROJECT_KEY_LIST, PERCENTAGE, FS_REASONS, UTF8, PROJECT_KEY_DEFAULTS;
+var init_project_config = __esm({
+  "src/lib/project-config.ts"() {
+    "use strict";
+    import_yaml3 = __toESM(require_dist(), 1);
+    init_global_config();
+    init_constants();
+    init_project();
+    init_utils();
+    COUNT = { kind: "number", integer: true, min: 0 };
+    PROJECT_KEYS = {
+      profile: { kind: "profile" },
+      "workflow.spec_sync": { kind: "boolean" },
+      "workflow.grilling.questions": { kind: "enum", values: ["tool", "inline"] },
+      "workflow.tdd.strict": { kind: "boolean" },
+      "workflow.tdd.orchestrator_strict": { kind: "boolean" },
+      "workflow.frontend_verification": { kind: "boolean" },
+      "workflow.maps.tracker": { kind: "enum", values: ["github", "files"] },
+      "workflow.maps.persist": { kind: "boolean" },
+      "workflow.handoff.agent": { kind: "string" },
+      "workflow.handoff.ack_turns": COUNT,
+      "workflow.handoff.self_invoke": { kind: "boolean" },
+      "workflow.handoff.nudge_warn": COUNT,
+      "workflow.handoff.nudge_severe": COUNT,
+      "workflow.handoff.nudge_step": COUNT,
+      "workflow.handoff.context_thresholds": { kind: "thresholds" },
+      "workflow.handoff.context_window": { kind: "number", integer: true, min: 1 },
+      "commands.test": { kind: "string" },
+      "commands.test_collect": { kind: "string" },
+      "commands.build": { kind: "string" },
+      "commands.lint": { kind: "string" },
+      "commands.typecheck": { kind: "string" },
+      "commands.format": { kind: "string" },
+      "directories.source": { kind: "string" },
+      "directories.tests": { kind: "string" },
+      "test_markers.exclude": { kind: "string" },
+      "venv.activate": { kind: "string" },
+      "frontend.directory": { kind: "string" },
+      "frontend.dev_server_url": { kind: "string" },
+      "frontend.dev_server_check": { kind: "string" },
+      "frontend.helpers_dir": { kind: "string" },
+      "frontend.commands.dev": { kind: "string" },
+      "frontend.commands.build": { kind: "string" },
+      "frontend.commands.lint": { kind: "string" },
+      "frontend.commands.test": { kind: "string" },
+      "frontend.browser.mode": { kind: "enum", values: ["remote", "headless", "local"] },
+      // Only `none` acts at read time, but a typo is still worth catching, so the
+      // three mode names it could plausibly be confused with are named too.
+      "frontend.browser.fallback": { kind: "enum", values: ["none", "remote", "headless", "local"] },
+      "frontend.browser.cdp_port": { kind: "number", integer: true, min: 1, max: 65535 }
+    };
+    PROJECT_KEY_LIST = Object.keys(PROJECT_KEYS);
+    PERCENTAGE = /^\d+(\.\d+)?%$/;
+    FS_REASONS = {
+      EACCES: "permission denied",
+      EPERM: "permission denied",
+      EROFS: "the filesystem is read-only",
+      EISDIR: "that path is a directory",
+      ENOTDIR: "a directory on that path is a file",
+      EMFILE: "too many open files",
+      ENOSPC: "the disk is full"
+    };
+    UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+    PROJECT_KEY_DEFAULTS = {
+      "workflow.spec_sync": "true",
+      "workflow.grilling.questions": "tool",
+      "workflow.tdd.strict": "true",
+      "workflow.tdd.orchestrator_strict": "true",
+      "workflow.frontend_verification": "false",
+      "workflow.maps.persist": "false",
+      "workflow.handoff.agent": "claude",
+      "workflow.handoff.ack_turns": "5",
+      "workflow.handoff.self_invoke": "true",
+      "workflow.handoff.nudge_warn": "200000",
+      "workflow.handoff.nudge_severe": "500000",
+      "workflow.handoff.nudge_step": "100000",
+      "directories.source": "src/",
+      "directories.tests": "tests/",
+      "frontend.directory": "frontend/",
+      "frontend.dev_server_url": "http://localhost:3000"
+    };
+  }
+});
+
 // src/commands/config.ts
 var config_exports = {};
 __export(config_exports, {
-  register: () => register6
+  register: () => register5
 });
+import { existsSync as existsSync9, readFileSync as readFileSync8, statSync as statSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
 import { join as join12 } from "node:path";
 function reportingUserErrors(action) {
   try {
@@ -16624,11 +16985,31 @@ function qualifier(key, required) {
   if (key !== "host" && !hostAxis(key)) return "";
   return ` (${required ? "required" : "optional"})`;
 }
+function projectWorkflow(projectYaml) {
+  return {
+    specSync: workflowFlag(projectYaml, "spec_sync", true),
+    frontendVerification: workflowFlag(projectYaml, "frontend_verification", false)
+  };
+}
 function loadProject() {
   const root = findProjectRoot();
-  if (!root) return { context: projectHostContext(void 0, false), settings: null };
+  if (!root) {
+    return {
+      root: null,
+      context: projectHostContext(void 0, false),
+      settings: null,
+      helpersDir: null,
+      workflow: projectWorkflow(void 0)
+    };
+  }
   const yaml = readYaml(join12(root, SPECHUB_DIR, PROJECT_FILE));
-  return { context: projectHostContext(yaml, true), settings: projectSettings(yaml, true) };
+  return {
+    root,
+    context: projectHostContext(yaml, true),
+    settings: projectSettings(yaml, true),
+    helpersDir: frontendHelpersDir(yaml),
+    workflow: projectWorkflow(yaml)
+  };
 }
 async function detectHostAxes(wanted, project) {
   const detected = /* @__PURE__ */ new Map();
@@ -16708,11 +17089,15 @@ function checkRequiredAxes(report, config, project) {
   const why = project.hasFrontend ? " (this project has a frontend)" : "";
   for (const key of requiredHostAxisKeys({ hasFrontend: project.hasFrontend })) {
     const result = getKey(config, key);
+    const id = `required-axis:${key}`;
     if (result.status === "set") {
-      report.line("pass", `${key} = ${JSON.stringify(result.value)}`);
+      report.line("pass", id, `${key} = ${JSON.stringify(result.value)}`);
     } else {
       const note = isBrowserAxis(key) ? why : "";
-      report.missing(`${key} is unset${note} - set it with \`spechub config set ${key} <value>\``);
+      report.missing(
+        id,
+        `${key} is unset${note} - set it with \`spechub config set ${key} <value>\``
+      );
     }
   }
   const declaredFalse = (key) => {
@@ -16720,7 +17105,11 @@ function checkRequiredAxes(report, config, project) {
     return result.status === "set" && result.value === false;
   };
   if (ORCHESTRATORS.every((name) => declaredFalse(ORCHESTRATOR_AXIS_KEYS[name]))) {
-    report.line("info", "neither orchestrator is on this host - plain git worktrees will be used");
+    report.line(
+      "info",
+      "no-orchestrator",
+      "neither orchestrator is on this host - plain git worktrees will be used"
+    );
   }
 }
 function checkOrchestrators(report, config) {
@@ -16736,12 +17125,14 @@ function checkOrchestrators(report, config) {
     }
     if (result.value !== true) continue;
     probed = true;
+    const id = `orchestrator:${name}`;
     const probe = ORCHESTRATOR_PROBES[name];
     const hint = probe.docs ? ` - see ${probe.docs}` : "";
     const binary = firstBinaryOnPath(probe.binaries);
     if (!binary) {
       report.line(
         "fail",
+        id,
         `${probe.binaries.join(" or ")} is not on PATH (${axisKey} is true)${hint}`
       );
       continue;
@@ -16749,14 +17140,15 @@ function checkOrchestrators(report, config) {
     const command = [binary, ...probe.args].join(" ");
     const outcome = runCommand(binary, probe.args);
     if (!outcome.exitedZero || !probe.answered(outcome.stdout)) {
-      report.line("fail", `\`${command}\` did not answer (${axisKey} is true)${hint}`);
+      report.line("fail", id, `\`${command}\` did not answer (${axisKey} is true)${hint}`);
       continue;
     }
-    report.line("pass", `\`${command}\` answered`);
+    report.line("pass", id, `\`${command}\` answered`);
   }
   if (!probed) {
     report.line(
       anyUndeclared ? "info" : "pass",
+      "orchestrator:none",
       "no orchestrator is declared true - nothing to probe"
     );
   }
@@ -16784,14 +17176,18 @@ async function checkDeclaredBrowserModes(report, config, project) {
     if (declared[mode] !== true) continue;
     probed = true;
     const { ok, detail } = await browserModeWorks(mode, project);
-    report.line(ok ? "pass" : "fail", `${key} is true and ${detail}`);
+    report.line(ok ? "pass" : "fail", `browser-mode:${mode}`, `${key} is true and ${detail}`);
   }
-  if (!probed) report.line("info", "no browser mode is declared true - nothing to probe");
+  if (!probed) {
+    report.line("info", "browser-mode:none", "no browser mode is declared true - nothing to probe");
+  }
 }
 function checkPreferredBrowserMode(report, config, project) {
   report.heading("Project's preferred browser mode is available");
-  if (!project.hasFrontend || !project.preferredMode) {
-    report.line("info", "this project states no browser mode preference");
+  const id = "preferred-browser-mode";
+  if (!project.hasFrontend) return;
+  if (!project.preferredMode) {
+    report.line("info", id, "this project states no browser mode preference");
     return;
   }
   const preferred = project.preferredMode;
@@ -16799,6 +17195,7 @@ function checkPreferredBrowserMode(report, config, project) {
   if (resolution.status === "resolved") {
     report.line(
       "pass",
+      id,
       resolution.fallback ? `project prefers ${preferred}, which this host does not declare; falling back to ${resolution.mode}` : `project prefers ${preferred} and this host declares it available`
     );
     return;
@@ -16806,21 +17203,23 @@ function checkPreferredBrowserMode(report, config, project) {
   if (resolution.problem.kind === "fallback-forbidden") {
     report.line(
       "fail",
+      id,
       `project prefers ${preferred}, which this host does not declare, and this project sets frontend.browser.fallback to "${FALLBACK_FORBIDDEN}" - so no other mode may stand in (set ${BROWSER_AXIS_KEYS[preferred]} to true, or change the project's fallback)`
     );
     return;
   }
   report.line(
     "fail",
+    id,
     `project prefers ${preferred}, but this host declares no browser mode available (set one of ${BROWSER_AXIS_LIST} to true)`
   );
 }
 function browserModeProblemMessage(problem) {
   switch (problem.kind) {
     case "no-project":
-      return "No SpecHub project here, so there is no frontend to drive a browser for - run `/spechub:init` in the project you want to set up.";
+      return "No SpecHub project here, so there is no frontend to drive a browser for - run `/spechub:setup` in the project you want to set up.";
     case "no-frontend":
-      return "This project configures no frontend, so it drives no browser - run `/spechub:init` if it should have one.";
+      return "This project configures no frontend, so it drives no browser - run `/spechub:setup` if it should have one.";
     case "host-undescribed":
       return `This host has not been described yet: none of ${BROWSER_AXIS_LIST} is set - run \`/spechub:host\` to describe this machine.`;
     case "host-declares-none":
@@ -16841,28 +17240,306 @@ function browserModeReason(resolved) {
 function checkOptionalAxes(report, config) {
   report.heading("Optional axes (informational only)");
   for (const axis of HOST_AXES.filter((a) => !a.required)) {
+    const id = `optional-axis:${axis.key}`;
     const result = getKey(config, axis.key);
     if (result.status !== "set") {
-      report.line("info", `${axis.key} is unset`);
+      report.line("info", id, `${axis.key} is unset`);
       continue;
     }
     const dependency = inertDependency(config, axis.key);
     const note = dependency ? ` - inert unless ${dependency.key} is ${String(dependency.value)}` : "";
-    report.line("info", `${axis.key} = ${JSON.stringify(result.value)}${note}`);
+    report.line("info", id, `${axis.key} = ${JSON.stringify(result.value)}${note}`);
   }
 }
-function register6(program3) {
-  const configCmd = program3.command("config").description("Manage global configuration");
+function firstLineOf(err) {
+  return (err instanceof Error ? err.message : String(err)).split("\n")[0];
+}
+function readJsonFile(path) {
+  if (!existsSync9(path)) return { status: "missing" };
+  try {
+    return { status: "read", value: JSON.parse(readFileSync8(path, "utf-8")) };
+  } catch (err) {
+    return { status: "unreadable", detail: firstLineOf(err) };
+  }
+}
+function isFile(path) {
+  return existsSync9(path) && statSync2(path).isFile();
+}
+function checkDomainMap(report, root, specSync) {
+  const id = "domain-map";
+  const consequence = "spec sync then skips silently and the living specs stop being updated";
+  const path = join12(root, DOMAIN_MAP_PATH);
+  if (!existsSync9(path)) {
+    report.line(
+      specSync ? "fail" : "info",
+      id,
+      specSync ? `${DOMAIN_MAP_PATH} is missing - ${consequence}` : `${DOMAIN_MAP_PATH} is missing, and workflow.spec_sync is false - nothing reads the map, so it is only owed if spec sync goes back on`
+    );
+    return;
+  }
+  let parsed;
+  try {
+    parsed = readYaml(path);
+  } catch (err) {
+    report.line("fail", id, `${DOMAIN_MAP_PATH} is not valid YAML: ${firstLineOf(err)}`);
+    return;
+  }
+  const domains = domainCount(parsed);
+  if (domains === null || domains === 0) {
+    report.line("fail", id, `${DOMAIN_MAP_PATH} names no domains - ${consequence}`);
+    return;
+  }
+  report.line(
+    "pass",
+    id,
+    `${DOMAIN_MAP_PATH} maps ${domains} ${domains === 1 ? "domain" : "domains"}`
+  );
+}
+function checkFrontendFiles(report, root, project, helpersDir, verification) {
+  if (firstBinaryOnPath([AGENT_BROWSER_BIN])) {
+    report.line("pass", "agent-browser", `${AGENT_BROWSER_BIN} is on PATH`);
+  } else {
+    report.line(
+      "fail",
+      "agent-browser",
+      `${AGENT_BROWSER_BIN} is not on PATH - install it with \`${AGENT_BROWSER_INSTALL}\``
+    );
+  }
+  checkAgentBrowserJson(report, root, project.cdpPort);
+  checkVerificationKnowledge(report, root, helpersDir);
+  checkFrontendVerification(report, verification);
+}
+function checkAgentBrowserJson(report, root, expected) {
+  const id = "agent-browser-json";
+  const read = readJsonFile(join12(root, AGENT_BROWSER_JSON_FILE));
+  if (read.status === "missing") {
+    report.line(
+      "fail",
+      id,
+      `${AGENT_BROWSER_JSON_FILE} is missing from the project root - ${AGENT_BROWSER_BIN} needs one naming CDP port ${expected}`
+    );
+    return;
+  }
+  if (read.status === "unreadable") {
+    report.line("fail", id, `${AGENT_BROWSER_JSON_FILE} is not valid JSON: ${read.detail}`);
+    return;
+  }
+  const port = agentBrowserCdpPort(read.value);
+  if (port === null) {
+    report.line("fail", id, `${AGENT_BROWSER_JSON_FILE} names no cdp port - it should name ${expected}`);
+    return;
+  }
+  if (port !== expected) {
+    report.line(
+      "fail",
+      id,
+      `${AGENT_BROWSER_JSON_FILE} names CDP port ${port} but this project uses ${expected} - set both to the same port`
+    );
+    return;
+  }
+  report.line("pass", id, `${AGENT_BROWSER_JSON_FILE} names CDP port ${port}, matching this project`);
+}
+function checkVerificationKnowledge(report, root, helpersDir) {
+  const id = "verification-knowledge";
+  if (helpersDir === null) {
+    report.line(
+      "fail",
+      id,
+      `frontend.helpers_dir is unset, so there is nowhere for ${VERIFICATION_KNOWLEDGE_FILE} to live`
+    );
+    return;
+  }
+  const relative2 = join12(helpersDir, VERIFICATION_KNOWLEDGE_FILE);
+  if (!isFile(join12(root, relative2))) {
+    report.line(
+      "fail",
+      id,
+      `${relative2} is missing - the frontend verifier keeps what it learns there`
+    );
+    return;
+  }
+  report.line("pass", id, `${relative2} is present`);
+}
+function checkFrontendVerification(report, enabled) {
+  const id = "frontend-verification";
+  const key = "workflow.frontend_verification";
+  if (!enabled) {
+    report.line(
+      "info",
+      id,
+      `${key} is not true, so a UI change lands unverified - set it to true to run the frontend verifier`
+    );
+    return;
+  }
+  report.line("pass", id, `${key} is true, so a UI change is verified in a browser before it lands`);
+}
+function checkProjectFiles(report, project) {
+  report.heading("This project's files");
+  if (!project.root) {
+    report.line("info", "no-project", "No SpecHub project here, so there are no project files to check");
+    return;
+  }
+  checkDomainMap(report, project.root, project.workflow.specSync);
+  if (project.context.hasFrontend) {
+    checkFrontendFiles(
+      report,
+      project.root,
+      project.context,
+      project.helpersDir,
+      project.workflow.frontendVerification
+    );
+  }
+}
+function settingsFiles(root) {
+  return [
+    {
+      label: join12(CLAUDE_DIR, CLAUDE_LOCAL_SETTINGS_FILE),
+      path: join12(root, CLAUDE_DIR, CLAUDE_LOCAL_SETTINGS_FILE)
+    },
+    {
+      label: join12(CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
+      path: join12(root, CLAUDE_DIR, CLAUDE_SETTINGS_FILE)
+    },
+    {
+      label: join12("~", CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
+      path: join12(homedir2(), CLAUDE_DIR, CLAUDE_SETTINGS_FILE)
+    }
+  ];
+}
+function checkOutputStyle(report, root) {
+  const id = "output-style";
+  report.heading("Writing style");
+  for (const file of settingsFiles(root)) {
+    const read = readJsonFile(file.path);
+    if (read.status === "missing") continue;
+    if (read.status === "unreadable") {
+      report.line(
+        "fail",
+        id,
+        `${file.label} is not valid JSON, so the outputStyle it selects cannot be read: ${read.detail}`
+      );
+      return;
+    }
+    const style = outputStyleOf(read.value);
+    if (style === null) continue;
+    report.line(
+      style === SPECHUB_OUTPUT_STYLE ? "pass" : "info",
+      id,
+      `outputStyle is ${style}, selected by ${file.label}`
+    );
+    return;
+  }
+  report.line("info", id, "outputStyle is not set by any settings file, so Claude Code uses its default");
+}
+function isHostKey(key) {
+  return key === "host" || key.startsWith("host.");
+}
+function unknownConfigKey(key) {
+  return new ConfigValidationError(
+    `Unknown config key "${key}".
+Project keys (${join12(SPECHUB_DIR, PROJECT_FILE)}): ${PROJECT_KEY_LIST.join(", ")}
+Host keys start with host. and are listed in docs/dev-setups.md.`
+  );
+}
+function setHostKey(key, value) {
+  const parsed = parseValue(key, value);
+  const config = setKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key, parsed);
+  writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
+  console.log(source_default.green(`Set ${key} = ${JSON.stringify(parsed)}`));
+  const dependency = inertDependency(config, key);
+  if (dependency) {
+    console.error(
+      source_default.yellow(
+        `Warning: ${key} has no effect unless ${dependency.key} is ${String(dependency.value)}`
+      )
+    );
+  }
+}
+function projectFileFor(key, purpose) {
+  if (!projectKeySpec(key)) throw unknownConfigKey(key);
+  const root = findProjectRoot();
+  if (!root) {
+    throw new ConfigValidationError(
+      `There is no SpecHub project here, so ${key} ${purpose}. Run /spechub:setup first.`
+    );
+  }
+  return join12(root, SPECHUB_DIR, PROJECT_FILE);
+}
+function setProjectFileKey(key, value) {
+  const file = projectFileFor(key, "has nowhere to go");
+  const parsed = parseProjectValue(key, value);
+  setProjectKey(file, key, parsed);
+  console.log(source_default.green(`Set ${key} = ${JSON.stringify(parsed)}`));
+}
+function printConfigValue(value) {
+  console.log(typeof value === "string" ? value : JSON.stringify(value));
+}
+function getHostKey(key) {
+  const result = getKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
+  if (result.status === "unset") {
+    console.error(source_default.yellow(`${key} is unset${qualifier(key, result.required)}`));
+    process.exit(2);
+  }
+  printConfigValue(result.value);
+}
+function unsetHostKey(key) {
+  const { config, removed } = unsetKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
+  if (!removed) {
+    console.log(source_default.dim(`${key} was not set`));
+    return;
+  }
+  writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
+  console.log(source_default.green(`Removed ${key}`));
+}
+function getProjectFileKey(key) {
+  const result = getProjectKey(projectFileFor(key, "has no value to read"), key);
+  if (result.status === "unset") {
+    const fallback = projectKeyDefault(key);
+    const note = fallback === void 0 ? "" : ` - the documented default is ${fallback}`;
+    console.error(source_default.yellow(`${key} is unset${note}`));
+    process.exit(2);
+  }
+  printConfigValue(result.value);
+}
+function unsetProjectFileKey(key) {
+  const file = projectFileFor(key, "has nothing to remove");
+  if (!unsetProjectKey(file, key)) {
+    console.log(source_default.dim(`${key} was not set`));
+    return;
+  }
+  console.log(source_default.green(`Removed ${key}`));
+}
+function printProjectKeys(root) {
+  if (!root) {
+    console.log(source_default.dim("No SpecHub project here."));
+    return;
+  }
+  const file = join12(root, SPECHUB_DIR, PROJECT_FILE);
+  console.log(source_default.bold(file));
+  const rows = listProjectKeys(file);
+  if (rows.length === 0) {
+    console.log(source_default.dim("This project states no configuration."));
+    return;
+  }
+  for (const [key, value] of rows) console.log(`${key} = ${JSON.stringify(value)}`);
+}
+function register5(program3) {
+  const configCmd = program3.command("config").description("Read and change the host and project configuration");
   configCmd.command("path").description("Print config file path").action(() => {
     console.log(GLOBAL_CONFIG_FILE);
   });
-  configCmd.command("list").description("Show all settings").option("--json", "output as JSON").action((opts) => {
+  configCmd.command("list").description("Show every setting the two config files state").option("--json", "output as JSON").action((opts) => {
     reportingUserErrors(() => {
       const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+      const root = findProjectRoot();
       if (opts.json) {
-        console.log(JSON.stringify(config, null, 2));
+        const project = root ? Object.fromEntries(listProjectKeys(join12(root, SPECHUB_DIR, PROJECT_FILE))) : null;
+        console.log(JSON.stringify({ ...config, project }, null, 2));
         return;
       }
+      printProjectKeys(root);
+      console.log("");
+      console.log(source_default.bold(GLOBAL_CONFIG_FILE));
       if (Object.keys(config).length === 0) {
         console.log(source_default.dim("No configuration set."));
         return;
@@ -16897,17 +17574,20 @@ function register6(program3) {
       printHostAxes(axes);
     });
   });
-  configCmd.command("check").description("Check the host setup against what this machine can actually do").action(async () => {
+  configCmd.command("check").description("Check the host setup against what this machine can actually do").option("--json", "output as JSON").action(async (opts) => {
     await reportingUserErrorsAsync(async () => {
       const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-      const project = loadProject().context;
+      const loaded = loadProject();
+      const project = loaded.context;
       const report = new CheckReport();
       checkRequiredAxes(report, config, project);
       checkOrchestrators(report, config);
       await checkDeclaredBrowserModes(report, config, project);
       checkPreferredBrowserMode(report, config, project);
       checkOptionalAxes(report, config);
-      report.finish();
+      checkProjectFiles(report, loaded);
+      checkOutputStyle(report, loaded.root ?? process.cwd());
+      report.finish(opts.json === true);
     });
   });
   configCmd.command("browser-mode").description("Report which browser mode the frontend verifier should use here, and why").option("--json", "output as JSON").action((opts) => {
@@ -16940,45 +17620,27 @@ function register6(program3) {
   });
   configCmd.command("get").description("Get a config value").argument("<key>", "config key").action((key) => {
     reportingUserErrors(() => {
-      const result = getKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
-      if (result.status === "unset") {
-        console.error(source_default.yellow(`${key} is unset${qualifier(key, result.required)}`));
-        process.exit(2);
-      }
-      console.log(
-        typeof result.value === "string" ? result.value : JSON.stringify(result.value)
-      );
+      if (isHostKey(key)) getHostKey(key);
+      else getProjectFileKey(key);
     });
   });
-  configCmd.command("set").description("Set a config value").argument("<key>", "config key").argument("<value>", "config value").action((key, value) => {
+  configCmd.command("set").description("Set a config value").argument("<key>", "config key").argument("<value>", "config value").addHelpText(
+    "after",
+    "\nReference: docs/dev-setups.md for the host.* axes, docs/config-reference.md for the spechub/project.yaml keys.\n"
+  ).action((key, value) => {
     reportingUserErrors(() => {
-      const parsed = parseValue(key, value);
-      const config = setKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key, parsed);
-      writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
-      console.log(source_default.green(`Set ${key} = ${JSON.stringify(parsed)}`));
-      const dependency = inertDependency(config, key);
-      if (dependency) {
-        console.error(
-          source_default.yellow(
-            `Warning: ${key} has no effect unless ${dependency.key} is ${String(dependency.value)}`
-          )
-        );
-      }
+      if (isHostKey(key)) setHostKey(key, value);
+      else setProjectFileKey(key, value);
     });
   });
   configCmd.command("unset").description("Remove a config value").argument("<key>", "config key").action((key) => {
     reportingUserErrors(() => {
-      const { config, removed } = unsetKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
-      if (!removed) {
-        console.log(source_default.dim(`${key} was not set`));
-        return;
-      }
-      writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
-      console.log(source_default.green(`Removed ${key}`));
+      if (isHostKey(key)) unsetHostKey(key);
+      else unsetProjectFileKey(key);
     });
   });
 }
-var AXIS_KEY_WIDTH, PROJECT_LABEL_WIDTH, CheckReport, BROWSER_AXIS_LIST;
+var AXIS_KEY_WIDTH, PROJECT_LABEL_WIDTH, OUTCOME_LABELS, CheckReport, BROWSER_AXIS_LIST, DOMAIN_MAP_PATH, AGENT_BROWSER_INSTALL;
 var init_config = __esm({
   "src/commands/config.ts"() {
     "use strict";
@@ -16987,50 +17649,70 @@ var init_config = __esm({
     init_global_config();
     init_host_status();
     init_host_probe();
+    init_project_config();
     init_project();
     init_utils();
     AXIS_KEY_WIDTH = Math.max(...HOST_AXES.map((axis) => axis.key.length));
     PROJECT_LABEL_WIDTH = 20;
+    OUTCOME_LABELS = {
+      pass: source_default.green("PASS"),
+      fail: source_default.red("FAIL"),
+      info: source_default.dim("INFO")
+    };
     CheckReport = class {
-      number = 0;
+      sections = [];
       failed = false;
       missingRequired = false;
-      counts = { pass: 0, fail: 0, info: 0 };
       heading(title) {
-        this.number += 1;
-        console.log(source_default.bold(`
-${this.number}. ${title}`));
+        this.sections.push({ title, rows: [] });
       }
-      line(outcome, message) {
-        this.counts[outcome] += 1;
-        if (outcome === "fail") this.failed = true;
-        const label = outcome === "pass" ? source_default.green("PASS") : outcome === "fail" ? source_default.red("FAIL") : source_default.dim("INFO");
-        console.log(`   ${label} ${message}`);
+      line(status, id, message) {
+        if (status === "fail") this.failed = true;
+        this.sections[this.sections.length - 1].rows.push({ id, status, message });
       }
       /** A required axis is unset: reported like any failure, but it sets exit 2. */
-      missing(message) {
+      missing(id, message) {
         this.missingRequired = true;
-        this.line("fail", message);
+        this.line("fail", id, message);
       }
-      finish() {
-        console.log(
-          `
-${this.counts.pass} passed, ${this.counts.fail} failed, ${this.counts.info} informational`
-        );
+      rows() {
+        return this.sections.flatMap((section) => section.rows);
+      }
+      printText() {
+        this.sections.forEach((section, index) => {
+          console.log(source_default.bold(`
+${index + 1}. ${section.title}`));
+          for (const row of section.rows) {
+            console.log(`   ${OUTCOME_LABELS[row.status]} ${row.message}`);
+          }
+        });
+        const counts = { pass: 0, fail: 0, info: 0 };
+        for (const row of this.rows()) counts[row.status] += 1;
+        console.log(`
+${counts.pass} passed, ${counts.fail} failed, ${counts.info} informational`);
+      }
+      finish(asJson) {
+        if (asJson) {
+          console.log(JSON.stringify({ checks: this.rows() }, null, 2));
+        } else {
+          this.printText();
+        }
         process.exitCode = this.missingRequired ? 2 : this.failed ? 1 : 0;
       }
     };
     BROWSER_AXIS_LIST = BROWSER_MODE_PRIORITY.map((mode) => BROWSER_AXIS_KEYS[mode]).join(", ");
+    DOMAIN_MAP_PATH = join12(SPECHUB_DIR, DOMAIN_MAP_FILE);
+    AGENT_BROWSER_INSTALL = `npm install -g ${AGENT_BROWSER_BIN}`;
   }
 });
 
 // src/commands/feedback.ts
 var feedback_exports = {};
 __export(feedback_exports, {
-  register: () => register7
+  register: () => register6
 });
 import { execSync } from "node:child_process";
-function register7(program3) {
+function register6(program3) {
   program3.command("feedback").description("Submit feedback or report an issue").argument("<message>", "feedback message").option("--body <text>", "additional details").action((message, opts) => {
     const title = encodeURIComponent(message);
     const body = opts.body ? encodeURIComponent(opts.body) : "";
@@ -17055,7 +17737,7 @@ var init_feedback = __esm({
 });
 
 // src/lib/ackfile.ts
-import { existsSync as existsSync9, readFileSync as readFileSync7, renameSync, rmSync as rmSync2, writeFileSync as writeFileSync4 } from "node:fs";
+import { existsSync as existsSync10, readFileSync as readFileSync9, renameSync, rmSync as rmSync2, writeFileSync as writeFileSync4 } from "node:fs";
 function isAckDecision(value) {
   return typeof value === "string" && ACK_DECISIONS.includes(value);
 }
@@ -17110,7 +17792,7 @@ function writeAck(args) {
       `That is a sidecar path, not a handoff file. Pass ${file.slice(0, -ACK_SUFFIX.length)} instead.`
     );
   }
-  if (!existsSync9(file)) {
+  if (!existsSync10(file)) {
     throw new Error(`No handoff file at ${file}. Check the path the handoff gave you.`);
   }
   const record2 = {
@@ -17126,7 +17808,7 @@ function writeAck(args) {
 function readAck(file) {
   let raw;
   try {
-    raw = readFileSync7(ackPath(file), "utf-8");
+    raw = readFileSync9(ackPath(file), "utf-8");
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
@@ -17157,11 +17839,11 @@ var init_ackfile = __esm({
 });
 
 // src/lib/ackwatch.ts
-import { readFileSync as readFileSync8, statSync as statSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { basename, join as join13 } from "node:path";
+import { readFileSync as readFileSync10, statSync as statSync3 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { basename as basename2, join as join13 } from "node:path";
 function transcriptPath(cwd, sessionId, projectsDir) {
-  const base = projectsDir ?? join13(homedir2(), ".claude", "projects");
+  const base = projectsDir ?? join13(homedir3(), ".claude", "projects");
   return join13(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
 }
 function parseAck(text) {
@@ -17254,7 +17936,7 @@ function mentionsFile(input, file) {
   } catch {
     return false;
   }
-  const name = basename(file);
+  const name = basename2(file);
   return serialized.includes(file) || name.length > 0 && serialized.includes(name);
 }
 function isEngagement(record2, file) {
@@ -17322,7 +18004,7 @@ function analyze(lines, options) {
 }
 function readLines(path) {
   try {
-    return readFileSync8(path, "utf-8").split("\n");
+    return readFileSync10(path, "utf-8").split("\n");
   } catch (err) {
     if (err.code === "ENOENT") return [];
     throw err;
@@ -17330,15 +18012,15 @@ function readLines(path) {
 }
 function stampTranscript(path) {
   try {
-    const stats = statSync2(path);
+    const stats = statSync3(path);
     return `${stats.size}:${stats.mtimeMs}`;
   } catch {
     return null;
   }
 }
 function sleep(ms) {
-  return new Promise((resolve6) => {
-    setTimeout(resolve6, ms);
+  return new Promise((resolve5) => {
+    setTimeout(resolve5, ms);
   });
 }
 async function watch(path, options = {}) {
@@ -17391,9 +18073,9 @@ var init_ackwatch = __esm({
 // src/commands/handoff.ts
 var handoff_exports = {};
 __export(handoff_exports, {
-  register: () => register8
+  register: () => register7
 });
-import { isAbsolute, resolve as resolve3 } from "node:path";
+import { isAbsolute, resolve as resolve2 } from "node:path";
 function parseIntAtLeast(name, min) {
   return (value) => {
     const parsed = value.trim() === "" ? NaN : Number(value);
@@ -17424,7 +18106,7 @@ function resolveTranscript(opts) {
   }
   return transcriptPath(opts.cwd, opts.sessionId);
 }
-function register8(program3) {
+function register7(program3) {
   const handoffCmd = program3.command("handoff").description("Hand work to another agent session");
   handoffCmd.command("watch").description(
     "Watch a handoff target's transcript and report whether it acknowledged the handoff, went silent for N turns, or timed out"
@@ -17483,7 +18165,7 @@ function register8(program3) {
         // The receiver types this in the directory it is working in, so a
         // relative path is the natural thing to write. Resolving it here is
         // what puts the sidecar beside the real handoff file.
-        file: resolve3(opts.file),
+        file: resolve2(opts.file),
         decision,
         reason: reason.join(" ")
       });
@@ -20651,8 +21333,8 @@ var require_pattern = __commonJS({
     }
     exports.endsWithSlashGlobStar = endsWithSlashGlobStar;
     function isAffectDepthOfReadingPattern(pattern) {
-      const basename2 = path.basename(pattern);
-      return endsWithSlashGlobStar(pattern) || isStaticPattern(basename2);
+      const basename3 = path.basename(pattern);
+      return endsWithSlashGlobStar(pattern) || isStaticPattern(basename3);
     }
     exports.isAffectDepthOfReadingPattern = isAffectDepthOfReadingPattern;
     function expandPatternsWithBraceExpansion(patterns) {
@@ -21126,11 +21808,11 @@ var require_out = __commonJS({
       async.read(path, getSettings(optionsOrSettingsOrCallback), callback);
     }
     exports.stat = stat;
-    function statSync4(path, optionsOrSettings) {
+    function statSync5(path, optionsOrSettings) {
       const settings = getSettings(optionsOrSettings);
       return sync.read(path, settings);
     }
-    exports.statSync = statSync4;
+    exports.statSync = statSync5;
     function getSettings(settingsOrOptions = {}) {
       if (settingsOrOptions instanceof settings_1.default) {
         return settingsOrOptions;
@@ -21795,41 +22477,41 @@ var require_queue = __commonJS({
       queue.drained = drained;
       return queue;
       function push(value) {
-        var p = new Promise(function(resolve6, reject) {
+        var p = new Promise(function(resolve5, reject) {
           pushCb(value, function(err, result) {
             if (err) {
               reject(err);
               return;
             }
-            resolve6(result);
+            resolve5(result);
           });
         });
         p.catch(noop);
         return p;
       }
       function unshift(value) {
-        var p = new Promise(function(resolve6, reject) {
+        var p = new Promise(function(resolve5, reject) {
           unshiftCb(value, function(err, result) {
             if (err) {
               reject(err);
               return;
             }
-            resolve6(result);
+            resolve5(result);
           });
         });
         p.catch(noop);
         return p;
       }
       function drained() {
-        var p = new Promise(function(resolve6) {
+        var p = new Promise(function(resolve5) {
           process.nextTick(function() {
             if (queue.idle()) {
-              resolve6();
+              resolve5();
             } else {
               var previousDrain = queue.drain;
               queue.drain = function() {
                 if (typeof previousDrain === "function") previousDrain();
-                resolve6();
+                resolve5();
                 queue.drain = previousDrain;
               };
             }
@@ -22315,9 +22997,9 @@ var require_stream3 = __commonJS({
         });
       }
       _getStat(filepath) {
-        return new Promise((resolve6, reject) => {
+        return new Promise((resolve5, reject) => {
           this._stat(filepath, this._fsStatSettings, (error, stats) => {
-            return error === null ? resolve6(stats) : reject(error);
+            return error === null ? resolve5(stats) : reject(error);
           });
         });
       }
@@ -22341,10 +23023,10 @@ var require_async5 = __commonJS({
         this._readerStream = new stream_1.default(this._settings);
       }
       dynamic(root, options) {
-        return new Promise((resolve6, reject) => {
+        return new Promise((resolve5, reject) => {
           this._walkAsync(root, options, (error, entries) => {
             if (error === null) {
-              resolve6(entries);
+              resolve5(entries);
             } else {
               reject(error);
             }
@@ -22354,10 +23036,10 @@ var require_async5 = __commonJS({
       async static(patterns, options) {
         const entries = [];
         const stream = this._readerStream.static(patterns, options);
-        return new Promise((resolve6, reject) => {
+        return new Promise((resolve5, reject) => {
           stream.once("error", reject);
           stream.on("data", (entry) => entries.push(entry));
-          stream.once("end", () => resolve6(entries));
+          stream.once("end", () => resolve5(entries));
         });
       }
     };
@@ -23015,7 +23697,7 @@ var require_out4 = __commonJS({
 });
 
 // src/lib/prose.ts
-import { resolve as resolve4 } from "node:path";
+import { resolve as resolve3 } from "node:path";
 function splitCells(body) {
   const cells = [];
   let current = "";
@@ -23489,7 +24171,7 @@ function lintProse(text, vocabulary) {
   return findings.sort((a, b) => a.line - b.line || a.column - b.column);
 }
 function isVocabularyFile(filePath, vocabularyPath) {
-  return resolve4(filePath) === resolve4(vocabularyPath);
+  return resolve3(filePath) === resolve3(vocabularyPath);
 }
 var RULES, SENTENCE_LIMIT_PROSE, SENTENCE_LIMIT_INSTRUCTION, PARAGRAPH_LIMIT, VOCABULARY_COLUMNS, DELETE_SENTINEL, BLOCKQUOTE_PREFIX, LIST_MARKER, ORDERED_MARKER, HEADING, FENCE_OPEN, FENCE_CLOSE, EMOJI_PART, EMOJI, LEGAL_MARKS, BE_FORMS, IRREGULAR_PARTICIPLES, NOT_PARTICIPLES, PASSIVE_MODIFIER, PASSIVE, ABBREVIATIONS;
 var init_prose = __esm({
@@ -23669,12 +24351,12 @@ var init_prose = __esm({
 var lint_prose_exports = {};
 __export(lint_prose_exports, {
   collectFiles: () => collectFiles,
-  register: () => register9,
+  register: () => register8,
   reportFile: () => reportFile,
   summarize: () => summarize
 });
-import { existsSync as existsSync10, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
-import { join as join14, relative, resolve as resolve5 } from "node:path";
+import { existsSync as existsSync11, readFileSync as readFileSync11, statSync as statSync4 } from "node:fs";
+import { join as join14, relative, resolve as resolve4 } from "node:path";
 function loadVocabulary() {
   const pluginRoot = findPluginRoot();
   if (!pluginRoot) {
@@ -23710,12 +24392,12 @@ function collectFiles(paths, opts) {
   const missing = [];
   if (opts.all) files.push(...markdownIn(opts.root));
   for (const path of paths) {
-    const full = resolve5(path);
-    if (!existsSync10(full)) {
+    const full = resolve4(path);
+    if (!existsSync11(full)) {
       missing.push(path);
       continue;
     }
-    if (statSync3(full).isDirectory()) {
+    if (statSync4(full).isDirectory()) {
       files.push(...markdownIn(full));
     } else {
       files.push(full);
@@ -23753,7 +24435,7 @@ function displayPath(root, file) {
 function reportFile(file, display, vocabulary) {
   let text;
   try {
-    text = readFileSync9(file, "utf-8");
+    text = readFileSync11(file, "utf-8");
   } catch {
     console.error(source_default.yellow(`Cannot read, skipping: ${display}`));
     return { path: display, findings: [], unreadable: true };
@@ -23793,7 +24475,7 @@ function printSummary(summary, missing) {
     `  ${source_default.bold(String(summary.total).padStart(5))}  total in ${summary.filesWithFindings} of ${summary.totalFiles} file(s)`
   );
 }
-function register9(program3) {
+function register8(program3) {
   program3.command("lint-prose").description("Warn about prose that drifts from the writing standard").argument("[paths...]", "files or directories to lint").option("--all", "lint every .md file in the repository").action((paths, opts) => {
     const root = findProjectRoot() ?? process.cwd();
     if (paths.length === 0 && !opts.all) {
@@ -23890,7 +24572,6 @@ function resolveVersion(startDir) {
 // src/index.ts
 var program2 = new Command().name("spechub").description("CLI for spec-driven development").version(resolveVersion(import.meta.dirname));
 var commands = await Promise.all([
-  Promise.resolve().then(() => (init_init(), init_exports)),
   Promise.resolve().then(() => (init_list(), list_exports)),
   Promise.resolve().then(() => (init_show(), show_exports)),
   Promise.resolve().then(() => (init_archive(), archive_exports)),
