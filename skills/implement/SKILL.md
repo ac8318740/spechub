@@ -88,13 +88,34 @@ The pipeline's state lives inside the claim, not on the node. For each
 claimed node (or the bare request), run the Implementation discipline to
 completion:
 
-1. **test-writer subagent** – failing tests from the node's behaviour
-   description. Skip for pure config/setup work with no testable behaviour.
+1. **test-writer subagent** – tests from the node's behaviour description.
+   Under strict they must all fail before step 2 runs. Skip step 1 for pure
+   config or setup work with no testable behaviour.
 2. **task-executor subagent** – make the tests pass. Executor CANNOT modify
    test files.
-3. **task-checker subagent** – verify tests pass, full suite passes, and
+3. **Format** – run `commands.format` over the files the work touched. A
+   `null` value means this project has no format step. Report a non-zero
+   exit. It never counts as a failed implementation.
+4. **task-checker subagent** – verify tests pass, full suite passes, and
    test count >= baseline. Also check the mock audit, TDD isolation,
    integration wired, and frontend visual verification (if applicable).
+
+`workflow.tdd.strict: false`, relaxed TDD, runs step 2 before step 1. It
+skips nothing. Relaxed TDD means nobody writes the tests first, and all
+three subagents still run. The format step stays immediately before the
+checker, so under relaxed it formats the new tests as well.
+
+Relaxed costs the test-writer some of its independence, and you state that
+cost rather than hide it. The implementation already sits in the working
+tree when the test-writer runs. Tell it to write the tests from the node's
+requirements, and to leave the implementation unread. Under strict there is
+no implementation for it to read, which is the stronger guarantee.
+
+The checker's gate moves with the setting. Under `true` the new tests failed
+before the executor and pass after it. Under `false` nothing can show them
+failing without the implementation. The checker then holds the new tests to
+existing and passing. It holds the full suite to passing, and the test count
+to not dropping.
 
 If the checker fails, route back to the executor with the feedback. If the
 work stalls or the session must stop mid-node, release the claim
@@ -143,7 +164,8 @@ extracts the durable record from the diff.
 ## Key rules
 
 - **TDD pipeline is mandatory** – test-writer -> task-executor ->
-  task-checker. No exceptions except pure config work.
+  task-checker. Only pure config work skips the test-writer.
+  `workflow.tdd.strict: false` reorders the first two and skips neither.
 - **Executors CANNOT modify test files** – if tests are wrong, report it.
 - **The tracker is the progress record** – claim on start, resolve on pass,
   release on stall. No checkbox files, no phase fields.
