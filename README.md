@@ -49,10 +49,12 @@ For the full picture – each step and how they connect – read [docs/workflows
 Then in your project:
 
 ```
-/spechub:init
+/spechub:setup
 ```
 
 This detects your project type and generates `spechub/project.yaml` with workflow settings. SpecHub loads its orchestrator instructions at session start whenever it detects a spechub project. Your CLAUDE.md stays clean for project-specific content.
+
+For every key in that file, its values, its default and what changes when you change it, read [docs/config-reference.md](docs/config-reference.md).
 
 Each machine also declares its own dev setup once, with `/spechub:host`. For every axis, what reads it, and how to describe a fresh machine, read [docs/dev-setups.md](docs/dev-setups.md).
 
@@ -64,7 +66,7 @@ The setup builds on herdr, a terminal multiplexer that keeps each agent's termin
 
 ## CLI
 
-SpecHub ships a Node.js CLI (`spechub init`, `spechub list`, `spechub node ...`, `spechub archive`).
+SpecHub ships a Node.js CLI (`spechub config`, `spechub list`, `spechub node ...`, `spechub archive`).
 
 A tracker has to provide four operations and nothing more: create, read, update, list. GitHub issues are the first-class tracker, because they already have the two links a map needs. Sub-issues carry the provenance parent, and issue dependencies carry the blocking edges. The CLI also ships a files tracker as the fallback (`spechub node create | read | update | list`), which writes one markdown file per node under `spechub/maps/<name>/`.
 
@@ -106,7 +108,6 @@ For work with open decisions, chart it with `/spechub:map` first.
 |-------|-------------|
 | `/spechub:commit` | Git commit with mandatory spec sync |
 | `/spechub:archive` | Close out a cleared map – check the residue landed (the durable output: spec updates, ADRs, glossary entries), then dispose of the nodes |
-| `/spechub:config` | View/modify workflow settings |
 | `/spechub:sync` | Update specs from code changes |
 | `/spechub:handoff` | Hand work to a visible agent – a new one in its own pane, or one already running – with acknowledgement |
 | `/spechub:compact-and-continue` | Anchor the session's load-bearing state to survive compaction, then continue in place |
@@ -115,7 +116,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:init` | Initialize SpecHub in a project |
+| `/spechub:setup` | Set up SpecHub in a project, and change how a project already set up is configured |
 | `/spechub:bootstrap` | Generate initial living specs from code |
 | `/spechub:explore` | Thinking partner mode (read-only) |
 | `/spechub:quick-fix` | Structured bug fix workflow with root cause analysis |
@@ -133,7 +134,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 
 | Agent | Role |
 |-------|------|
-| `test-writer` | TDD Phase 1 – writes failing tests from requirements only |
+| `test-writer` | Writes tests from requirements only, before the code under strict TDD and after it under relaxed |
 | `task-executor` | TDD Phase 2 – makes tests pass, cannot modify tests |
 | `task-checker` | TDD Phase 3 – verifies everything (mock audit, regression, TDD isolation) |
 | `frontend-verifier` | TDD Phase 4 – real browser verification via agent-browser CLI (when frontend configured) |
@@ -142,7 +143,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 
 The plugin ships one output style, shown to Claude Code as `spechub:ac-writing-style`. It applies the `writing` skill's plain-language rules and the `visual-docs` skill's Minto pyramid to every chat reply. A reply leads with the answer, keeps one idea per sentence, names the actor, and uses no em dash or emoji.
 
-`/spechub:init` offers the style as a late optional step, and `/spechub:config check` offers it on a project you already set up. Both write `outputStyle` for you. Use `~/.claude/settings.json` for every project, or `.claude/settings.local.json` for this one. A project value overrides the global one. The style applies after `/clear`, or in a new session. The plugin never forces it on.
+`/spechub:setup` offers the style on both paths: late and optional on a new project, and as a health-check row on one already set up. The skill writes `outputStyle` for you, and asks first. Use `~/.claude/settings.json` for every project, or `.claude/settings.local.json` for this one. A project value overrides the global one. The style applies after `/clear`, or in a new session. The plugin never forces it on.
 
 ## Language profiles
 
@@ -152,11 +153,11 @@ The plugin ships one output style, shown to Claude Code as `spechub:ac-writing-s
 
 ## Design principles
 
-- **TDD is structural, not aspirational.** Test-writer can't see the implementation plan. Executor can't touch test files. Tests stay independent of the code they verify.
+- **TDD is structural under strict, instructional under relaxed.** Executor can't touch test files, either way. Under strict TDD the test-writer runs first, so no implementation exists for it to see. Under relaxed it runs after the executor, and only its instructions keep it from reading the code it tests. The two settings do not give equal independence, which is why strict is the default.
 - **Specs converge toward reality.** Every commit updates the living specs via spec sync. Agents fix inaccuracies on sight. Specs track what the code implements, never what anyone plans.
 - **Progressive materialisation.** Structure appears only when it has to persist. A typo fix needs no machinery. A long effort earns a map. The same entry point serves both, and nothing declares which.
 - **Planning outweighs coding.** Three parallel explorers run before anyone writes code. Mock audits, mutation checks, regression suites, integration wiring.
-- **Strict defaults, easy to relax.** Use `/spechub:config` to adjust TDD strictness, orchestrator mode, or how grilling presents questions.
+- **Strict defaults, easy to relax.** Run `spechub config set` to adjust TDD strictness, orchestrator mode, or how grilling presents questions.
 
 ## License
 

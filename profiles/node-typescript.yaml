@@ -1,5 +1,5 @@
 # Node/TypeScript project profile for spechub
-# Used by /spechub:init to generate spechub/project.yaml
+# Used by /spechub:setup to generate spechub/project.yaml
 
 commands:
   test: "npm test"
@@ -21,4 +21,3 @@ venv: null
 frontend:
   dev_server_url: "http://localhost:3000"
   dev_server_check: "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000"
-  framework: "react"

@@ -580,7 +580,7 @@ Not automated yet: [what still has to be done by hand – logging in to Tailscal
 connecting the Playwriter bridge, pairing a client to Orca, turning on "Show in
 worktree list" – or "nothing".]
 
-Next: [run /spechub:init in a project, or `~/.claude/spechub/bin/spechub config
+Next: [run /spechub:setup in a project, or `~/.claude/spechub/bin/spechub config
 check` to health-check what was just declared against this machine and against
 the project in the current directory.]
 ```
