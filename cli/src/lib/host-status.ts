@@ -1,4 +1,4 @@
-import { HOST_AXES, getKey, type GlobalConfig } from './global-config.js';
+import { HOST_AXES, getKey, parseBooleanWord, type GlobalConfig } from './global-config.js';
 
 /**
  * The decisions behind `spechub config show` and `spechub config check`.
@@ -409,4 +409,82 @@ export function projectSettings(projectYaml: unknown, hasProject = true): Projec
       ? { mode: statedString(browser?.mode), cdpPort, fallback: statedString(browser?.fallback) }
       : null,
   };
+}
+
+/**
+ * The project's `frontend.helpers_dir`, or null when it states none.
+ *
+ * Kept out of both `ProjectHostContext` and `ProjectSettings`: it is not part
+ * of what the host has to provide, and it is not one of the facts `show`
+ * reports. Only `check` wants it, to find the verification knowledge base.
+ */
+export function frontendHelpersDir(projectYaml: unknown): string | null {
+  return statedString(record(record(projectYaml)?.frontend)?.helpers_dir);
+}
+
+/**
+ * The boolean a project states at `workflow.<key>`, or `whenUnstated` when it
+ * states nothing there - or states something no boolean can be read out of.
+ *
+ * The default is the caller's to name rather than this function's, because
+ * the two keys `check` reads default opposite ways: spec sync runs unless a
+ * project turns it off, and frontend verification stays off until a project
+ * turns it on.
+ *
+ * A string goes through the same parser `spechub config set` writes these
+ * keys with. `off`, `on`, `yes` and `no` are words the command accepts and
+ * turns into `false` or `true` on the way to disk, but the YAML core schema
+ * reads them as strings - so a user who typed one by hand would otherwise
+ * have the line ignored, and the file would mean one thing written by the
+ * tool and another written by them. `parseBooleanWord` is reused rather than
+ * matched again here, so the two commands cannot end up with two vocabularies.
+ *
+ * A string it refuses falls back to `whenUnstated`, because a typo is not a
+ * decision: taking any non-empty string as true would turn `mabye` into an
+ * answer the user never gave.
+ */
+export function workflowFlag(projectYaml: unknown, key: string, whenUnstated: boolean): boolean {
+  const value = record(record(projectYaml)?.workflow)?.[key];
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return whenUnstated;
+
+  try {
+    return parseBooleanWord(`workflow.${key}`, value);
+  } catch {
+    return whenUnstated;
+  }
+}
+
+/**
+ * How many domains a parsed domain map describes, or null when it describes
+ * no `domains` mapping at all.
+ *
+ * The count is the point rather than mere existence: a map that names two
+ * domains in a repo with forty is the failure a bare "the file is there" line
+ * cannot show.
+ */
+export function domainCount(domainMapYaml: unknown): number | null {
+  const domains = record(record(domainMapYaml)?.domains);
+  return domains ? Object.keys(domains).length : null;
+}
+
+/**
+ * The CDP port a parsed `agent-browser.json` names, or null when it names
+ * none readable as a port.
+ *
+ * The file is written with the port as a string, so both a string and a
+ * number are accepted: what matters is which port the tool will dial, not
+ * which JSON type it was spelled with.
+ */
+export function agentBrowserCdpPort(agentBrowserJson: unknown): number | null {
+  const cdp = record(agentBrowserJson)?.cdp;
+  if (typeof cdp === 'number') return Number.isInteger(cdp) && cdp > 0 ? cdp : null;
+  if (typeof cdp !== 'string') return null;
+  const port = Number(cdp.trim());
+  return Number.isInteger(port) && port > 0 ? port : null;
+}
+
+/** The `outputStyle` a parsed Claude Code settings file selects, or null. */
+export function outputStyleOf(settingsJson: unknown): string | null {
+  return statedString(record(settingsJson)?.outputStyle);
 }

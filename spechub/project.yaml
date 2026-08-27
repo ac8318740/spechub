@@ -20,7 +20,11 @@ workflow:
 commands:
   test: "npm --prefix cli test"
   test_collect: null
-  build: "npm --prefix cli run build"
+  # Regenerates both sets of committed generated files, because continuous
+  # integration fails when either is stale. cli/dist comes from the first
+  # command, agents/codex/*.toml from the second. Anything that verifies a
+  # build therefore leaves the tree matching what CI expects.
+  build: "npm --prefix cli run build && node scripts/gen-codex-agents.mjs"
   lint: "npm --prefix cli run lint"
   typecheck: "npm --prefix cli run typecheck"
   format: null

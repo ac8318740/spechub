@@ -146,24 +146,40 @@ Drop this into `.git/hooks/pre-commit` inside the spechub clone (not the marketp
 
 ```bash
 #!/usr/bin/env bash
-# Auto-rebuild cli/dist when cli/src changed and stage the result.
+# Regenerate whichever committed generated files the staged diff invalidates.
 set -euo pipefail
 
-if git diff --cached --name-only | grep -q '^cli/src/'; then
+staged=$(git diff --cached --name-only)
+
+if grep -q '^cli/src/' <<<"$staged"; then
   echo "pre-commit: cli/src changed – rebuilding dist/"
   (cd cli && npm run build)
   git add cli/dist cli/package.json
 fi
+
+if grep -qE '^agents/[^/]+\.md$' <<<"$staged"; then
+  echo "pre-commit: agents/*.md changed – regenerating agents/codex/"
+  node scripts/gen-codex-agents.mjs
+  git add agents/codex
+fi
 ```
 
-This runs `npm run build` (esbuild) only when `cli/src/` is part of the staged
-diff. It then stages what the build regenerates. If the build fails, the commit
-aborts.
+Each block fires only when its own source is part of the staged diff, then stages
+what it regenerates. If either command fails, the commit aborts.
+
+The repository commits two sets of generated files, so the hook has two blocks.
+`cli/dist` comes from esbuild. `agents/codex/*.toml` comes from
+`scripts/gen-codex-agents.mjs`, which reads the markdown in `agents/`. Editing an
+agent's markdown and committing without the second block leaves a red run.
 
 The hook is optional and easy to forget to install. CI is what actually enforces
-it: `.github/workflows/ci.yml` rebuilds and fails the run if `cli/dist` or
-`cli/package.json` differs from what the build produces. Treat the hook as a
-convenience that saves you a red run, not as the guarantee.
+both: `.github/workflows/ci.yml` regenerates each set and fails the run if the
+committed copy differs. Treat the hook as a convenience that saves you a red run,
+not as the guarantee.
+
+`spechub/project.yaml` names both commands in one place. Its `commands.build`
+runs the esbuild build and the Codex generator together, so anything that
+verifies a build leaves the tree matching what CI expects.
 
 `npm run build` syncs `cli/package.json`'s version from
 `.claude-plugin/plugin.json`, then runs esbuild. That is why both the pre-commit

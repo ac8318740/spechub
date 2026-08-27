@@ -9,7 +9,7 @@ description: How to interact with a browser for frontend verification using agen
 
 This is an operational reference for browser-based verification using the `agent-browser` CLI and Chrome DevTools Protocol (CDP). It covers commands, selector strategy, environment setup, and troubleshooting.
 
-For initial setup (installing agent-browser, creating config files, scaffolding knowledge base), use `/spechub:init` or `/spechub:config check`.
+For setup (installing agent-browser, creating config files, scaffolding knowledge base), use `/spechub:setup`. To audit what a project already has, run `spechub config check`.
 
 ## Project configuration
 
@@ -71,7 +71,7 @@ The command exits 1, writes one plain-text message to stderr, and prints nothing
 
 Three situations produce it. Each message names the one command that fixes it:
 
-- the project configures no frontend, or there is no SpecHub project here. The message names `/spechub:init`
+- the project configures no frontend, or there is no SpecHub project here. The message names `/spechub:setup`
 - this host declares no browser mode available, or nobody has described this host yet. The message names `/spechub:host`
 - the project forbids a fallback, and this host does not declare the mode it prefers. The message names `/spechub:host`
 
@@ -214,6 +214,6 @@ The snapshot gives you accessible names and roles automatically. Use these to fi
 
 - **frontend-verifier agent** uses agent-browser for Phase 4 verification – this skill is its reference
 - **task-checker agent** delegates to frontend-verifier when frontend files changed
-- **/spechub:init** handles initial setup (install, config, knowledge base scaffolding)
-- **/spechub:config check** audits browser infrastructure and walks through fixes
+- **/spechub:setup** runs the setup interviews (install, config, knowledge base scaffolding) and offers a fix for each row the health check fails
+- **`spechub config check`** audits the browser infrastructure and changes nothing
 - **/spechub:quick-fix** uses agent-browser for visual verification of bug fixes
