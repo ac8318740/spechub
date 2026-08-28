@@ -15,7 +15,7 @@ description: One plain-language standard for every durable artifact. A durable a
 - **Not everyone is as smart as you**
     - That is your problem to solve, never theirs
     - Always explain a thing so a reader without your domain expertise gets it on the first pass
-    - A sentence the reader has to work at is a sentence you have not finished
+    - A sentence the reader has to work to understand is a sentence you need to write better
 - **Everything you say and write flows logically and reads easily**
     - Each point follows from the one before it
     - Nothing needs a second pass to interpret
