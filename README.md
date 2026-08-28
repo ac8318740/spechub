@@ -1,124 +1,209 @@
 # SpecHub
 
-A Claude Code plugin for spec-driven TDD development.
+SpecHub is a Claude Code plugin. It makes Claude plan before it codes, write the tests before the implementation, and keep your docs matching the code.
 
-## Overview
+- **SpecHub aims to solve two common failure modes Claude introduces when coding**
+    - Claude starts building before the requirements are clear
+    - Claude writes code, then creates tests that pass against the code it just wrote
+- **SpecHub introduces structure around how your agent works**
+    - Every change goes through a test-writer, an implementer, and a checker
+    - Every commit updates your specs from the diff
+- **Downside: this structure may make your agent take longer on small tweaks than necessary**
 
-SpecHub grows planning structure only as far as the fog demands. Fog is the part of the work you cannot state precisely yet – the open questions, the undecided shape. Little fog means little structure, so the same entry point serves a one-question change and a fifty-question effort. Living specs stay in sync with your codebase automatically via commit-time spec sync.
+```mermaid
+flowchart TD
+    Q{"What kind of<br/>request is this?"} -->|"clear enough to build"| IM["Build it<br/>(/spechub:implement)"]
+    Q -->|"something stopped working"| QF["Find the root cause first<br/>(/spechub:quick-fix)"]
+    Q -->|"still has open questions"| MP["Answer them first<br/>(/spechub:map)"]
+    MP -->|"once the questions are answered"| IM
+    IM --> C["Commit, and update the docs<br/>(/spechub:commit)"]
+    QF --> C
+```
 
-Every rule exists because something went wrong without it. SpecHub grew over months of real product development with Claude Code.
+Every box above is section 2. The rest of this file is reference.
 
-## Workflows
+| What you want | Where |
+| ------------- | ----- |
+| Quickstart | section 1 |
+| The three commands, and which one to use | section 2 |
+| Configure a project and a machine | section 3 |
+| The CLI | section 4 |
+| Every skill | section 5 |
+| Every agent | section 6 |
+| Output style | section 7 |
+| Terminal workspace | section 8 |
+| Design principles | section 9 |
+| Licence and credits | section 10 |
 
-No path selection. Planning structure grows only as far as the fog demands:
+## 1. Quickstart
 
-- **The way is clear** – `/spechub:implement` runs the TDD pipeline (test-writer → task-executor → task-checker, plus frontend-verifier when `project.yaml` sets `frontend`) on the request directly. A small unit of work is simply small.
-- **Something broke** – `/spechub:quick-fix` forces root-cause analysis before any edit.
-- **Decisions need settling** – `/spechub:map` charts a map if none exists and works the frontier if one does. You settle a single question in conversation. SpecHub calls that interview technique grilling. The question leaves an architecture decision record (ADR), a short note that states the decision and the reason. A long effort becomes a map instead, worked across sessions.
+You need the [Claude Code](https://claude.com/claude-code) CLI and Node.js 20 or later.
 
-A map is a set of small records called nodes. Each node is one question to settle or one piece of work to do. Every node has one of five statuses: `fog`, `open`, `claimed`, `resolved` and `out-of-scope`. A `fog` node holds something you cannot state precisely yet. An `open` node is ready to settle, and a `claimed` node is one someone works now. You have settled a `resolved` node, and you have deliberately dropped an `out-of-scope` node.
-
-Every node also names its provenance parent – the node whose answer raised this one. It names its blocking edges too – the nodes that must resolve before it can start. A node's mode says who settles it: `hitl` for a human, `afk` for an agent working alone.
-
-The frontier is the set of nodes you can work right now – the open nodes with nothing unresolved blocking them. A tracker holds the nodes. A tracker is the swappable storage layer behind a map (GitHub issues first-class, plain files as the fallback). The packaging walk collects a map into one brief, so a fresh session can pick up an effort without re-reading everything.
-
-For the full picture – each step and how they connect – read [docs/workflows.md](docs/workflows.md).
-
-## Features
-
-- **Progressive materialisation** – structure appears only when it has to persist; a map exists only when the fog will outlive the session
-- **Commit-time spec sync** – Living specs auto-update on every commit
-- **Four-phase TDD pipeline** – test-writer → task-executor → task-checker → frontend-verifier
-- **Orchestrator pattern** – Claude coordinates specialized agents rather than doing everything itself
-- **Quality gates** – Mock skepticism, test baseline enforcement, regression checking, TDD isolation audits
-- **Frontend visual verification** – Browser-based UI verification via agent-browser CLI
-- **Project configuration** – Per-project workflow settings via `spechub/project.yaml`
-
-## Prerequisites
-
-- [Claude Code](https://claude.com/claude-code) CLI
-- Node.js >= 20 (for the SpecHub CLI)
-
-## Installation
+Install the plugin:
 
 ```
 /plugin marketplace add ac8318740/ac-agentic-coding
 /plugin install spechub@ac-agentic-coding
 ```
 
-Then in your project:
+Then, in your project:
 
 ```
 /spechub:setup
 ```
 
-This detects your project type and generates `spechub/project.yaml` with workflow settings. SpecHub loads its orchestrator instructions at session start whenever it detects a spechub project. Your CLAUDE.md stays clean for project-specific content.
+- `/spechub:setup` detects the project type, then writes `spechub/project.yaml` with workflow settings
+- The SessionStart hook loads the orchestrator instructions whenever it detects a spechub project
+- Your CLAUDE.md stays clean for project-specific content
+- Upgrading from a version before 0.8.0 means deleting one stale `@import` line (see [docs/migrate-0.8.md](docs/migrate-0.8.md))
 
-For every key in that file, its values, its default and what changes when you change it, read [docs/config-reference.md](docs/config-reference.md).
+## 2. The three commands, and which one to use
 
-Each machine also declares its own dev setup once, with `/spechub:host`. For every axis, what reads it, and how to describe a fresh machine, read [docs/dev-setups.md](docs/dev-setups.md).
+*Pick by what is in your way: nothing, a bug, or an unanswered question.*
 
-## Terminal workspace for driving several agents
+Two words first, because the third command below uses them.
 
-Run `/spechub:terminal-workspace` to set up a keyboard-only terminal for driving several agents on a dev machine, the remote machine your agents run on. The skill installs every tool and writes every config. SpecHub needs none of it, so the whole setup is optional. [docs/terminal-workspace.md](docs/terminal-workspace.md) documents it.
+- **A map** is a to-do graph SpecHub keeps for one piece of work
+- **A node** is one entry on that graph: one question to answer, or one piece of work to do
 
-The setup builds on herdr, a terminal multiplexer that keeps each agent's terminal running after you disconnect. You attach to it from your own machine with `herdr --remote`, so your own clipboard and browser reach the session. Each agent can get its own git worktree, meaning its own checkout on its own branch. Then gh-dash triages pull requests and diffnav reads diffs, both without leaving the terminal. The document gives the exact config, every key, and the traps worth knowing.
+The three commands:
 
-## CLI
+- **The request is clear enough to build** – run `/spechub:implement`
+    - It runs the four agents of section 6 on your request
+    - A one-line change stays a one-line change
+- **Something already built stopped working** – run `/spechub:quick-fix`
+    - It makes Claude find the root cause before it edits anything
+- **The request still has open questions** – run `/spechub:map`
+    - Claude interviews you one round at a time
+    - Each round asks every question it can answer next
+    - Each question comes with Claude's recommended answer
+    - You provide feedback on Claude's recommended answer instead of prompting from scratch
+    - Some requests only need one question
+    - Claude writes that decision down as a short note under `docs/adr/`
+    - A big feature may need dozens of questions
+    - Claude stores those questions as a **map**
+    - You work through the map across several sessions
 
-SpecHub ships a Node.js CLI (`spechub config`, `spechub list`, `spechub node ...`, `spechub archive`).
+### 2.1. What a map holds
 
-A tracker has to provide four operations and nothing more: create, read, update, list. GitHub issues are the first-class tracker, because they already have the two links a map needs. Sub-issues carry the provenance parent, and issue dependencies carry the blocking edges. The CLI also ships a files tracker as the fallback (`spechub node create | read | update | list`), which writes one markdown file per node under `spechub/maps/<name>/`.
+*`/spechub:map` builds a map only when a single conversation cannot settle every question.*
 
-The CLI builds everything else on those four operations. `spechub node frontier` lists the nodes ready to work. It returns the open nodes with nothing unresolved blocking them, closest to the root node first.
+Each node carries one of five statuses.
 
-`spechub node walk` packages the map for a handoff. It reads the nodes in provenance order. It includes the root node in full, plus any node marked pinned. Pinned marks a node as always worth carrying along. The skills claim and resolve a node with `update` calls.
+| Status | Meaning |
+| ------ | ------- |
+| `fog` | anything you cannot yet articulate clearly |
+| `open` | ready to answer or build |
+| `claimed` | someone is working on it now |
+| `resolved` | done |
+| `out-of-scope` | dropped on purpose |
 
-The plugin's skills and agents invoke the CLI through an invariant absolute path – `~/.claude/spechub/bin/spechub` – that the SessionStart hook maintains. Agents therefore do not depend on your shell `PATH`. The CLI keeps working across plugin version bumps, non-interactive subshells, and fresh agent contexts.
+Each node also records four things.
 
-For typing `spechub` at a terminal yourself, the hook also creates `~/.local/bin/spechub`. Add `~/.local/bin` to your `PATH` to use it. The hook prints a one-line reminder if it isn't already there. This second symlink is a convenience only – nothing in the plugin breaks if you don't set up `PATH`.
+- **Which earlier answer led to this question**
+    - You can read the decisions back in the order you made them
+- **Which other nodes have to finish before this one starts**
+    - SpecHub uses that to tell you what is ready to start
+- **Who answers it**: you, or Claude working alone
+- **Where it lives**: a GitHub issue by default, or a markdown file under `spechub/maps/` with no GitHub remote
 
-If `spechub` doesn't run after install, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md). A Claude Code session can read it and apply the fix directly.
+Two things SpecHub does with a finished map.
 
-## Upgrading
+- **It works through the nodes that are ready to start**, meaning the open ones with nothing unfinished blocking them
+    - SpecHub calls that set the **frontier**
+- **It packs the whole map into a single brief**
+    - A fresh Claude session picks up where the last one stopped
 
-Upgrading from a version before 0.8.0? See [docs/migrate-0.8.md](docs/migrate-0.8.md) for how to remove the stale `@import` line from your project CLAUDE.md.
+Every rule in SpecHub exists because something went wrong without it, over months of real product development with Claude Code.
 
-## Skills
+For the full picture of each step and how they connect, read [docs/workflows.md](docs/workflows.md).
 
-### Implementation
+## 3. Configure a project and a machine
+
+*The project states what to run. The machine states what it can do.*
+
+- `spechub/project.yaml` holds every project-scoped setting
+    - [docs/config-reference.md](docs/config-reference.md) gives each key, its values, its default and what changes
+- `~/.config/spechub/config.json` holds the eight `host.*` axes
+    - `/spechub:host` writes them once per machine
+    - [docs/dev-setups.md](docs/dev-setups.md) gives every axis, what reads it, and how to describe a fresh machine
+- `/spechub:setup` copies the commands and directories from one of three language profiles
+    - **python** – pytest, ruff, mypy
+    - **node-typescript** – npm test, eslint, tsc
+    - **fullstack-python** – Python backend, plus a Node or TypeScript frontend
+- `spechub config check` audits the project and the machine
+    - It exits 2 when a required host axis has no value
+
+## 4. The CLI
+
+*Four storage operations carry the whole map. One fixed path makes the CLI reachable from any Claude session.*
+
+SpecHub ships a Node.js CLI: `spechub config`, `spechub list`, `spechub node ...`, and `spechub archive`.
+
+- The storage behind a map provides four operations and nothing more: create, read, update, list
+    - GitHub issues are the default
+        - An issue already holds the two links a map needs
+    - A sub-issue records what raised a node
+    - An issue dependency records what must finish first
+    - Markdown files are the fallback, one per node under `spechub/maps/<name>/`
+- The CLI builds everything else on those four operations
+    - `spechub node frontier` lists what is ready to start now, closest to the original goal first
+    - `spechub node walk` packs the whole map into one brief for a fresh session, in the order the decisions happened
+    - The brief always includes the original goal, plus any node you marked as worth carrying along
+    - The skills claim and resolve a node with `update` calls
+
+Two symlinks reach the CLI. The SessionStart hook maintains both.
+
+- `~/.claude/spechub/bin/spechub` is the fixed path every skill and agent calls
+    - Agents therefore do not depend on your shell `PATH`
+    - The CLI keeps working across plugin version bumps, non-interactive subshells and fresh agent contexts
+- `~/.local/bin/spechub` is for typing `spechub` at a terminal yourself
+    - Add `~/.local/bin` to your `PATH` to use it
+    - The hook prints a one-line reminder when it is absent
+    - Nothing in the plugin breaks without it
+
+If `spechub` does not run after install, read [TROUBLESHOOTING.md](TROUBLESHOOTING.md). A Claude Code session reads it and applies the fix directly.
+
+## 5. Every skill
+
+*Four groups, ordered by when you reach for them.*
+
+### 5.1. Implementation
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:implement` | Claim agent-workable (afk) nodes from the map frontier and run the TDD pipeline – runs directly on the request when no map exists |
+| `/spechub:implement` | Build what is ready to start, running the four agents of section 6, whether or not a map exists |
 
 For work with open decisions, chart it with `/spechub:map` first.
 
-### Planning
+### 5.2. Planning
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:map` | Entry point for planned work – charts a map if none exists, works the frontier if one does |
-| `grilling` | Interview technique – asks the whole frontier per round, each question with a recommended answer (model-invoked) |
-| `record-context` | Writes durable records when a decision lands – an ADR, a glossary term, both, or neither (model-invoked) |
+| `/spechub:map` | Answer the open questions first, building the to-do graph on the first run and working through it after |
+| `grilling` | The interview itself, asking every question it can answer next per round, each with a recommended answer (Claude invokes it) |
+| `record-context` | Writes a decision down when one lands: a short note, a glossary term, both, or neither (Claude invokes it) |
 
-### Operations
+### 5.3. Operations
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:commit` | Git commit with mandatory spec sync |
-| `/spechub:archive` | Close out a cleared map – check the residue landed (the durable output: spec updates, ADRs, glossary entries), then dispose of the nodes |
-| `/spechub:sync` | Update specs from code changes |
-| `/spechub:handoff` | Hand work to a visible agent – a new one in its own pane, or one already running – with acknowledgement |
+| `/spechub:commit` | Commit, and update the specs under `spechub/specs/` from the diff first |
+| `/spechub:archive` | Close a finished map, after checking the decisions reached your specs and notes, then delete the nodes |
+| `/spechub:sync` | Update the specs from code changes, outside a commit |
+| `/spechub:handoff` | Hand work to a visible agent, a new one in its own pane or one already running, with acknowledgement |
 | `/spechub:compact-and-continue` | Anchor the session's load-bearing state to survive compaction, then continue in place |
 
-### Setup and supporting
+What an effort leaves behind is what matters: updated specs, decision notes, and glossary entries. SpecHub throws the nodes away.
+
+### 5.4. Setup and supporting
 
 | Skill | Description |
 |-------|-------------|
 | `/spechub:setup` | Set up SpecHub in a project, and change how a project already set up is configured |
-| `/spechub:bootstrap` | Generate initial living specs from code |
-| `/spechub:explore` | Thinking partner mode (read-only) |
+| `/spechub:host` | Declare this machine's dev setup once, as the `host.*` axes |
+| `/spechub:bootstrap` | Write the first set of specs by reading your existing code |
+| `/spechub:explore` | Thinking partner mode, read-only |
 | `/spechub:quick-fix` | Structured bug fix workflow with root cause analysis |
 | `/spechub:pre-commit-review` | Deep quality review of all changes since last commit |
 | `/spechub:test-conventions` | Test placement rules and naming conventions |
@@ -130,51 +215,104 @@ For work with open decisions, chart it with `/spechub:map` first.
 | `/spechub:teardown-worktree` | Retire finished worktrees and delete their merged local and remote branches |
 | `/spechub:terminal-workspace` | Set up a keyboard-only terminal for driving agents on a dev machine |
 
-## Agents
+## 6. Every agent
+
+*Four agents run in order. The one rule that matters: the test-writer never sees the implementation.*
 
 | Agent | Role |
 |-------|------|
 | `test-writer` | Writes tests from requirements only, before the code under strict TDD and after it under relaxed |
-| `task-executor` | TDD Phase 2 – makes tests pass, cannot modify tests |
-| `task-checker` | TDD Phase 3 – verifies everything (mock audit, regression, TDD isolation) |
-| `frontend-verifier` | TDD Phase 4 – real browser verification via agent-browser CLI (when frontend configured) |
+| `task-executor` | TDD phase 2, making tests pass, and it cannot modify tests |
+| `task-checker` | TDD phase 3, verifying everything: mock skepticism, test baseline, regressions, TDD isolation audit |
+| `frontend-verifier` | TDD phase 4, real browser verification via agent-browser CLI, when `project.yaml` configures a frontend |
 
-## Output style
+- The Claude session you talk to coordinates
+    - It hands every piece of research and code to these agents
+- A fail from the task-checker sends the work back to the task-executor with the reason
+- The frontend-verifier runs under three conditions: a configured frontend, changed frontend files, and verification switched on
 
-The plugin ships one output style, shown to Claude Code as `spechub:ac-writing-style`. It applies the `writing` skill's plain-language rules and the `visual-docs` skill's Minto pyramid to every chat reply. A reply leads with the answer and puts 90% or more of what follows in bullets. Each bullet holds one sentence and ends without a period. Sub-bullets nest as far as the point needs, indented eight spaces at the first level and four more at each level below. Every word has to earn its place: no em dash, no emoji, no puffery, and no contrast clause that does no work.
+## 7. Output style
 
-`/spechub:setup` offers the style on both paths: late and optional on a new project, and as a health-check row on one already set up. The skill writes `outputStyle` for you, and asks first. Use `~/.claude/settings.json` for every project, or `.claude/settings.local.json` for this one. A project value overrides the global one. The style applies after `/clear`, or in a new session. The plugin never forces it on.
+*The plugin ships one output style. It applies the house standard to every chat reply.*
 
-## Language profiles
+- Claude Code shows the style as `spechub:ac-writing-style`
+- It applies the `writing` skill's plain-language rules and the `visual-docs` skill's Minto pyramid and bullet discipline
+- A reply leads with the answer and puts 90% or more of what follows in bullets
+- Each bullet holds one sentence and ends without a period
+- Sub-bullets nest as far as the point needs, indented eight spaces at the first level and four more at each level below
+- Every word has to earn its place: no em dash, no emoji, no puffery, and no contrast clause that does no work
 
-- **python** – pytest, ruff, mypy
-- **node-typescript** – npm test, eslint, tsc
-- **fullstack-python** – Python backend + Node/TS frontend
+How to turn it on:
 
-## Design principles
+- `/spechub:setup` offers the style on both paths
+    - On a new project it comes late
+    - It is optional there
+    - On a project already set up it is a health-check row
+- The skill writes `outputStyle` for you
+- It asks first
+- Use `~/.claude/settings.json` for every project, or `.claude/settings.local.json` for this one
+- A project value overrides the global one
+- The style applies after `/clear`, or in a new session
+- The plugin never forces it on
 
-- **TDD is structural under strict, instructional under relaxed.** Executor can't touch test files, either way. Under strict TDD the test-writer runs first, so no implementation exists for it to see. Under relaxed it runs after the executor, and only its instructions keep it from reading the code it tests. The two settings do not give equal independence, which is why strict is the default.
-- **Specs converge toward reality.** Every commit updates the living specs via spec sync. Agents fix inaccuracies on sight. Specs track what the code implements, never what anyone plans.
-- **Progressive materialisation.** Structure appears only when it has to persist. A typo fix needs no machinery. A long effort earns a map. The same entry point serves both, and nothing declares which.
-- **Planning outweighs coding.** Three parallel explorers run before anyone writes code. Mock audits, mutation checks, regression suites, integration wiring.
-- **Strict defaults, easy to relax.** Run `spechub config set` to adjust TDD strictness, orchestrator mode, or how grilling presents questions.
+## 8. Terminal workspace for driving several agents
 
-## License
+*An optional keyboard-only setup for running several agents on a remote machine. SpecHub works fine without it.*
 
-[MIT](LICENSE)
+- `/spechub:terminal-workspace` installs every tool and writes every config
+- [docs/terminal-workspace.md](docs/terminal-workspace.md) gives the exact config, every key, and the traps worth knowing
+- The setup builds on herdr, a terminal multiplexer that keeps each agent's terminal running after you disconnect
+    - You attach from your own machine with `herdr --remote`
+    - Your own clipboard and browser then reach the session
+    - Each agent can get its own git worktree, meaning its own checkout on its own branch
+- gh-dash then triages pull requests and diffnav reads diffs, both without leaving the terminal
 
-## Credits
+## 9. Design principles
 
-- **[OpenSpec](https://github.com/Fission-AI/OpenSpec)** – SpecHub forks its CLI from OpenSpec. OpenSpec was the core spec engine under the original workflow. The spec-driven development concepts – proposals, designs, tasks, living specs, change management, archiving – all originate from OpenSpec.
-- **[Taskmaster AI](https://github.com/eyaltoledano/claude-task-master)** – Taskmaster's task management model inspired the orchestrator pattern and the agent coordination approach.
-- **[Skills for Real Engineers](https://github.com/mattpocock/skills)** by Matt Pocock – the Wayfinder map, the grilling technique, and the durability rule for agent briefs. SpecHub's node graph is a direct adaptation of Wayfinder. MIT licensed; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
-- Additional inspiration from [Superpowers](https://github.com/obra/superpowers), [GSD](https://github.com/gsd-build/get-shit-done), and [Spec Kit](https://github.com/github/spec-kit).
-- The optional terminal workspace installs, but does not bundle, the three tools you drive and the five behind them. Each keeps its own licence.
-  - [herdr](https://herdr.dev)
-  - [tuicr](https://github.com/agavra/tuicr) by agavra, which reviews a pull request inside the terminal
-  - [gh-dash](https://github.com/dlvhdr/gh-dash) and [diffnav](https://github.com/dlvhdr/diffnav) by dlvhdr
-  - [delta](https://github.com/dandavison/delta) by dandavison
-  - [yazi](https://github.com/sxyazi/yazi) by sxyazi, the file manager that previews whatever the cursor sits on
-  - [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by AlexanderGrooff
-  - [glow](https://github.com/charmbracelet/glow) by charmbracelet
-- The optional fork build of tuicr compiles [agavra/tuicr#607](https://github.com/agavra/tuicr/pull/607) by [antonio2368](https://github.com/antonio2368). It also compiles [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633) and one counts fix not yet submitted upstream, both written for this fork. That build is off by default and temporary. See [docs/terminal-workspace.md](docs/terminal-workspace.md).
+*Five rules explain why every default is what it is.*
+
+- **Strict TDD holds because of the order the agents run in** – relaxed TDD holds only because the instructions say so
+    - Either way the task-executor cannot edit a test file
+    - Under strict TDD the test-writer runs first
+    - There is no implementation for it to copy
+    - Under relaxed TDD it runs second
+    - Only its instructions stop it reading the code it is testing
+    - The two are not equally safe
+    - That is why strict is the default
+- **Your docs never drift from the code** – `/spechub:commit` reads the diff and updates the specs under `spechub/specs/` in the same commit
+    - Any agent that spots a spec contradicting the code fixes the spec there and then
+    - A spec describes what the code does today
+    - It never describes what someone plans to build
+- **Build no more process than the job needs** – a to-do graph appears only when one conversation cannot hold the questions
+    - A typo fix gets no machinery
+    - A month-long feature gets a map
+    - You type the same command either way
+    - SpecHub works out which it is
+- **Planning gets more effort than coding** – three agents read the relevant code before anyone writes a line
+    - Mock audits, regression suites and integration checks follow the implementation
+- **Strict defaults, easy to relax** – run `spechub config set` to change how strict the TDD is, how much Claude does itself, or how it asks you questions
+
+## 10. Licence and credits
+
+*[MIT](LICENSE). Four projects shaped the design.*
+
+- **[OpenSpec](https://github.com/Fission-AI/OpenSpec)** – SpecHub forks its CLI from OpenSpec
+    - OpenSpec was the core spec engine under the original workflow
+    - The spec-driven concepts all originate there: proposals, designs, tasks, living specs, change management, and archiving
+- **[Taskmaster AI](https://github.com/eyaltoledano/claude-task-master)** – Taskmaster's task management model inspired the orchestrator pattern and the agent coordination approach
+- **[Skills for Real Engineers](https://github.com/mattpocock/skills)** by Matt Pocock – the Wayfinder map, the round-by-round interview, and the durability rule for agent briefs
+    - SpecHub's node graph is a direct adaptation of Wayfinder
+    - MIT licensed, and recorded in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)
+- Additional inspiration comes from [Superpowers](https://github.com/obra/superpowers), [GSD](https://github.com/gsd-build/get-shit-done) and [Spec Kit](https://github.com/github/spec-kit)
+
+The optional terminal workspace installs, but does not bundle, the three tools you drive and the five behind them. Each one keeps its own licence.
+
+- [herdr](https://herdr.dev)
+- [tuicr](https://github.com/agavra/tuicr) by agavra, which reviews a pull request inside the terminal
+- [gh-dash](https://github.com/dlvhdr/gh-dash) and [diffnav](https://github.com/dlvhdr/diffnav) by dlvhdr
+- [delta](https://github.com/dandavison/delta) by dandavison
+- [yazi](https://github.com/sxyazi/yazi) by sxyazi, the file manager that previews whatever the cursor sits on
+- [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by AlexanderGrooff
+- [glow](https://github.com/charmbracelet/glow) by charmbracelet
+
+The optional fork build of tuicr compiles [agavra/tuicr#607](https://github.com/agavra/tuicr/pull/607) by [antonio2368](https://github.com/antonio2368). It also compiles [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633) and one counts fix not yet submitted upstream, both written for this fork. That build is off by default and temporary. See [docs/terminal-workspace.md](docs/terminal-workspace.md).

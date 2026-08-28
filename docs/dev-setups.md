@@ -1,8 +1,23 @@
 # Dev setups
 
-SpecHub sessions run on more than one machine. Those machines differ: one has herdr installed, another Orca, and one can drive a real browser where another has no display at all. So how does a skill know what the machine under it can do? Each machine declares its own **dev setup** once, as a set of `host.*` keys in one file. The worktree skills and the frontend verifier read the answers from there.
+*One file per machine records what that machine has installed. A skill never has to guess.*
 
-Four terms first. A **dev setup** is the machine-level tools a session runs inside. An **axis** is one setting of it, recorded as one `host.*` key. An **orchestrator** owns terminal panes and git worktrees: herdr or Orca. A **checkout** is one git worktree directory.
+You run SpecHub on more than one machine. Those machines are not the same.
+
+- **One has herdr installed, another has Orca, a third has neither**
+- **One can drive a real Chrome window**
+- **Another has no display at all**
+- **A skill cannot guess which**
+    - Each machine answers eight questions once, with `/spechub:host`
+- **The answers live in `~/.config/spechub/config.json`** as `host.*` keys
+- **The worktree skills and the frontend verifier read them** instead of probing
+
+Four terms first.
+
+- **A dev setup** is the machine-level tools a session runs inside
+- **An axis** is one setting of it, recorded as one `host.*` key
+- **An orchestrator** owns terminal panes and git worktrees: herdr or Orca
+- **A checkout** is one git worktree directory
 
 ```mermaid
 flowchart TD
@@ -34,45 +49,93 @@ flowchart TD
 | `frontend.browser.cdp_port` | a port number | no | `spechub/project.yaml` | `frontend-verifier`; defaults to `19988` for `remote` and `9555` otherwise |
 | `frontend.browser.fallback` | `none`, or any word | no | `spechub/project.yaml` | only `none` acts: it forbids a stand-in mode |
 
-The global config is a JSON file at `~/.config/spechub/config.json`, or under `$XDG_CONFIG_HOME` when you set that variable. Run `~/.claude/spechub/bin/spechub config path` for the real location. `spechub config show` prints every axis with the project's settings.
+Where the file lives, and how the CLI reads a value:
 
-The CLI matches enum values case-sensitively, so `stagewise` works and `Stagewise` does not. It matches booleans loosely: `true`, `yes` and `on` all mean true, and `false`, `no` and `off` all mean false.
+- The global config is a JSON file at `~/.config/spechub/config.json`
+    - It moves under `$XDG_CONFIG_HOME` when you set that variable
+    - Run `~/.claude/spechub/bin/spechub config path` for the real location
+- `spechub config show` prints every axis with the project's settings
+- The CLI matches an enum value case-sensitively
+    - `stagewise` works, and `Stagewise` does not
+- The CLI matches a boolean loosely: `true`, `yes`, and `on` all mean true, and `false`, `no`, and `off` all mean false
 
 ## 2. Orchestrator axes
 
-*Each orchestrator is its own yes-or-no. Declared means installed, and the environment says which one hosts this session.*
+*Each orchestrator is its own yes-or-no. Declared means installed. The environment says which one hosts this session.*
 
-A machine can have both installed, one, or neither, so an answer about herdr says nothing about Orca. Answering no to both is a real answer: the worktree skills then use plain git under `.claude/worktrees`.
+- A machine can have both installed, one, or neither
+    - An answer about herdr says nothing about Orca
+- Answering no to both is a real answer
+    - The worktree skills then use plain git under `.claude/worktrees`
+- `skills/new-worktree/detect-orchestrator.sh` prints six lines: `declared_herdr`, `declared_orca`, `detected`, `active`, `owner`, and `warning`
+    - `detected` reads the markers an orchestrator sets in its terminals
+    - `active` always equals it
+    - herdr sets `HERDR_ENV` and `HERDR_PANE_ID`
+    - orca sets `ORCA_PANE_KEY`
+- `owner` comes from the checkout's path root, not from the session
+    - orca owns `~/orca/workspaces/<repo>/`
+    - herdr owns everything under its worktree root, `~/.herdr/worktrees` by default
+    - Any other path is plain git
+    - The session's host creates a checkout
+    - The checkout's owner removes it
 
-`skills/new-worktree/detect-orchestrator.sh` prints six lines: `declared_herdr`, `declared_orca`, `detected`, `active`, `owner` and `warning`. `detected` reads the markers an orchestrator sets in its terminals, and `active` always equals it. herdr sets `HERDR_ENV` and `HERDR_PANE_ID`. Orca sets `ORCA_PANE_KEY`.
+**herdr.**
 
-`owner` comes from the checkout's path root, not from the session. Orca owns `~/orca/workspaces/<repo>/`. herdr owns everything under its worktree root, `~/.herdr/worktrees` by default. Any other path is plain git. The session's host creates a checkout, and the checkout's owner removes it.
+- `new-worktree` creates the checkout, then moves this pane into the new workspace with `herdr pane move`
+- The session then sits in the sidebar row for the worktree it works in
+- One limit matters: a herdr server serves one client at a time
 
-**herdr.** `new-worktree` creates the checkout, then moves this pane into the new workspace with `herdr pane move`. The session then sits in the sidebar row for the worktree it works in. One limit matters. A herdr server serves one client at a time.
+**Orca.**
 
-**Orca.** The Linux executable is `orca-ide`, and some installs put it on `PATH` as plain `orca`. Orca runs as a desktop application, or as a headless `orca serve` that the user views through a paired client. `host.orca.topology` records which one. Five limits matter.
+- The Linux executable is `orca-ide`
+    - Some installs put it on `PATH` as plain `orca`
+- orca runs as a desktop application, or as a headless `orca serve` that the user views through a paired client
+- `host.orca.topology` records which one
+- Five limits matter
+    - No command moves a running terminal into a worktree
+        - The session changes directory instead
+    - `worktree rm` always deletes the branch, and removes a checkout with live agents in it
+        - `teardown-worktree` therefore reads `agents[]` and `liveTerminalCount` from `worktree ps --json` first
+    - Nobody has tested Claude Code Agent Teams under `orca serve`
+        - Upstream issue 11739 reports that the tmux-compatibility layer can break them
+    - Nobody has tested Design Mode either
+        - It needs the browser pane on the developer's own machine
+    - The Orca web client cannot create terminals behind a reverse proxy
+        - Pair a desktop or phone client instead
+        - Upstream issue 9047 tracks it
 
-- No command moves a running terminal into a worktree, so the session changes directory instead.
-- `worktree rm` always deletes the branch, and it removes a checkout with live agents in it. So `teardown-worktree` reads `agents[]` and `liveTerminalCount` from `worktree ps --json` first.
-- Nobody has tested Claude Code Agent Teams under `orca serve`. Upstream issue 11739 reports that the tmux-compatibility layer can break them.
-- Nobody has tested Design Mode either, and it needs the browser pane on the developer's own machine.
-- The Orca web client cannot create terminals behind a reverse proxy, so pair a desktop or phone client instead. Upstream issue 9047 tracks it.
+Neither tool sees the other's sessions.
 
-Neither tool sees the other's sessions. Orca and a paired phone list herdr checkouts only after you turn on one switch per repository. Orca's desktop application holds it, named "show in worktree list", and no command sets it.
+- orca and a paired phone list herdr checkouts only after you turn on one switch per repository
+- orca's desktop application holds that switch, named "show in worktree list"
+- No command sets it
 
 ## 3. Browser axes
 
-*The three modes are not alternatives. A machine can offer any combination, and each one needs something different.*
+*The three modes are not alternatives. A machine can offer any combination. Each one needs something different.*
 
-- **remote** drives a real browser on the developer's own machine, over the Playwriter bridge. Something must answer HTTP on the CDP port the project resolves to. That is the stated `frontend.browser.cdp_port`, else `19988` when the project's mode is `remote`, else `9555`. Check 3 knocks on it.
-- **headless** launches headless Chromium here and needs no display. It needs `chromium`, `chromium-browser`, `google-chrome` or `google-chrome-stable` on `PATH`.
-- **local** launches a visible browser here. It needs one of those binaries and a graphical display.
+- **remote** drives a real browser on the developer's own machine, over the Playwriter bridge
+    - Something must answer HTTP on the CDP port the project resolves to
+    - That is the stated `frontend.browser.cdp_port`, else `19988` when the project's mode is `remote`, else `9555`
+    - Check 3 knocks on it
+- **headless** launches headless Chromium here and needs no display
+    - It needs `chromium`, `chromium-browser`, `google-chrome`, or `google-chrome-stable` on `PATH`
+- **local** launches a visible browser here
+    - It needs one of those binaries and a graphical display
 
-The host declares what works, and the project states a preference in `frontend.browser.mode`. When the host does not declare that mode, the first mode it does declare stands in. The order is remote, headless, local. Setting `frontend.browser.fallback` to `none` refuses any stand-in and fails instead.
+How the two sides meet:
 
-`~/.claude/spechub/bin/spechub config browser-mode` applies those rules and prints the answer with its reason. The frontend verifier runs it rather than choosing for itself.
+- The host declares what works
+- The project states a preference in `frontend.browser.mode`
+- The first mode the host does declare stands in, when the host does not declare that mode
+- The order is remote, headless, local
+- Setting `frontend.browser.fallback` to `none` refuses any stand-in and fails instead
+- `~/.claude/spechub/bin/spechub config browser-mode` applies those rules and prints the answer with its reason
+- The frontend verifier runs that command instead of choosing for itself
 
 ## 4. Describe this machine once
+
+*Eight steps. Each install plans before it touches anything.*
 
 1. Run `/spechub:host`. It detects what is here, then asks about every axis.
 2. Detection never decides a required axis. It only pre-fills the recommended answer.
@@ -83,4 +146,9 @@ The host declares what works, and the project states a preference in `frontend.b
 7. Run `~/.claude/spechub/bin/spechub config check`. It prints five numbered checks.
 8. Read its exit code. It exits 2 on an unset required axis, 1 on any other failure, and 0 when everything passes.
 
-Four things stay yours. Log in to Tailscale. Connect the Playwriter bridge. Pair a client to Orca. Turn on "show in worktree list" for each repository in Orca's desktop application.
+Four things stay yours.
+
+- Log in to Tailscale
+- Connect the Playwriter bridge
+- Pair a client to Orca
+- Turn on "show in worktree list" for each repository in Orca's desktop application

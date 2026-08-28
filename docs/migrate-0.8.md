@@ -1,23 +1,28 @@
 # Migrating to SpecHub 0.8.0
 
-If you initialized SpecHub before version 0.8.0, your project `CLAUDE.md` contains a line like:
+*Delete one `@import` line from your project `CLAUDE.md`, and nothing else.*
+
+A project initialized before version 0.8.0 holds a line like this in its `CLAUDE.md`:
 
 ```
 @import /home/<user>/.claude/plugins/cache/ac8318740-plugins/spechub/<version>/CLAUDE.md
 ```
 
-You can delete it. As of 0.8.0, the orchestrator instructions load automatically via a SessionStart hook that always resolves to the currently installed plugin version.
+As of 0.8.0 a SessionStart hook loads the orchestrator instructions, and it always resolves to the currently installed plugin version.
 
-## Why remove it
+## 1. Why remove it
 
-- **Silent staleness.** The path pins your project to a single plugin version. Upgrades leave the `@import` pointing at old orchestrator rules.
-- **Time-bomb breakage.** Claude Code cleans up orphaned plugin versions from its cache after 7 days. Once Claude Code removes the pinned version, the `@import` path 404s.
-- **Duplication.** Leaving the line in place while running 0.8.0+ loads the same content twice – harmless but wasteful.
+*Three reasons, and any one of them is enough.*
 
-## What to do
+- **Silent staleness** – the path pins your project to a single plugin version
+    - An upgrade leaves the `@import` pointing at old orchestrator rules
+- **Time-bomb breakage** – Claude Code cleans an orphaned plugin version out of its cache after 7 days, and the pinned path then 404s
+- **Duplication** – leaving the line in place under 0.8.0 or later loads the same content twice
+
+## 2. What to do
 
 1. Open your project's `CLAUDE.md`.
 2. Remove any line matching `@import .../plugins/cache/ac8318740-plugins/spechub/<version>/CLAUDE.md`.
-3. Save the file. No other changes needed.
+3. Save the file.
 
-Next time you start a session in that project, SpecHub's orchestrator instructions load via the hook, and you do nothing else.
+The hook loads SpecHub's orchestrator instructions next time you start a session in that project. Nothing else changes.
