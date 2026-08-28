@@ -242,7 +242,7 @@ Four cases stop sync.
 
 ## 6. Archive
 
-*A map is scaffolding. Archive checks the decisions reached your specs, your decision notes and your glossary, then deletes the nodes.*
+*A map is working state, not a record you keep. Archive checks the decisions reached your specs, your decision notes, and your glossary, then deletes the nodes.*
 
 - `/spechub:archive` checks for a cleared map: empty frontier, no fog, no claims
 - It spot-checks that the specs, the decision notes and the glossary captured what the effort settled
@@ -263,7 +263,7 @@ Four cases stop sync.
 
 ## 7. Living specs
 
-*What the project keeps. Maps are scaffolding. `spechub/specs/` outlives them.*
+*What the project keeps. SpecHub deletes a map once every question resolves. `spechub/specs/` outlives it.*
 
 - Specs live at `spechub/specs/<domain>/spec.md`, organised by the domains in `domain-map.yaml`
 - Each spec states numbered functional requirements (`FR-NNN`) in Given, When, Then form

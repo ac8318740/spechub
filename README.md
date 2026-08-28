@@ -116,7 +116,7 @@ Two things SpecHub does with a finished map.
 
 Every rule in SpecHub exists because something went wrong without it, over months of real product development with Claude Code.
 
-For the full picture, each step and how they connect, read [docs/workflows.md](docs/workflows.md).
+For the full picture of each step and how they connect, read [docs/workflows.md](docs/workflows.md).
 
 ## 3. Configure a project and a machine
 
@@ -194,7 +194,7 @@ For work with open decisions, chart it with `/spechub:map` first.
 | `/spechub:handoff` | Hand work to a visible agent, a new one in its own pane or one already running, with acknowledgement |
 | `/spechub:compact-and-continue` | Anchor the session's load-bearing state to survive compaction, then continue in place |
 
-What an effort leaves behind is what matters: updated specs, decision notes and glossary entries. The nodes themselves are scaffolding.
+What an effort leaves behind is what matters: updated specs, decision notes, and glossary entries. SpecHub throws the nodes away.
 
 ### 5.4. Setup and supporting
 
