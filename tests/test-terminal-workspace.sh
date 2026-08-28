@@ -2073,8 +2073,8 @@ echo "yazi keymap merge safety"
 KEYMAP="$WORK/keymap.py"
 awk "/^    py \"\\\$HOME\/\.config\/yazi\/keymap\.toml\" <<'PY'\$/{f=1; next} f && /^PY\$/{exit} f" \
   "$SETUP" > "$KEYMAP"
-run_keymap() {  # run_keymap <browser-key> <line-numbers-key> <path>
-  SPECHUB_ARGS="$1|$2|$BEGIN_MARK|$END_MARK" python3 "$KEYMAP" "$3" 2>/dev/null
+run_keymap() {  # run_keymap <browser-key> <line-numbers-key> <path> [download-target]
+  SPECHUB_ARGS="$1|$2|D|${4-}|$BEGIN_MARK|$END_MARK" python3 "$KEYMAP" "$3" 2>/dev/null
 }
 
 if [ -s "$KEYMAP" ]; then
@@ -2187,6 +2187,49 @@ if [ "$first_km" = "1" ]; then
   ok "managed yazi keymap blocks do not accumulate"
 else
   no "managed yazi keymap blocks do not accumulate ($first_km)"
+fi
+
+# The download key is the one binding written from a config value rather than
+# always. No target means no key, because a machine with no Tailscale would
+# otherwise carry a binding that can only fail.
+rm -f "$WORK/km-nodl.toml"
+run_keymap b "#" "$WORK/km-nodl.toml"
+if parses "$WORK/km-nodl.toml" && ! grep -q 'tailscale file cp' "$WORK/km-nodl.toml"; then
+  ok "no download_target writes no download key"
+else
+  no "no download_target writes no download key"
+fi
+
+rm -f "$WORK/km-dl.toml"
+run_keymap b "#" "$WORK/km-dl.toml" my-laptop
+if parses "$WORK/km-dl.toml" && python3 - "$WORK/km-dl.toml" <<'PYDL'
+import sys, tomllib
+data = tomllib.load(open(sys.argv[1], "rb"))
+binds = data.get("mgr", {}).get("prepend_keymap", [])
+hit = [b for b in binds if b.get("on") == "D"]
+if not hit:
+    sys.exit("no download binding")
+run = hit[0].get("run", "")
+if "tailscale file cp" not in run:
+    sys.exit(f"binding does not send over Taildrop: {run!r}")
+if "my-laptop:" not in run:
+    sys.exit(f"binding does not name the target: {run!r}")
+# %* is an [opener] placeholder. A keybinding passes the two characters
+# through, and tailscale answers `open %*: no such file or directory`.
+# Measured on yazi 26.8.15.
+if "%*" in run:
+    sys.exit(f"binding uses a placeholder yazi never expands: {run!r}")
+if "%h" not in run:
+    sys.exit(f"binding does not pass the hovered file: {run!r}")
+# A send reports progress, and a refused one reports why. Detached, both go
+# nowhere and the user sees only yazi's exit code.
+if "--block" not in run:
+    sys.exit(f"the send is detached, so its error goes nowhere: {run!r}")
+PYDL
+then
+  ok "download_target binds the key to Taildrop on the hovered file"
+else
+  no "download_target binds the key to Taildrop on the hovered file"
 fi
 
 

@@ -32,7 +32,7 @@ flowchart TD
     Q -->|"an SSH shell"| KB["Free the keys the emulator swallows<br/>(client-keybindings.md)"]
     Q -->|"a herdr client on their own machine"| RM["Attach with the server keymap<br/>(herdr --remote)"]
     RM --> KB
-    KB --> FB["Copy or open fails<br/>(read the last lines of status)"]
+    KB --> FB["Copy, open or download fails<br/>(read the last lines of status)"]
     AP --> OFF["Turn one component off<br/>(setup.sh disable, uninstall)"]
 ```
 
@@ -45,7 +45,7 @@ flowchart TD
 | How does the user reach this machine? | section 5 |
 | Attach with the server keymap         | section 5 |
 | Free the keys the emulator swallows   | section 6 |
-| Copy or open fails                    | section 7 |
+| Copy, open or download fails          | section 7 |
 | Turn one component off                | section 8 |
 
 ## 1. Eight components, installed for a user account and not for a project
@@ -71,7 +71,7 @@ above them. Those eight sections install ten tools between them:
 | diffnav | A diff viewer with a file tree, on one key. | `diffnav.enabled` |
 | delta | The diff renderer git pages through. | `delta.enabled` |
 | tuicr | Reviews a pull request inside the terminal. | `tuicr.enabled` |
-| yazi | A file manager, with markdown drawn live by spechub-md. | `yazi.enabled` |
+| yazi | A file manager, with markdown drawn live by spechub-md. One key sends the hovered file to the machine the user sits at. | `yazi.enabled` |
 | markdown | Markdown with its mermaid diagrams drawn as text, or served to a browser. Installs spechub-md, mermaid-ascii and glow. | `markdown.enabled` |
 | remote | Copy and open, on a machine with no display of its own. Installs spechub-clip and spechub-open. | `remote.enabled` |
 
@@ -112,7 +112,7 @@ Its last lines say where a copy and an open will land on this machine. Section
 
 ## 3. Copy the config, then walk the user through the choices
 
-*The config exposes far more keys than this. Seven of them are worth raising with the user, and the two that need no new vocabulary come first.*
+*The config exposes far more keys than this. Eight of them are worth raising with the user, and the two that need no new vocabulary come first.*
 
 Copy the example config before the first `apply`:
 
@@ -137,6 +137,10 @@ Then ask about these settings, in this order:
   - `true` needs cargo, the Rust build tool, and takes a few minutes to build
   - Tell the user it is temporary. `status` tracks the two upstream pull requests, not the local fix
 - **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave it empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
+- **`yazi.download_target`**: the Tailscale node name of the machine the user sits at. Setting it puts a download key in yazi. Leave it empty for a user who does not run Tailscale, and `apply` writes no key
+  - Ask for the name `tailscale status` prints on **this** machine, not the name the user calls their laptop
+  - Taildrop sends only between devices one Tailscale account owns on one tailnet, so confirm both ends match before setting it
+  - Tell them to run `sudo tailscale set --operator=$USER` once on this machine, because `tailscale file cp` refuses a non-root caller without it
 - **`remote.clipboard_shim`**: leave it `true` on any machine reached over SSH. It puts an `xclip` on `$PATH`, backed by `spechub-clip`. That stand-in is the only reason gh-dash's `y` and `Y` work there. `apply` skips it when the machine has a real `xclip` or a display
 
 One setting sits outside the config. `spechub-md --serve` takes its port from
@@ -268,9 +272,9 @@ it. A user on a plain Linux console has nothing to fix.
 **Never** try to edit a client-side terminal config from a remote host. Never
 ask the user to paste their local config here so you can rewrite it.
 
-## 7. Copy and open, on a machine with no display
+## 7. Copy, open and download, on a machine with no display
 
-*Three gh-dash keys break there. `apply` fixes them, and the last lines of `status` say how.*
+*Three gh-dash keys break there, and a file has no way off the machine at all. `apply` writes a route for each. The last lines of `status` say where a copy and an open will land.*
 
 The dev machine – the remote machine the user's agents run on, a virtual
 machine in this setup – has no display and no clipboard. Two gaps, and three
@@ -386,6 +390,46 @@ killing it is the user's call, not yours.
 
 Detail, and why OSC 52 rather than a clipboard daemon:
 [docs/terminal-workspace.md](../../docs/terminal-workspace.md).
+
+### 7.2. Getting a file off the machine
+
+*A third gap has nothing to do with gh-dash. OSC 52 carries text, and a file needs Taildrop.*
+
+The clipboard route above carries text. A screenshot, a build artifact or a log
+has no route at all. The user's own SSH client pulls one down only when they
+type the path by hand.
+
+Set `yazi.download_target` and `apply` binds one key in yazi, `D` by default. It
+runs Taildrop, Tailscale's file send, on the hovered file:
+
+```toml
+run = 'shell --block -- tailscale file cp "%h" <target>:'
+```
+
+Recommend Taildrop over `scp` back to the user's machine. That route needs
+three things on their machine, and Taildrop needs none of them:
+
+- an SSH server running there
+- a reverse tunnel raised on every connection
+- this machine's key in their `authorized_keys`
+
+Taildrop needs no inbound port on their machine either.
+
+Three things break it, and `apply` names whichever one holds:
+
+| What the user sees | What it means | What to do |
+|---|---|---|
+| `Access denied: file access denied` | The account does not own the local Tailscale daemon | Run `sudo tailscale set --operator=$USER` once |
+| `502 Bad Gateway`, or the target reported offline | The two machines sit on different tailnets or under different accounts | Compare `tailscale status` on both ends |
+| `open %*: no such file or directory` | A binding used `%*`, which yazi never expands in a keymap | Use `%h`, the hovered file |
+
+The last row is why the key takes one file at a time. `%*` belongs to yazi's
+`[opener]` table. A keybinding passes the two characters through untouched,
+measured on yazi 26.8.15.
+
+Do not offer to install an SSH server on the user's own machine to work around
+a Taildrop failure. Fix the tailnet instead, or leave `yazi.download_target`
+empty.
 
 ## 8. Turning one component off, or all of them
 

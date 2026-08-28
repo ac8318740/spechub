@@ -791,6 +791,19 @@ The file tree draws markdown twice over.
 - Add `spechub-md` to your own `[opener]` table to read markdown with it
 - Add `show_hidden = true` to your own `mgr` table if you want hidden files shown
 - Section 10.4 says what it concedes and why
+- `D` sends the file under the cursor to the machine you sit at, over Tailscale Taildrop
+    - Taildrop is Tailscale's file send
+    - It beats `scp` back to a laptop, because it needs nothing installed at the other end and no inbound port there
+    - The file lands in that machine's Tailscale receive folder
+- The key appears only when `yazi.download_target` names a Tailscale node, and `yazi.download_key` moves it
+- Taildrop sends only between devices one Tailscale account owns on one tailnet
+    - On this machine `tailscale status` may report the target as `offline`
+        - That means you signed the other machine in to another tailnet, whatever its own Tailscale client shows
+    - A `502 Bad Gateway` from the send means the same thing
+    - Read `tailscale status` on both ends and compare the account column, because two nodes can share a hostname across two tailnets
+- One step has no config key, because it is machine-level
+    - `tailscale file cp` answers a non-root caller with `Access denied: file access denied` until the account owns the daemon
+    - Run `sudo tailscale set --operator=$USER` once
 
 Four keys and a cursor move cover the loop.
 
@@ -1366,6 +1379,12 @@ The opener rides the same machinery as the bridge.
 - A template written with `"$@"` hands the helper no file at all
 - `%s` is the placeholder yazi substitutes, already quoted
 - Measured on yazi 26.8.15
+- The `keymap.toml` bindings say `%h` for the same reason, and never `%*`
+    - `%h` is the hovered file
+    - `%*` belongs to `[opener]`, and a keybinding never expands it
+        - The two characters go through untouched
+        - The command reports them back as a filename, such as `open %*: no such file or directory`
+    - So a binding that carries a file uses `%h`, and takes one file at a time
 - The `#` key runs two actions rather than one, flipping the flag, then forcing yazi to draw the pane again
 - Without the redraw the pane keeps showing whatever it drew before you pressed the key
 - The switch looks broken until you move the cursor
