@@ -137,9 +137,11 @@ A write keeps the file as you wrote it. Comments, blank lines, key order, and qu
 So the result decides which path a write takes, and never the shape of the key.
 
 - A hand-edited file with ordinary one-line values gets the byte-for-byte path
-    - That is the common case, and the one such a file needs
+    - That is the common case
+    - It is the path such a file needs
 - Anything the check cannot vouch for gets re-emitted
-    - That is always correct, and it costs only formatting
+    - That is always correct
+    - It costs only formatting
 - Losing the alignment of a comment beats losing the key that follows a block scalar
 
 ### 1.6. Four file shapes that get a decision rather than a crash

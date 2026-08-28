@@ -11,7 +11,8 @@ This skill makes a doc lead with a diagram, then derive its sections from that d
 
 - **Most technical docs explain in reading order rather than importance order**
     - The reader builds the picture themselves and learns what mattered last
-- **One diagram carries the whole shape**, and every section maps to a part of it
+- **One diagram carries the whole shape**
+- **Every section maps to a part of that diagram**
 - **The prose rules live in the `writing` skill**
 - This skill owns shape alone
 
@@ -88,11 +89,11 @@ End the lead diagram with a mapping table when the doc has more than four sectio
 
 *Say what the thing is and who it is for in one sentence. Put everything else in bullets under it.*
 
-The opening is never a paragraph. A reader meeting the doc for the first time scans it, and a four-sentence block of setup is the part they skip.
+The opening is never a paragraph. A reader meeting the doc for the first time scans it. A four-sentence block of setup is the part they skip.
 
 - **Sentence one names the thing and what it does**, in words a developer who has never seen this repo already knows
 - **Bullets under it carry the rest**: what problem it solves, what it costs, what it does not do
-- **A bullet that needs context gets a sub-bullet**, and never a second sentence
+- **A bullet that needs context gets a sub-bullet**, never a second sentence
 
 | Beat | Where it goes |
 | ---- | ------------- |
@@ -103,7 +104,7 @@ The opening is never a paragraph. A reader meeting the doc for the first time sc
 
 Two rules keep the opening honest.
 
-- The answer goes first, and never at the end
+- The answer goes first, never at the end
 - A reader who stops after the opening sentence and the first bullet must still leave with the conclusion
 
 ### 2.2. The vertical rule

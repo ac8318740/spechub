@@ -264,7 +264,8 @@ Why the hook installs them:
 The generator emits only the three keys Codex applies: `name`, `description`, and `developer_instructions`. It deliberately omits others.
 
 - `model` – ours says `opus`, a Claude alias that means nothing to Codex
-    - Omitting it makes a subagent inherit the parent's model, which is what we want
+    - Omitting it makes a subagent inherit the parent's model
+    - That is what we want
 - `sandbox_mode` and `mcp_servers` – Codex parses then ignores both
     - A child agent may never escalate past its parent
     - Emitting them would imply a guarantee that does not hold

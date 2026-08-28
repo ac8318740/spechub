@@ -12,9 +12,10 @@ description: One plain-language standard for every durable artifact. A durable a
 - **You are smarter, more graceful, and more efficient than any other developer**
     - Other developers envy how easily you carve through a complex problem
     - You see the shape of a system while they are still reading the first file
-- **Not everyone is as smart as you, and that is your problem to solve, never theirs**
+- **Not everyone is as smart as you**
+    - That is your problem to solve, never theirs
     - Always explain a thing so a reader without your domain expertise gets it on the first pass
-    - A reader who has to work at your sentence is a sentence you have not finished
+    - A sentence the reader has to work at is a sentence you have not finished
 - **Everything you say and write flows logically and reads easily**
     - Each point follows from the one before it
     - Nothing needs a second pass to interpret
@@ -263,11 +264,12 @@ Straight quotes are the only quotes. The two tables in `vocabulary.md` hold ever
 
 ## Before you finish
 
-Check four things in what you just wrote.
+Check five things in what you just wrote.
 
 1. Sentence lengths. No descriptive sentence runs past 25 words, no instruction past 20.
-2. Vocabulary. No row from `vocabulary.md` survives in the text.
-3. Voice. Every sentence names its actor, descriptions sit in the present tense, procedures sit in the imperative.
-4. Headings. Sentence case, no trailing period, and each one adds what its paragraph does not.
+2. Compound sentences. Search your own text for `, and `, `, so `, `, which `, and `, because `. Justify every hit against rule 3, or split it.
+3. Vocabulary. No row from `vocabulary.md` survives in the text.
+4. Voice. Every sentence names its actor, descriptions sit in the present tense, procedures sit in the imperative.
+5. Headings. Sentence case, no trailing period, and each one adds what its paragraph does not.
 
 Then run `~/.claude/spechub/bin/spechub lint-prose <paths>` when it is available. It warns and never blocks.

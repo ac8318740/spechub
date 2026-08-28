@@ -76,9 +76,12 @@ The three commands:
 - **The request still has open questions** – run `/spechub:map`
     - Claude interviews you one round at a time
     - Each round asks every question it can answer next
-    - Each question comes with Claude's recommended answer, so you confirm instead of composing
-    - A single question ends there, and Claude writes the decision down as a short note under `docs/adr/`
-    - A big feature needs dozens of questions, and Claude stores those as a map you work through across several sessions
+    - Each question comes with Claude's recommended answer
+    - You confirm instead of composing
+    - A single question ends there
+    - Claude writes the decision down as a short note under `docs/adr/`
+    - A big feature needs dozens of questions
+    - Claude stores those as a map you work through across several sessions
 
 ### 2.1. What a map holds
 
@@ -96,8 +99,10 @@ Each node carries one of five statuses.
 
 Each node also records four things.
 
-- **What raised it**, so you can read the decisions back in the order they happened
-- **What must finish first**, so SpecHub can tell you what is ready to start
+- **What raised it**
+    - You can read the decisions back in the order they happened
+- **What must finish first**
+    - SpecHub uses that to tell you what is ready to start
 - **Who answers it**: you, or Claude working alone
 - **Where it lives**: a GitHub issue by default, or a markdown file under `spechub/maps/` with no GitHub remote
 
@@ -105,7 +110,8 @@ Two things SpecHub does with a finished map.
 
 - **It works through the nodes that are ready to start**, meaning the open ones with nothing unfinished blocking them
     - SpecHub calls that set the **frontier**
-- **It packs the whole map into a single brief**, so a fresh Claude session picks up where the last one stopped
+- **It packs the whole map into a single brief**
+    - A fresh Claude session picks up where the last one stopped
 
 Every rule in SpecHub exists because something went wrong without it, over months of real product development with Claude Code.
 
@@ -238,7 +244,8 @@ What an effort leaves behind is what matters: updated specs, decision notes and 
 How to turn it on:
 
 - `/spechub:setup` offers the style on both paths
-    - On a new project it comes late, and it is optional
+    - On a new project it comes late
+    - It is optional there
     - On a project already set up it is a health-check row
 - The skill writes `outputStyle` for you
 - It asks first
