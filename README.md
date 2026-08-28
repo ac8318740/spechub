@@ -78,7 +78,7 @@ The three commands:
     - Each round asks every question it can answer next
     - Each question comes with Claude's recommended answer
     - You provide feedback on Claude's recommended answer instead of prompting from scratch
-    - Some requests need only one question
+    - Some requests only need one question
     - Claude writes that decision down as a short note under `docs/adr/`
     - A big feature may need dozens of questions
     - Claude stores those questions as a **map**

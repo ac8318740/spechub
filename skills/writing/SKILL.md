@@ -123,7 +123,7 @@ The same rule orders sections. A section that uses a term has to sit after the s
 
 ### 11. Use the common word, and never a metaphor where a plain word exists
 
-Four ways this fails. Each carries its own pair.
+Five ways this fails. Each carries its own pair.
 
 **A fancier word than the job needs.** The longer word buys nothing, and it costs the reader a beat.
 
@@ -132,6 +132,11 @@ Four ways this fails. Each carries its own pair.
 
 - Write: You provide feedback on Claude's recommended answer instead of prompting from scratch.
 - Not: You confirm instead of composing.
+
+**Word order nobody uses out loud.** Say the sentence to yourself. Write the order you said.
+
+- Write: Some requests only need one question.
+- Not: Some requests need only one question.
 
 **A metaphor the reader has to decode.** A heading is the worst place to make them do that.
 
@@ -145,7 +150,10 @@ Four ways this fails. Each carries its own pair.
 
 **A sentence written for drama.** State the fact and stop. A sentence built for effect reads as marketing, not as documentation.
 
-- Write: Some requests need only one question.
+- Write: SpecHub throws the nodes away.
+- Not: The nodes themselves are scaffolding.
+
+- Write: Some requests only need one question.
 - Not: A single question ends there.
 
 Most of these words have no entry in `vocabulary.md`, and they should not. `composing` is right in a sentence about music. The judgment is yours, and these pairs are what it looks like.
