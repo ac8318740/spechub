@@ -3983,6 +3983,16 @@ var init_source = __esm({
 // src/lib/constants.ts
 import { join as join2 } from "node:path";
 import { homedir } from "node:os";
+function spechubFile(name, root) {
+  const relative2 = join2(SPECHUB_DIR, name);
+  return root === void 0 ? relative2 : join2(root, relative2);
+}
+function projectFile(root) {
+  return spechubFile(PROJECT_FILE, root);
+}
+function domainMapFile(root) {
+  return spechubFile(DOMAIN_MAP_FILE, root);
+}
 var SPECHUB_DIR, CHANGES_DIR, MAPS_DIR, SPECS_DIR, ARCHIVE_DIR, PROJECT_FILE, DOMAIN_MAP_FILE, PROFILES_DIR, AGENT_BROWSER_JSON_FILE, VERIFICATION_KNOWLEDGE_FILE, AGENT_BROWSER_BIN, CLAUDE_DIR, CLAUDE_SETTINGS_FILE, CLAUDE_LOCAL_SETTINGS_FILE, SPECHUB_OUTPUT_STYLE, VOCABULARY_PATH, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE, GLOBAL_DATA_DIR;
 var init_constants = __esm({
   "src/lib/constants.ts"() {
@@ -16213,9 +16223,17 @@ function parseBooleanWord(key, raw) {
   const normalized = raw.toLowerCase();
   if (TRUE_VALUES.includes(normalized)) return true;
   if (FALSE_VALUES.includes(normalized)) return false;
-  throw new ConfigValidationError(
-    `Invalid value "${raw}" for ${key}. Expected a boolean: ${TRUE_VALUES.join("/")} or ${FALSE_VALUES.join("/")}`
+  throw invalidValue(
+    key,
+    raw,
+    `Expected a boolean: ${TRUE_VALUES.join("/")} or ${FALSE_VALUES.join("/")}`
   );
+}
+function invalidValue(key, raw, expected) {
+  return new ConfigValidationError(`Invalid value "${raw}" for ${key}. ${expected}`);
+}
+function invalidEnumValue(key, raw, values) {
+  return invalidValue(key, raw, `Allowed values: ${values.join(", ")}`);
 }
 function hostAxis(key) {
   return HOST_AXES.find((axis) => axis.key === key);
@@ -16259,11 +16277,7 @@ function parseValue(key, raw) {
   assertSettableKey(key);
   const axis = hostAxis(key);
   if (axis.kind === "enum") {
-    if (!axis.values.includes(raw)) {
-      throw new ConfigValidationError(
-        `Invalid value "${raw}" for ${key}. Allowed values: ${axis.values.join(", ")}`
-      );
-    }
+    if (!axis.values.includes(raw)) throw invalidEnumValue(key, raw, axis.values);
     return raw;
   }
   return parseBooleanWord(key, raw);
@@ -16469,14 +16483,16 @@ function projectSettings(projectYaml, hasProject = true) {
 function frontendHelpersDir(projectYaml) {
   return statedString(record(record(projectYaml)?.frontend)?.helpers_dir);
 }
-function workflowFlag(projectYaml, key, whenUnstated) {
-  const value = record(record(projectYaml)?.workflow)?.[key];
+function workflowFlag(projectYaml, flag, whenUnstated) {
+  const key = `workflow.${flag}`;
+  const fallback = whenUnstated(key);
+  const value = record(record(projectYaml)?.workflow)?.[flag];
   if (typeof value === "boolean") return value;
-  if (typeof value !== "string") return whenUnstated;
+  if (typeof value !== "string") return fallback;
   try {
-    return parseBooleanWord(`workflow.${key}`, value);
+    return parseBooleanWord(key, value);
   } catch {
-    return whenUnstated;
+    return fallback;
   }
 }
 function domainCount(domainMapYaml) {
@@ -16493,7 +16509,7 @@ function agentBrowserCdpPort(agentBrowserJson) {
 function outputStyleOf(settingsJson) {
   return statedString(record(settingsJson)?.outputStyle);
 }
-var BROWSER_MODE_PRIORITY, BROWSER_AXIS_KEYS, BROWSER_AXIS_KEY_SET, ORCHESTRATORS, ORCHESTRATOR_AXIS_KEYS, ORCHESTRATOR_PROBES, CHROMIUM_BINARIES, DEFAULT_REMOTE_CDP_PORT, DEFAULT_CDP_PORT, FALLBACK_FORBIDDEN;
+var BROWSER_MODE_PRIORITY, BROWSER_AXIS_KEYS, BROWSER_AXIS_LIST, BROWSER_AXIS_KEY_SET, ORCHESTRATORS, ORCHESTRATOR_AXIS_KEYS, ORCHESTRATOR_PROBES, CHROMIUM_BINARIES, DEFAULT_REMOTE_CDP_PORT, DEFAULT_CDP_PORT, FALLBACK_FORBIDDEN, BROWSER_FALLBACK_VALUES;
 var init_host_status = __esm({
   "src/lib/host-status.ts"() {
     "use strict";
@@ -16504,6 +16520,7 @@ var init_host_status = __esm({
       headless: "host.browser.headless",
       local: "host.browser.local"
     };
+    BROWSER_AXIS_LIST = BROWSER_MODE_PRIORITY.map((mode) => BROWSER_AXIS_KEYS[mode]).join(", ");
     BROWSER_AXIS_KEY_SET = new Set(Object.values(BROWSER_AXIS_KEYS));
     ORCHESTRATORS = ["herdr", "orca"];
     ORCHESTRATOR_AXIS_KEYS = {
@@ -16530,72 +16547,51 @@ var init_host_status = __esm({
     DEFAULT_REMOTE_CDP_PORT = 19988;
     DEFAULT_CDP_PORT = 9555;
     FALLBACK_FORBIDDEN = "none";
+    BROWSER_FALLBACK_VALUES = [
+      FALLBACK_FORBIDDEN,
+      ...BROWSER_MODE_PRIORITY
+    ];
   }
 });
 
-// src/lib/host-probe.ts
-import { spawnSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
-import { request } from "node:http";
-import { delimiter, join as join10 } from "node:path";
-function binaryOnPath(binary) {
-  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-    if (!dir) continue;
+// src/lib/atomic-file.ts
+import { randomBytes } from "node:crypto";
+import { renameSync, rmSync as rmSync2, writeFileSync as writeFileSync3 } from "node:fs";
+function tempPathFor(path) {
+  return `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+}
+function replaceFileAtomically(path, text, beforeRename) {
+  const temp = tempPathFor(path);
+  try {
+    writeFileSync3(temp, text, "utf-8");
+    beforeRename?.(temp);
+    renameSync(temp, path);
+  } catch (err) {
     try {
-      accessSync(join10(dir, binary), constants.X_OK);
-      return true;
+      rmSync2(temp, { force: true });
     } catch {
     }
+    throw err;
   }
-  return false;
 }
-function firstBinaryOnPath(binaries) {
-  return binaries.find(binaryOnPath);
-}
-function runCommand(binary, args) {
-  const result = spawnSync(binary, [...args], {
-    // In order: no standard input, capture standard output, discard standard error.
-    stdio: ["ignore", "pipe", "ignore"],
-    encoding: "utf-8",
-    timeout: PROBE_TIMEOUT_MS,
-    shell: false
-  });
-  return { exitedZero: result.status === 0, stdout: result.stdout ?? "" };
-}
-function cdpPortAnswers(port, host = "127.0.0.1") {
-  return new Promise((resolve5) => {
-    let settled = false;
-    const finish = (answered) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      req.destroy();
-      resolve5(answered);
-    };
-    const req = request(
-      { host, port, path: "/json/version", method: "GET", timeout: PROBE_TIMEOUT_MS },
-      (res) => {
-        res.resume();
-        finish(true);
-      }
-    );
-    const deadline = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
-    req.on("timeout", () => finish(false));
-    req.on("error", () => finish(false));
-    req.end();
-  });
-}
-var PROBE_TIMEOUT_MS;
-var init_host_probe = __esm({
-  "src/lib/host-probe.ts"() {
+var init_atomic_file = __esm({
+  "src/lib/atomic-file.ts"() {
     "use strict";
-    PROBE_TIMEOUT_MS = 2e3;
   }
 });
 
 // src/lib/project-config.ts
-import { existsSync as existsSync8, readFileSync as readFileSync7, readdirSync as readdirSync5, writeFileSync as writeFileSync3 } from "node:fs";
-import { basename, dirname as dirname4, join as join11 } from "node:path";
+import {
+  accessSync,
+  chmodSync,
+  constants as fsConstants,
+  existsSync as existsSync8,
+  readFileSync as readFileSync7,
+  readdirSync as readdirSync5,
+  realpathSync,
+  statSync as statSync2
+} from "node:fs";
+import { basename, dirname as dirname4, join as join10 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 function projectKeySpec(key) {
   return PROJECT_KEYS[key];
@@ -16603,16 +16599,13 @@ function projectKeySpec(key) {
 function profileNames() {
   const pluginRoot = findPluginRoot();
   if (!pluginRoot) return [];
-  const dir = join11(pluginRoot, PROFILES_DIR);
+  const dir = join10(pluginRoot, PROFILES_DIR);
   if (!existsSync8(dir)) return [];
   return readdirSync5(dir).filter((name) => name.endsWith(".yaml")).map((name) => basename(name, ".yaml")).sort();
 }
-function invalidValue(key, raw, expected) {
-  return new ConfigValidationError(`Invalid value "${raw}" for ${key}. ${expected}`);
-}
 function parseEnum(key, raw, values) {
   if (values.includes(raw)) return raw;
-  throw invalidValue(key, raw, `Allowed values: ${values.join(", ")}`);
+  throw invalidEnumValue(key, raw, values);
 }
 function numberRange(spec) {
   const { min, max } = spec;
@@ -16707,8 +16700,13 @@ function holdsSameDataAs(candidate, expected) {
   }
 }
 function lineEndingOf(src) {
-  const first2 = src.indexOf("\n");
-  return first2 > 0 && src[first2 - 1] === "\r" ? "\r\n" : "\n";
+  const crlf = (src.match(/\r\n/g) ?? []).length;
+  const lf = (src.match(/\n/g) ?? []).length - crlf;
+  return crlf > lf ? "\r\n" : "\n";
+}
+function withByteOrderMark(text, src) {
+  if (!src.startsWith(BYTE_ORDER_MARK) || text.startsWith(BYTE_ORDER_MARK)) return text;
+  return BYTE_ORDER_MARK + text;
 }
 function withLineEnding(text, ending) {
   const lf = text.replace(/\r\n/g, "\n");
@@ -16735,16 +16733,49 @@ function readSource(file) {
     );
   }
 }
+function replaceFile(file, text) {
+  const present = existsSync8(file);
+  const target = present ? realpathSync(file) : file;
+  const existing = present ? statSync2(target) : null;
+  if (existing) accessSync(target, fsConstants.W_OK);
+  const directory = dirname4(target);
+  try {
+    accessSync(directory, fsConstants.W_OK);
+  } catch (err) {
+    throw new ConfigFileError(
+      `Could not write ${file}: ${fsReason(err)} on ${directory}. The new file is written there and renamed over the target, so that directory has to be writable too.`
+    );
+  }
+  replaceFileAtomically(target, text, (temp) => {
+    if (existing) chmodSync(temp, existing.mode & 511);
+  });
+}
 function writeSource(file, text) {
   try {
     ensureDir(dirname4(file));
-    writeFileSync3(file, text, "utf-8");
+    replaceFile(file, text);
   } catch (err) {
+    if (err instanceof ConfigFileError) throw err;
     throw new ConfigFileError(`Could not write ${file}: ${fsReason(err)}`);
   }
 }
-function writeDocument(file, doc, ending) {
-  writeSource(file, withLineEnding(doc.toString(), ending));
+function writeDocument(file, key, doc, src) {
+  const text = withByteOrderMark(withLineEnding(emitDocument(file, doc), lineEndingOf(src)), src);
+  if (!holdsSameDataAs(text, doc)) {
+    throw new ConfigValidationError(
+      `Cannot write ${key} to ${file} safely: what the writer emits reads back as a different value, so nothing was written. Change the value, or edit the key by hand.`
+    );
+  }
+  writeSource(file, text);
+}
+function emitDocument(file, doc) {
+  try {
+    return doc.toString();
+  } catch (err) {
+    throw new ConfigValidationError(
+      `Could not rewrite ${file}: ${err instanceof Error ? err.message : String(err)}. Remove the alias, or point it at a key the file still states, and try again.`
+    );
+  }
 }
 function isNullScalar(node) {
   return (0, import_yaml3.isScalar)(node) && node.value === null;
@@ -16757,8 +16788,13 @@ function emptyBlockFor(node, doc) {
   }
   return map;
 }
-function ensureBlocksAbove(doc, path) {
+function ensureBlocksAbove(file, doc, path) {
   if (isNullScalar(doc.contents)) doc.contents = emptyBlockFor(doc.contents, doc);
+  if (doc.contents != null && !(0, import_yaml3.isMap)(doc.contents)) {
+    throw new ConfigValidationError(
+      `Cannot set ${path.join(".")}: ${file} holds ${(0, import_yaml3.isSeq)(doc.contents) ? "a list" : "a value"}, not a block of keys. Rewrite the file as a block of keys and try again.`
+    );
+  }
   for (let depth = 1; depth < path.length; depth += 1) {
     const above = path.slice(0, depth);
     if (!doc.hasIn(above)) return;
@@ -16774,21 +16810,39 @@ function ensureBlocksAbove(doc, path) {
     );
   }
 }
-function setProjectKey(file, key, value) {
+function writeProjectEdit(file, key, edit) {
   const src = readSource(file);
   const doc = parseProjectDocument(file, src);
   const path = key.split(".");
-  ensureBlocksAbove(doc, path);
-  const spliced = splicedSource(src, doc, path, value);
-  doc.setIn(path, value);
-  if (spliced !== null && holdsSameDataAs(spliced, doc)) {
-    writeSource(file, spliced);
-    return;
+  if (!edit.prepare(doc, path)) return false;
+  const candidate = edit.candidate(src, doc, path);
+  edit.apply(doc, path);
+  if (candidate !== null && holdsSameDataAs(candidate, doc)) {
+    writeSource(file, candidate);
+    return true;
   }
-  writeDocument(file, doc, lineEndingOf(src));
+  writeDocument(file, key, doc, src);
+  return true;
+}
+function setProjectKey(file, key, value) {
+  writeProjectEdit(file, key, {
+    prepare: (doc, path) => {
+      ensureBlocksAbove(file, doc, path);
+      return true;
+    },
+    candidate: (src, doc, path) => splicedSource(src, doc, path, value),
+    apply: (doc, path) => doc.setIn(path, value)
+  });
 }
 function projectKeyDefault(key) {
   return PROJECT_KEY_DEFAULTS[key];
+}
+function projectKeyDefaultFlag(key) {
+  const stated = projectKeyDefault(key);
+  if (stated === void 0) {
+    throw new Error(`${key} has no documented default to apply.`);
+  }
+  return parseBooleanWord(key, stated);
 }
 function parseProjectDocument(file, src) {
   const doc = (0, import_yaml3.parseDocument)(src);
@@ -16819,10 +16873,24 @@ function listProjectKeys(file) {
       for (const [name, child] of Object.entries(node)) walk(child, [...path, name]);
       return;
     }
-    if (path.length > 0) rows.push([path.join("."), node]);
+    if (path.length === 0) return;
+    rows.push({ key: path.join("."), value: node, known: rowIsKnown(path, node) });
   };
   walk(parseProjectDocument(file, readSource(file)).toJS(), []);
   return rows;
+}
+function statesNothing(value) {
+  if (value === null) return true;
+  return typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+function knowsKeysUnder(key) {
+  return PROJECT_KEY_LIST.some((known2) => known2.startsWith(`${key}.`));
+}
+function rowIsKnown(path, value) {
+  if (path.some((part) => part.includes("."))) return false;
+  const key = path.join(".");
+  if (projectKeySpec(key) !== void 0) return true;
+  return statesNothing(value) && knowsKeysUnder(key);
 }
 function nextLineStart(src, from) {
   const at = src.indexOf("\n", from);
@@ -16853,37 +16921,35 @@ function collapseEmptied(doc, path) {
   if ((0, import_yaml3.isMap)(doc.contents) && doc.contents.items.length === 0) doc.contents = null;
 }
 function unsetProjectKey(file, key) {
-  const src = readSource(file);
-  const doc = parseProjectDocument(file, src);
-  const path = key.split(".");
-  if (!doc.hasIn(path)) return false;
-  const removed = removedSource(src, doc, path);
-  doc.deleteIn(path);
-  collapseEmptied(doc, path);
-  if (removed !== null && holdsSameDataAs(removed, doc)) {
-    writeSource(file, removed);
-    return true;
-  }
-  writeDocument(file, doc, lineEndingOf(src));
-  return true;
+  return writeProjectEdit(file, key, {
+    prepare: (doc, path) => doc.hasIn(path),
+    candidate: removedSource,
+    apply: (doc, path) => {
+      doc.deleteIn(path);
+      collapseEmptied(doc, path);
+    }
+  });
 }
-var import_yaml3, COUNT, PROJECT_KEYS, PROJECT_KEY_LIST, PERCENTAGE, FS_REASONS, UTF8, PROJECT_KEY_DEFAULTS;
+var import_yaml3, COUNT, FRONTEND_VERIFICATION_KEY, PROJECT_KEYS, PROJECT_KEY_LIST, PERCENTAGE, BYTE_ORDER_MARK, FS_REASONS, UTF8, PROJECT_KEY_DEFAULTS;
 var init_project_config = __esm({
   "src/lib/project-config.ts"() {
     "use strict";
     import_yaml3 = __toESM(require_dist(), 1);
     init_global_config();
+    init_atomic_file();
+    init_host_status();
     init_constants();
     init_project();
     init_utils();
     COUNT = { kind: "number", integer: true, min: 0 };
+    FRONTEND_VERIFICATION_KEY = "workflow.frontend_verification";
     PROJECT_KEYS = {
       profile: { kind: "profile" },
       "workflow.spec_sync": { kind: "boolean" },
       "workflow.grilling.questions": { kind: "enum", values: ["tool", "inline"] },
       "workflow.tdd.strict": { kind: "boolean" },
       "workflow.tdd.orchestrator_strict": { kind: "boolean" },
-      "workflow.frontend_verification": { kind: "boolean" },
+      [FRONTEND_VERIFICATION_KEY]: { kind: "boolean" },
       "workflow.maps.tracker": { kind: "enum", values: ["github", "files"] },
       "workflow.maps.persist": { kind: "boolean" },
       "workflow.handoff.agent": { kind: "string" },
@@ -16912,14 +16978,16 @@ var init_project_config = __esm({
       "frontend.commands.build": { kind: "string" },
       "frontend.commands.lint": { kind: "string" },
       "frontend.commands.test": { kind: "string" },
-      "frontend.browser.mode": { kind: "enum", values: ["remote", "headless", "local"] },
-      // Only `none` acts at read time, but a typo is still worth catching, so the
-      // three mode names it could plausibly be confused with are named too.
-      "frontend.browser.fallback": { kind: "enum", values: ["none", "remote", "headless", "local"] },
+      // Both lists come from host-status.ts, which owns the mode names and reads
+      // them at run time. A schema spelling them again would be a second list to
+      // keep in step, and the file that resolves a mode would not know it existed.
+      "frontend.browser.mode": { kind: "enum", values: BROWSER_MODE_PRIORITY },
+      "frontend.browser.fallback": { kind: "enum", values: BROWSER_FALLBACK_VALUES },
       "frontend.browser.cdp_port": { kind: "number", integer: true, min: 1, max: 65535 }
     };
     PROJECT_KEY_LIST = Object.keys(PROJECT_KEYS);
     PERCENTAGE = /^\d+(\.\d+)?%$/;
+    BYTE_ORDER_MARK = "\uFEFF";
     FS_REASONS = {
       EACCES: "permission denied",
       EPERM: "permission denied",
@@ -16935,7 +17003,7 @@ var init_project_config = __esm({
       "workflow.grilling.questions": "tool",
       "workflow.tdd.strict": "true",
       "workflow.tdd.orchestrator_strict": "true",
-      "workflow.frontend_verification": "false",
+      [FRONTEND_VERIFICATION_KEY]: "false",
       "workflow.maps.persist": "false",
       "workflow.handoff.agent": "claude",
       "workflow.handoff.ack_turns": "5",
@@ -16951,139 +17019,70 @@ var init_project_config = __esm({
   }
 });
 
-// src/commands/config.ts
-var config_exports = {};
-__export(config_exports, {
-  register: () => register5
-});
-import { existsSync as existsSync9, readFileSync as readFileSync8, statSync as statSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { join as join12 } from "node:path";
-function reportingUserErrors(action) {
-  try {
-    action();
-  } catch (err) {
-    if (err instanceof ConfigValidationError || err instanceof ConfigFileError) {
-      console.error(source_default.red(err.message));
-      process.exit(1);
+// src/lib/host-probe.ts
+import { spawnSync } from "node:child_process";
+import { accessSync as accessSync2, constants } from "node:fs";
+import { request } from "node:http";
+import { delimiter, join as join11 } from "node:path";
+function binaryOnPath(binary) {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (!dir) continue;
+    try {
+      accessSync2(join11(dir, binary), constants.X_OK);
+      return true;
+    } catch {
     }
-    throw err;
   }
+  return false;
 }
-async function reportingUserErrorsAsync(action) {
-  try {
-    await action();
-  } catch (err) {
-    if (err instanceof ConfigValidationError || err instanceof ConfigFileError) {
-      console.error(source_default.red(err.message));
-      process.exit(1);
-    }
-    throw err;
-  }
+function firstBinaryOnPath(binaries) {
+  return binaries.find(binaryOnPath);
 }
-function qualifier(key, required) {
-  if (key !== "host" && !hostAxis(key)) return "";
-  return ` (${required ? "required" : "optional"})`;
+function runCommand(binary, args) {
+  const result = spawnSync(binary, [...args], {
+    // In order: no standard input, capture standard output, discard standard error.
+    stdio: ["ignore", "pipe", "ignore"],
+    encoding: "utf-8",
+    timeout: PROBE_TIMEOUT_MS,
+    shell: false
+  });
+  return { exitedZero: result.status === 0, stdout: result.stdout ?? "" };
 }
-function projectWorkflow(projectYaml) {
-  return {
-    specSync: workflowFlag(projectYaml, "spec_sync", true),
-    frontendVerification: workflowFlag(projectYaml, "frontend_verification", false)
-  };
-}
-function loadProject() {
-  const root = findProjectRoot();
-  if (!root) {
-    return {
-      root: null,
-      context: projectHostContext(void 0, false),
-      settings: null,
-      helpersDir: null,
-      workflow: projectWorkflow(void 0)
+function cdpPortAnswers(port, host = "127.0.0.1") {
+  return new Promise((resolve5) => {
+    let settled = false;
+    const finish = (answered) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      req.destroy();
+      resolve5(answered);
     };
-  }
-  const yaml = readYaml(join12(root, SPECHUB_DIR, PROJECT_FILE));
-  return {
-    root,
-    context: projectHostContext(yaml, true),
-    settings: projectSettings(yaml, true),
-    helpersDir: frontendHelpersDir(yaml),
-    workflow: projectWorkflow(yaml)
-  };
-}
-async function detectHostAxes(wanted, project) {
-  const detected = /* @__PURE__ */ new Map();
-  for (const name of ORCHESTRATORS) {
-    const key = ORCHESTRATOR_AXIS_KEYS[name];
-    if (!wanted.has(key)) continue;
-    if (firstBinaryOnPath(ORCHESTRATOR_PROBES[name].binaries)) detected.set(key, true);
-  }
-  const chromiumKeys = [BROWSER_AXIS_KEYS.headless, BROWSER_AXIS_KEYS.local].filter(
-    (key) => wanted.has(key)
-  );
-  if (chromiumKeys.length > 0 && firstBinaryOnPath(CHROMIUM_BINARIES)) {
-    for (const key of chromiumKeys) detected.set(key, true);
-  }
-  if (wanted.has(BROWSER_AXIS_KEYS.remote) && project.hasFrontend) {
-    if (await cdpPortAnswers(project.cdpPort)) detected.set(BROWSER_AXIS_KEYS.remote, true);
-  }
-  return detected;
-}
-async function hostAxisStatuses(config, project) {
-  const required = new Set(requiredHostAxisKeys({ hasFrontend: project.hasFrontend }));
-  const declared = /* @__PURE__ */ new Map();
-  for (const axis of HOST_AXES) {
-    const result = getKey(config, axis.key);
-    if (result.status === "set") declared.set(axis.key, result.value);
-  }
-  const undeclared = new Set(HOST_AXES.map((axis) => axis.key).filter((key) => !declared.has(key)));
-  const detected = await detectHostAxes(undeclared, project);
-  return HOST_AXES.map((axis) => {
-    const base = { key: axis.key, required: required.has(axis.key) };
-    if (declared.has(axis.key)) {
-      return { ...base, status: "declared", value: declared.get(axis.key) };
-    }
-    if (detected.has(axis.key)) {
-      return { ...base, status: "detected", value: detected.get(axis.key) };
-    }
-    return { ...base, status: "unset" };
+    const req = request(
+      { host, port, path: "/json/version", method: "GET", timeout: PROBE_TIMEOUT_MS },
+      (res) => {
+        res.resume();
+        finish(true);
+      }
+    );
+    const deadline = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
+    req.on("timeout", () => finish(false));
+    req.on("error", () => finish(false));
+    req.end();
   });
 }
-function formatValue(status) {
-  if (status.status === "unset") return source_default.dim("-");
-  return typeof status.value === "string" ? status.value : JSON.stringify(status.value);
-}
-function printHostAxes(axes) {
-  console.log(source_default.bold("Host"));
-  for (const axis of axes) {
-    const status = axis.status === "declared" ? source_default.green("declared") : source_default.dim(axis.status);
-    console.log(
-      `  ${axis.key.padEnd(AXIS_KEY_WIDTH)}  ${formatValue(axis).padEnd(10)}  ${status.padEnd(8)}  ${source_default.dim(axis.required ? "required" : "optional")}`
-    );
+var PROBE_TIMEOUT_MS;
+var init_host_probe = __esm({
+  "src/lib/host-probe.ts"() {
+    "use strict";
+    PROBE_TIMEOUT_MS = 2e3;
   }
-}
-function projectLine(label, value) {
-  return `  ${label.padEnd(PROJECT_LABEL_WIDTH)}  ${value}`;
-}
-function printProject(settings) {
-  if (!settings) {
-    console.log(source_default.dim("No SpecHub project here."));
-    return;
-  }
-  console.log(source_default.bold("Project"));
-  console.log(projectLine("profile", settings.profile ?? source_default.dim("-")));
-  for (const [name, command] of Object.entries(settings.commands)) {
-    console.log(projectLine(`commands.${name}`, command));
-  }
-  const browser = settings.browser;
-  if (!browser) {
-    console.log(source_default.dim("  this project has no frontend configured"));
-    return;
-  }
-  if (browser.mode !== null) console.log(projectLine("browser mode", browser.mode));
-  if (browser.cdpPort !== null) console.log(projectLine("browser CDP port", String(browser.cdpPort)));
-  if (browser.fallback !== null) console.log(projectLine("browser fallback", browser.fallback));
-}
+});
+
+// src/commands/config-check.ts
+import { existsSync as existsSync9, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { join as join12 } from "node:path";
 function checkRequiredAxes(report, config, project) {
   report.heading("Required host axes are set");
   const why = project.hasFrontend ? " (this project has a frontend)" : "";
@@ -17214,29 +17213,6 @@ function checkPreferredBrowserMode(report, config, project) {
     `project prefers ${preferred}, but this host declares no browser mode available (set one of ${BROWSER_AXIS_LIST} to true)`
   );
 }
-function browserModeProblemMessage(problem) {
-  switch (problem.kind) {
-    case "no-project":
-      return "No SpecHub project here, so there is no frontend to drive a browser for - run `/spechub:setup` in the project you want to set up.";
-    case "no-frontend":
-      return "This project configures no frontend, so it drives no browser - run `/spechub:setup` if it should have one.";
-    case "host-undescribed":
-      return `This host has not been described yet: none of ${BROWSER_AXIS_LIST} is set - run \`/spechub:host\` to describe this machine.`;
-    case "host-declares-none":
-      return `This host declares no browser mode available: every one of ${BROWSER_AXIS_LIST} it sets is false - run \`/spechub:host\` to declare one this machine can actually provide.`;
-    case "fallback-forbidden":
-      return `This project prefers the ${problem.preferred} browser mode, which this host does not declare available, and it sets frontend.browser.fallback to "${FALLBACK_FORBIDDEN}" - so ${problem.available} may not stand in. Set ${BROWSER_AXIS_KEYS[problem.preferred]} to true with \`/spechub:host\`, or change this project's frontend.browser.fallback.`;
-  }
-}
-function browserModeReason(resolved) {
-  if (!resolved.preferred) {
-    return `the project states no browser mode preference, so ${resolved.mode} wins as the first mode this host declares available`;
-  }
-  if (resolved.fallback) {
-    return `the project prefers ${resolved.preferred}, which this host does not declare available, so ${resolved.mode} stands in`;
-  }
-  return `the project prefers ${resolved.preferred} and this host declares it available`;
-}
 function checkOptionalAxes(report, config) {
   report.heading("Optional axes (informational only)");
   for (const axis of HOST_AXES.filter((a) => !a.required)) {
@@ -17263,12 +17239,16 @@ function readJsonFile(path) {
   }
 }
 function isFile(path) {
-  return existsSync9(path) && statSync2(path).isFile();
+  try {
+    return statSync3(path).isFile();
+  } catch {
+    return false;
+  }
 }
 function checkDomainMap(report, root, specSync) {
   const id = "domain-map";
   const consequence = "spec sync then skips silently and the living specs stop being updated";
-  const path = join12(root, DOMAIN_MAP_PATH);
+  const path = domainMapFile(root);
   if (!existsSync9(path)) {
     report.line(
       specSync ? "fail" : "info",
@@ -17307,7 +17287,7 @@ function checkFrontendFiles(report, root, project, helpersDir, verification) {
   }
   checkAgentBrowserJson(report, root, project.cdpPort);
   checkVerificationKnowledge(report, root, helpersDir);
-  checkFrontendVerification(report, verification);
+  reportFrontendVerificationFlag(report, verification);
 }
 function checkAgentBrowserJson(report, root, expected) {
   const id = "agent-browser-json";
@@ -17360,9 +17340,9 @@ function checkVerificationKnowledge(report, root, helpersDir) {
   }
   report.line("pass", id, `${relative2} is present`);
 }
-function checkFrontendVerification(report, enabled) {
+function reportFrontendVerificationFlag(report, enabled) {
   const id = "frontend-verification";
-  const key = "workflow.frontend_verification";
+  const key = FRONTEND_VERIFICATION_KEY;
   if (!enabled) {
     report.line(
       "info",
@@ -17373,20 +17353,20 @@ function checkFrontendVerification(report, enabled) {
   }
   report.line("pass", id, `${key} is true, so a UI change is verified in a browser before it lands`);
 }
-function checkProjectFiles(report, project) {
+function checkProjectFiles(report, loaded) {
   report.heading("This project's files");
-  if (!project.root) {
+  if (!loaded.root) {
     report.line("info", "no-project", "No SpecHub project here, so there are no project files to check");
     return;
   }
-  checkDomainMap(report, project.root, project.workflow.specSync);
-  if (project.context.hasFrontend) {
+  checkDomainMap(report, loaded.root, loaded.workflow.specSync);
+  if (loaded.host.hasFrontend) {
     checkFrontendFiles(
       report,
-      project.root,
-      project.context,
-      project.helpersDir,
-      project.workflow.frontendVerification
+      loaded.root,
+      loaded.host,
+      loaded.helpersDir,
+      loaded.workflow.frontendVerification
     );
   }
 }
@@ -17431,218 +17411,9 @@ function checkOutputStyle(report, root) {
   }
   report.line("info", id, "outputStyle is not set by any settings file, so Claude Code uses its default");
 }
-function isHostKey(key) {
-  return key === "host" || key.startsWith("host.");
-}
-function unknownConfigKey(key) {
-  return new ConfigValidationError(
-    `Unknown config key "${key}".
-Project keys (${join12(SPECHUB_DIR, PROJECT_FILE)}): ${PROJECT_KEY_LIST.join(", ")}
-Host keys start with host. and are listed in docs/dev-setups.md.`
-  );
-}
-function setHostKey(key, value) {
-  const parsed = parseValue(key, value);
-  const config = setKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key, parsed);
-  writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
-  console.log(source_default.green(`Set ${key} = ${JSON.stringify(parsed)}`));
-  const dependency = inertDependency(config, key);
-  if (dependency) {
-    console.error(
-      source_default.yellow(
-        `Warning: ${key} has no effect unless ${dependency.key} is ${String(dependency.value)}`
-      )
-    );
-  }
-}
-function projectFileFor(key, purpose) {
-  if (!projectKeySpec(key)) throw unknownConfigKey(key);
-  const root = findProjectRoot();
-  if (!root) {
-    throw new ConfigValidationError(
-      `There is no SpecHub project here, so ${key} ${purpose}. Run /spechub:setup first.`
-    );
-  }
-  return join12(root, SPECHUB_DIR, PROJECT_FILE);
-}
-function setProjectFileKey(key, value) {
-  const file = projectFileFor(key, "has nowhere to go");
-  const parsed = parseProjectValue(key, value);
-  setProjectKey(file, key, parsed);
-  console.log(source_default.green(`Set ${key} = ${JSON.stringify(parsed)}`));
-}
-function printConfigValue(value) {
-  console.log(typeof value === "string" ? value : JSON.stringify(value));
-}
-function getHostKey(key) {
-  const result = getKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
-  if (result.status === "unset") {
-    console.error(source_default.yellow(`${key} is unset${qualifier(key, result.required)}`));
-    process.exit(2);
-  }
-  printConfigValue(result.value);
-}
-function unsetHostKey(key) {
-  const { config, removed } = unsetKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
-  if (!removed) {
-    console.log(source_default.dim(`${key} was not set`));
-    return;
-  }
-  writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
-  console.log(source_default.green(`Removed ${key}`));
-}
-function getProjectFileKey(key) {
-  const result = getProjectKey(projectFileFor(key, "has no value to read"), key);
-  if (result.status === "unset") {
-    const fallback = projectKeyDefault(key);
-    const note = fallback === void 0 ? "" : ` - the documented default is ${fallback}`;
-    console.error(source_default.yellow(`${key} is unset${note}`));
-    process.exit(2);
-  }
-  printConfigValue(result.value);
-}
-function unsetProjectFileKey(key) {
-  const file = projectFileFor(key, "has nothing to remove");
-  if (!unsetProjectKey(file, key)) {
-    console.log(source_default.dim(`${key} was not set`));
-    return;
-  }
-  console.log(source_default.green(`Removed ${key}`));
-}
-function printProjectKeys(root) {
-  if (!root) {
-    console.log(source_default.dim("No SpecHub project here."));
-    return;
-  }
-  const file = join12(root, SPECHUB_DIR, PROJECT_FILE);
-  console.log(source_default.bold(file));
-  const rows = listProjectKeys(file);
-  if (rows.length === 0) {
-    console.log(source_default.dim("This project states no configuration."));
-    return;
-  }
-  for (const [key, value] of rows) console.log(`${key} = ${JSON.stringify(value)}`);
-}
-function register5(program3) {
-  const configCmd = program3.command("config").description("Read and change the host and project configuration");
-  configCmd.command("path").description("Print config file path").action(() => {
-    console.log(GLOBAL_CONFIG_FILE);
-  });
-  configCmd.command("list").description("Show every setting the two config files state").option("--json", "output as JSON").action((opts) => {
-    reportingUserErrors(() => {
-      const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-      const root = findProjectRoot();
-      if (opts.json) {
-        const project = root ? Object.fromEntries(listProjectKeys(join12(root, SPECHUB_DIR, PROJECT_FILE))) : null;
-        console.log(JSON.stringify({ ...config, project }, null, 2));
-        return;
-      }
-      printProjectKeys(root);
-      console.log("");
-      console.log(source_default.bold(GLOBAL_CONFIG_FILE));
-      if (Object.keys(config).length === 0) {
-        console.log(source_default.dim("No configuration set."));
-        return;
-      }
-      for (const [key, value] of Object.entries(config)) {
-        console.log(`${key} = ${JSON.stringify(value)}`);
-      }
-    });
-  });
-  configCmd.command("show").description("Show the host setup: every axis, declared or merely detected").option("--json", "output as JSON").action(async (opts) => {
-    await reportingUserErrorsAsync(async () => {
-      const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-      const { context: project, settings } = loadProject();
-      const axes = await hostAxisStatuses(config, project);
-      if (opts.json) {
-        console.log(
-          JSON.stringify(
-            {
-              hasProject: project.hasProject,
-              hasFrontend: project.hasFrontend,
-              axes,
-              project: settings
-            },
-            null,
-            2
-          )
-        );
-        return;
-      }
-      printProject(settings);
-      console.log("");
-      printHostAxes(axes);
-    });
-  });
-  configCmd.command("check").description("Check the host setup against what this machine can actually do").option("--json", "output as JSON").action(async (opts) => {
-    await reportingUserErrorsAsync(async () => {
-      const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-      const loaded = loadProject();
-      const project = loaded.context;
-      const report = new CheckReport();
-      checkRequiredAxes(report, config, project);
-      checkOrchestrators(report, config);
-      await checkDeclaredBrowserModes(report, config, project);
-      checkPreferredBrowserMode(report, config, project);
-      checkOptionalAxes(report, config);
-      checkProjectFiles(report, loaded);
-      checkOutputStyle(report, loaded.root ?? process.cwd());
-      report.finish(opts.json === true);
-    });
-  });
-  configCmd.command("browser-mode").description("Report which browser mode the frontend verifier should use here, and why").option("--json", "output as JSON").action((opts) => {
-    reportingUserErrors(() => {
-      const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
-      const project = loadProject().context;
-      const resolution = resolveBrowserMode(declaredBrowserModes(config), project);
-      if (resolution.status === "unresolved") {
-        console.error(source_default.red(browserModeProblemMessage(resolution.problem)));
-        process.exit(1);
-      }
-      const reason = browserModeReason(resolution);
-      if (opts.json) {
-        console.log(
-          JSON.stringify(
-            {
-              mode: resolution.mode,
-              preferred: resolution.preferred ?? null,
-              reason,
-              fallback: resolution.fallback
-            },
-            null,
-            2
-          )
-        );
-        return;
-      }
-      console.log(`${source_default.bold(resolution.mode)} - ${source_default.dim(reason)}`);
-    });
-  });
-  configCmd.command("get").description("Get a config value").argument("<key>", "config key").action((key) => {
-    reportingUserErrors(() => {
-      if (isHostKey(key)) getHostKey(key);
-      else getProjectFileKey(key);
-    });
-  });
-  configCmd.command("set").description("Set a config value").argument("<key>", "config key").argument("<value>", "config value").addHelpText(
-    "after",
-    "\nReference: docs/dev-setups.md for the host.* axes, docs/config-reference.md for the spechub/project.yaml keys.\n"
-  ).action((key, value) => {
-    reportingUserErrors(() => {
-      if (isHostKey(key)) setHostKey(key, value);
-      else setProjectFileKey(key, value);
-    });
-  });
-  configCmd.command("unset").description("Remove a config value").argument("<key>", "config key").action((key) => {
-    reportingUserErrors(() => {
-      if (isHostKey(key)) unsetHostKey(key);
-      else unsetProjectFileKey(key);
-    });
-  });
-}
-var AXIS_KEY_WIDTH, PROJECT_LABEL_WIDTH, OUTCOME_LABELS, CheckReport, BROWSER_AXIS_LIST, DOMAIN_MAP_PATH, AGENT_BROWSER_INSTALL;
-var init_config = __esm({
-  "src/commands/config.ts"() {
+var OUTCOME_LABELS, CheckReport, DOMAIN_MAP_PATH, AGENT_BROWSER_INSTALL;
+var init_config_check = __esm({
+  "src/commands/config-check.ts"() {
     "use strict";
     init_source();
     init_constants();
@@ -17650,10 +17421,7 @@ var init_config = __esm({
     init_host_status();
     init_host_probe();
     init_project_config();
-    init_project();
     init_utils();
-    AXIS_KEY_WIDTH = Math.max(...HOST_AXES.map((axis) => axis.key.length));
-    PROJECT_LABEL_WIDTH = 20;
     OUTCOME_LABELS = {
       pass: source_default.green("PASS"),
       fail: source_default.red("FAIL"),
@@ -17668,7 +17436,9 @@ var init_config = __esm({
       }
       line(status, id, message) {
         if (status === "fail") this.failed = true;
-        this.sections[this.sections.length - 1].rows.push({ id, status, message });
+        const section = this.sections[this.sections.length - 1];
+        if (!section) throw new Error(`the check row ${id} was added before any heading`);
+        section.rows.push({ id, status, message });
       }
       /** A required axis is unset: reported like any failure, but it sets exit 2. */
       missing(id, message) {
@@ -17700,9 +17470,422 @@ ${counts.pass} passed, ${counts.fail} failed, ${counts.info} informational`);
         process.exitCode = this.missingRequired ? 2 : this.failed ? 1 : 0;
       }
     };
-    BROWSER_AXIS_LIST = BROWSER_MODE_PRIORITY.map((mode) => BROWSER_AXIS_KEYS[mode]).join(", ");
-    DOMAIN_MAP_PATH = join12(SPECHUB_DIR, DOMAIN_MAP_FILE);
+    DOMAIN_MAP_PATH = domainMapFile();
     AGENT_BROWSER_INSTALL = `npm install -g ${AGENT_BROWSER_BIN}`;
+  }
+});
+
+// src/commands/config-show.ts
+async function detectHostAxes(wanted, project) {
+  const detected = /* @__PURE__ */ new Map();
+  for (const name of ORCHESTRATORS) {
+    const key = ORCHESTRATOR_AXIS_KEYS[name];
+    if (!wanted.has(key)) continue;
+    if (firstBinaryOnPath(ORCHESTRATOR_PROBES[name].binaries)) detected.set(key, true);
+  }
+  const chromiumKeys = [BROWSER_AXIS_KEYS.headless, BROWSER_AXIS_KEYS.local].filter(
+    (key) => wanted.has(key)
+  );
+  if (chromiumKeys.length > 0 && firstBinaryOnPath(CHROMIUM_BINARIES)) {
+    for (const key of chromiumKeys) detected.set(key, true);
+  }
+  if (wanted.has(BROWSER_AXIS_KEYS.remote) && project.hasFrontend) {
+    if (await cdpPortAnswers(project.cdpPort)) detected.set(BROWSER_AXIS_KEYS.remote, true);
+  }
+  return detected;
+}
+async function hostAxisStatuses(config, project) {
+  const required = new Set(requiredHostAxisKeys({ hasFrontend: project.hasFrontend }));
+  const declared = /* @__PURE__ */ new Map();
+  for (const axis of HOST_AXES) {
+    const result = getKey(config, axis.key);
+    if (result.status === "set") declared.set(axis.key, result.value);
+  }
+  const undeclared = new Set(HOST_AXES.map((axis) => axis.key).filter((key) => !declared.has(key)));
+  const detected = await detectHostAxes(undeclared, project);
+  return HOST_AXES.map((axis) => {
+    const base = { key: axis.key, required: required.has(axis.key) };
+    if (declared.has(axis.key)) {
+      return { ...base, status: "declared", value: declared.get(axis.key) };
+    }
+    if (detected.has(axis.key)) {
+      return { ...base, status: "detected", value: detected.get(axis.key) };
+    }
+    return { ...base, status: "unset" };
+  });
+}
+function formatValue(status) {
+  if (status.status === "unset") return source_default.dim("-");
+  return typeof status.value === "string" ? status.value : JSON.stringify(status.value);
+}
+function printHostAxes(axes) {
+  console.log(source_default.bold("Host"));
+  for (const axis of axes) {
+    const status = axis.status === "declared" ? source_default.green("declared") : source_default.dim(axis.status);
+    console.log(
+      `  ${axis.key.padEnd(AXIS_KEY_WIDTH)}  ${formatValue(axis).padEnd(10)}  ${status.padEnd(8)}  ${source_default.dim(axis.required ? "required" : "optional")}`
+    );
+  }
+}
+function projectLine(label, value) {
+  return `  ${label.padEnd(PROJECT_LABEL_WIDTH)}  ${value}`;
+}
+function printProject(settings) {
+  if (!settings) {
+    console.log(NO_PROJECT_LINE);
+    return;
+  }
+  console.log(source_default.bold("Project"));
+  console.log(projectLine("profile", settings.profile ?? source_default.dim("-")));
+  for (const [name, command] of Object.entries(settings.commands)) {
+    console.log(projectLine(`commands.${name}`, command));
+  }
+  const browser = settings.browser;
+  if (!browser) {
+    console.log(source_default.dim("  this project has no frontend configured"));
+    return;
+  }
+  if (browser.mode !== null) console.log(projectLine("browser mode", browser.mode));
+  if (browser.cdpPort !== null) console.log(projectLine("browser CDP port", String(browser.cdpPort)));
+  if (browser.fallback !== null) console.log(projectLine("browser fallback", browser.fallback));
+}
+var NO_PROJECT_LINE, AXIS_KEY_WIDTH, PROJECT_LABEL_WIDTH;
+var init_config_show = __esm({
+  "src/commands/config-show.ts"() {
+    "use strict";
+    init_source();
+    init_global_config();
+    init_host_status();
+    init_host_probe();
+    NO_PROJECT_LINE = source_default.dim("No SpecHub project here.");
+    AXIS_KEY_WIDTH = Math.max(...HOST_AXES.map((axis) => axis.key.length));
+    PROJECT_LABEL_WIDTH = 20;
+  }
+});
+
+// src/commands/config.ts
+var config_exports = {};
+__export(config_exports, {
+  register: () => register5
+});
+function reportUserError(err) {
+  if (err instanceof ConfigValidationError || err instanceof ConfigFileError) {
+    console.error(source_default.red(err.message));
+    process.exit(1);
+  }
+  throw err;
+}
+function reportingUserErrors(action) {
+  try {
+    action();
+  } catch (err) {
+    reportUserError(err);
+  }
+}
+async function reportingUserErrorsAsync(action) {
+  try {
+    await action();
+  } catch (err) {
+    reportUserError(err);
+  }
+}
+function qualifier(key, required) {
+  if (key !== "host" && !hostAxis(key)) return "";
+  return ` (${required ? "required" : "optional"})`;
+}
+function projectWorkflow(projectYaml) {
+  return {
+    specSync: workflowFlag(projectYaml, "spec_sync", projectKeyDefaultFlag),
+    frontendVerification: workflowFlag(projectYaml, "frontend_verification", projectKeyDefaultFlag)
+  };
+}
+function loadProject() {
+  const root = findProjectRoot();
+  if (!root) {
+    return {
+      root: null,
+      host: projectHostContext(void 0, false),
+      settings: null,
+      helpersDir: null,
+      workflow: projectWorkflow(void 0)
+    };
+  }
+  const yaml = readYaml(projectFile(root));
+  return {
+    root,
+    host: projectHostContext(yaml, true),
+    settings: projectSettings(yaml, true),
+    helpersDir: frontendHelpersDir(yaml),
+    workflow: projectWorkflow(yaml)
+  };
+}
+function browserModeProblemMessage(problem) {
+  switch (problem.kind) {
+    case "no-project":
+      return "No SpecHub project here, so there is no frontend to drive a browser for - run `/spechub:setup` in the project you want to set up.";
+    case "no-frontend":
+      return "This project configures no frontend, so it drives no browser - run `/spechub:setup` if it should have one.";
+    case "host-undescribed":
+      return `This host has not been described yet: none of ${BROWSER_AXIS_LIST} is set - run \`/spechub:host\` to describe this machine.`;
+    case "host-declares-none":
+      return `This host declares no browser mode available: every one of ${BROWSER_AXIS_LIST} it sets is false - run \`/spechub:host\` to declare one this machine can actually provide.`;
+    case "fallback-forbidden":
+      return `This project prefers the ${problem.preferred} browser mode, which this host does not declare available, and it sets frontend.browser.fallback to "${FALLBACK_FORBIDDEN}" - so ${problem.available} may not stand in. Set ${BROWSER_AXIS_KEYS[problem.preferred]} to true with \`/spechub:host\`, or change this project's frontend.browser.fallback.`;
+  }
+}
+function browserModeReason(resolved) {
+  if (!resolved.preferred) {
+    return `the project states no browser mode preference, so ${resolved.mode} wins as the first mode this host declares available`;
+  }
+  if (resolved.fallback) {
+    return `the project prefers ${resolved.preferred}, which this host does not declare available, so ${resolved.mode} stands in`;
+  }
+  return `the project prefers ${resolved.preferred} and this host declares it available`;
+}
+function isHostKey(key) {
+  return key === "host" || key.startsWith("host.");
+}
+function unknownConfigKey(key) {
+  return new ConfigValidationError(
+    `Unknown config key "${key}".
+Project keys (${projectFile()}): ${PROJECT_KEY_LIST.join(", ")}
+Host keys start with host. and are listed in docs/dev-setups.md.`
+  );
+}
+function setHostKey(key, value) {
+  const parsed = parseValue(key, value);
+  const config = setKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key, parsed);
+  writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
+  console.log(source_default.green(`Set ${key} = ${JSON.stringify(parsed)}`));
+  const dependency = inertDependency(config, key);
+  if (dependency) {
+    console.error(
+      source_default.yellow(
+        `Warning: ${key} has no effect unless ${dependency.key} is ${String(dependency.value)}`
+      )
+    );
+  }
+}
+function projectFileFor(key, use) {
+  if (!projectKeySpec(key)) throw unknownConfigKey(key);
+  const root = findProjectRoot();
+  if (!root) {
+    switch (use) {
+      case "set":
+        throw new ConfigValidationError(
+          `There is no SpecHub project here, so ${key} has nowhere to go. Run /spechub:setup first.`
+        );
+      case "get":
+        throw new ConfigValidationError(
+          `There is no SpecHub project here, so ${key} has no value to read. Run /spechub:setup first.`
+        );
+      case "unset":
+        throw new ConfigValidationError(
+          `There is no SpecHub project here, so ${key} has nothing to remove. Run /spechub:setup first.`
+        );
+    }
+  }
+  return projectFile(root);
+}
+function setProjectFileKey(key, value) {
+  const file = projectFileFor(key, "set");
+  const parsed = parseProjectValue(key, value);
+  setProjectKey(file, key, parsed);
+  console.log(source_default.green(`Set ${key} = ${JSON.stringify(parsed)}`));
+}
+function printConfigValue(value) {
+  console.log(typeof value === "string" ? value : JSON.stringify(value));
+}
+function getHostKey(key) {
+  const result = getKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
+  if (result.status === "unset") {
+    console.error(source_default.yellow(`${key} is unset${qualifier(key, result.required)}`));
+    process.exit(2);
+  }
+  printConfigValue(result.value);
+}
+function unsetHostKey(key) {
+  const { config, removed } = unsetKey(readGlobalConfig(GLOBAL_CONFIG_FILE), key);
+  if (!removed) {
+    console.log(source_default.dim(`${key} was not set`));
+    return;
+  }
+  writeGlobalConfig(config, GLOBAL_CONFIG_FILE);
+  console.log(source_default.green(`Removed ${key}`));
+}
+function getProjectFileKey(key) {
+  const result = getProjectKey(projectFileFor(key, "get"), key);
+  if (result.status === "unset") {
+    const fallback = projectKeyDefault(key);
+    const note = fallback === void 0 ? "" : ` - the documented default is ${fallback}`;
+    console.error(source_default.yellow(`${key} is unset${note}`));
+    process.exit(2);
+  }
+  printConfigValue(result.value);
+}
+function unsetProjectFileKey(key) {
+  const file = projectFileFor(key, "unset");
+  if (!unsetProjectKey(file, key)) {
+    console.log(source_default.dim(`${key} was not set`));
+    return;
+  }
+  console.log(source_default.green(`Removed ${key}`));
+}
+function printProjectKeys(root) {
+  if (!root) {
+    console.log(NO_PROJECT_LINE);
+    return;
+  }
+  const file = projectFile(root);
+  console.log(source_default.bold(file));
+  const rows = listProjectKeys(file);
+  if (rows.length === 0) {
+    console.log(source_default.dim("This project states no configuration."));
+    return;
+  }
+  for (const { key, value, known: known2 } of rows) {
+    const mark = known2 ? "" : source_default.yellow(` ${UNKNOWN_KEY_MARK}`);
+    console.log(`${key} = ${JSON.stringify(value)}${mark}`);
+  }
+}
+function listConfig(asJson) {
+  const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+  const root = findProjectRoot();
+  if (asJson) {
+    const project = root ? listProjectKeys(projectFile(root)) : null;
+    console.log(JSON.stringify({ ...config, project }, null, 2));
+    return;
+  }
+  printProjectKeys(root);
+  console.log("");
+  console.log(source_default.bold(GLOBAL_CONFIG_FILE));
+  if (Object.keys(config).length === 0) {
+    console.log(source_default.dim("No configuration set."));
+    return;
+  }
+  for (const [key, value] of Object.entries(config)) {
+    console.log(`${key} = ${JSON.stringify(value)}`);
+  }
+}
+async function showConfig(asJson) {
+  const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+  const { host: project, settings } = loadProject();
+  const axes = await hostAxisStatuses(config, project);
+  if (asJson) {
+    console.log(
+      JSON.stringify(
+        {
+          hasProject: project.hasProject,
+          hasFrontend: project.hasFrontend,
+          axes,
+          project: settings
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+  printProject(settings);
+  console.log("");
+  printHostAxes(axes);
+}
+async function checkConfig(asJson) {
+  const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+  const loaded = loadProject();
+  const report = new CheckReport();
+  checkRequiredAxes(report, config, loaded.host);
+  checkOrchestrators(report, config);
+  await checkDeclaredBrowserModes(report, config, loaded.host);
+  checkPreferredBrowserMode(report, config, loaded.host);
+  checkOptionalAxes(report, config);
+  checkProjectFiles(report, loaded);
+  checkOutputStyle(report, loaded.root ?? process.cwd());
+  report.finish(asJson);
+}
+function reportBrowserMode(asJson) {
+  const config = readGlobalConfig(GLOBAL_CONFIG_FILE);
+  const project = loadProject().host;
+  const resolution = resolveBrowserMode(declaredBrowserModes(config), project);
+  if (resolution.status === "unresolved") {
+    console.error(source_default.red(browserModeProblemMessage(resolution.problem)));
+    process.exit(1);
+  }
+  const reason = browserModeReason(resolution);
+  if (asJson) {
+    console.log(
+      JSON.stringify(
+        {
+          mode: resolution.mode,
+          preferred: resolution.preferred ?? null,
+          reason,
+          fallback: resolution.fallback
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+  console.log(`${source_default.bold(resolution.mode)} - ${source_default.dim(reason)}`);
+}
+function register5(program3) {
+  const configCmd = program3.command("config").description("Read and change the host and project configuration");
+  configCmd.command("path").description("Print config file path").action(() => {
+    console.log(GLOBAL_CONFIG_FILE);
+  });
+  configCmd.command("list").description("Show every setting the two config files state").option("--json", "output as JSON").action((opts) => {
+    reportingUserErrors(() => {
+      listConfig(opts.json === true);
+    });
+  });
+  configCmd.command("show").description("Show the host setup: every axis, declared or merely detected").option("--json", "output as JSON").action(async (opts) => {
+    await reportingUserErrorsAsync(() => showConfig(opts.json === true));
+  });
+  configCmd.command("check").description("Check the host setup against what this machine can actually do").option("--json", "output as JSON").action(async (opts) => {
+    await reportingUserErrorsAsync(() => checkConfig(opts.json === true));
+  });
+  configCmd.command("browser-mode").description("Report which browser mode the frontend verifier should use here, and why").option("--json", "output as JSON").action((opts) => {
+    reportingUserErrors(() => {
+      reportBrowserMode(opts.json === true);
+    });
+  });
+  configCmd.command("get").description("Get a config value").argument("<key>", "config key").action((key) => {
+    reportingUserErrors(() => {
+      if (isHostKey(key)) getHostKey(key);
+      else getProjectFileKey(key);
+    });
+  });
+  configCmd.command("set").description("Set a config value").argument("<key>", "config key").argument("<value>", "config value").addHelpText(
+    "after",
+    "\nReference: docs/dev-setups.md for the host.* axes, docs/config-reference.md for the spechub/project.yaml keys.\n"
+  ).action((key, value) => {
+    reportingUserErrors(() => {
+      if (isHostKey(key)) setHostKey(key, value);
+      else setProjectFileKey(key, value);
+    });
+  });
+  configCmd.command("unset").description("Remove a config value").argument("<key>", "config key").action((key) => {
+    reportingUserErrors(() => {
+      if (isHostKey(key)) unsetHostKey(key);
+      else unsetProjectFileKey(key);
+    });
+  });
+}
+var UNKNOWN_KEY_MARK;
+var init_config = __esm({
+  "src/commands/config.ts"() {
+    "use strict";
+    init_source();
+    init_constants();
+    init_global_config();
+    init_host_status();
+    init_project_config();
+    init_project();
+    init_utils();
+    init_config_check();
+    init_config_show();
+    UNKNOWN_KEY_MARK = "(unknown key)";
   }
 });
 
@@ -17737,7 +17920,7 @@ var init_feedback = __esm({
 });
 
 // src/lib/ackfile.ts
-import { existsSync as existsSync10, readFileSync as readFileSync9, renameSync, rmSync as rmSync2, writeFileSync as writeFileSync4 } from "node:fs";
+import { existsSync as existsSync10, readFileSync as readFileSync9 } from "node:fs";
 function isAckDecision(value) {
   return typeof value === "string" && ACK_DECISIONS.includes(value);
 }
@@ -17770,12 +17953,9 @@ function normaliseReason(value) {
   return value.replace(/\s+/g, " ").trim();
 }
 function writeAtomically(path, body) {
-  const temp = `${path}.${process.pid}.tmp`;
   try {
-    writeFileSync4(temp, body, "utf-8");
-    renameSync(temp, path);
+    replaceFileAtomically(path, body);
   } catch (err) {
-    rmSync2(temp, { force: true });
     throw new Error(
       `Could not write the ack sidecar at ${path}: ${err.message}. Reply with a message beginning ACCEPT or DECLINE instead, so the sender still hears back.`
     );
@@ -17833,13 +18013,14 @@ var ACK_DECISIONS, ACK_SUFFIX;
 var init_ackfile = __esm({
   "src/lib/ackfile.ts"() {
     "use strict";
+    init_atomic_file();
     ACK_DECISIONS = ["accept", "decline"];
     ACK_SUFFIX = ".ack";
   }
 });
 
 // src/lib/ackwatch.ts
-import { readFileSync as readFileSync10, statSync as statSync3 } from "node:fs";
+import { readFileSync as readFileSync10, statSync as statSync4 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 import { basename as basename2, join as join13 } from "node:path";
 function transcriptPath(cwd, sessionId, projectsDir) {
@@ -18012,7 +18193,7 @@ function readLines(path) {
 }
 function stampTranscript(path) {
   try {
-    const stats = statSync3(path);
+    const stats = statSync4(path);
     return `${stats.size}:${stats.mtimeMs}`;
   } catch {
     return null;
@@ -21808,11 +21989,11 @@ var require_out = __commonJS({
       async.read(path, getSettings(optionsOrSettingsOrCallback), callback);
     }
     exports.stat = stat;
-    function statSync5(path, optionsOrSettings) {
+    function statSync6(path, optionsOrSettings) {
       const settings = getSettings(optionsOrSettings);
       return sync.read(path, settings);
     }
-    exports.statSync = statSync5;
+    exports.statSync = statSync6;
     function getSettings(settingsOrOptions = {}) {
       if (settingsOrOptions instanceof settings_1.default) {
         return settingsOrOptions;
@@ -24355,7 +24536,7 @@ __export(lint_prose_exports, {
   reportFile: () => reportFile,
   summarize: () => summarize
 });
-import { existsSync as existsSync11, readFileSync as readFileSync11, statSync as statSync4 } from "node:fs";
+import { existsSync as existsSync11, readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
 import { join as join14, relative, resolve as resolve4 } from "node:path";
 function loadVocabulary() {
   const pluginRoot = findPluginRoot();
@@ -24397,7 +24578,7 @@ function collectFiles(paths, opts) {
       missing.push(path);
       continue;
     }
-    if (statSync4(full).isDirectory()) {
+    if (statSync5(full).isDirectory()) {
       files.push(...markdownIn(full));
     } else {
       files.push(full);

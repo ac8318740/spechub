@@ -1,4 +1,31 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+/**
+ * What `spechub/project.yaml` holds, and every read and write of it.
+ *
+ * One writer, one reader, one schema, so a value the command accepts is a
+ * value every reader of the file already understands.
+ *
+ * A write replaces the file rather than emptying it and filling it in, so a
+ * process killed mid-write leaves the whole old file. Two writers running at
+ * once still race: each reads the file, changes its own key and writes the
+ * result, so the second one to finish saves a document that never held the
+ * first one's change. Nothing here locks, and that is the accepted cost - a
+ * configuration tool is driven by a person at a prompt, and the answer to two
+ * of them is to run the second command again.
+ */
+
+import {
+  accessSync,
+  chmodSync,
+  // Aliased: `constants` is also the name of this project's own constants
+  // module, which this file imports below, and one name for two things in one
+  // file reads as a mistake at every use of either.
+  constants as fsConstants,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+} from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -10,7 +37,15 @@ import {
   stringify as stringifyYaml,
   YAMLMap,
 } from 'yaml';
-import { ConfigFileError, ConfigValidationError, parseBooleanWord } from './global-config.js';
+import {
+  ConfigFileError,
+  ConfigValidationError,
+  invalidEnumValue,
+  invalidValue,
+  parseBooleanWord,
+} from './global-config.js';
+import { replaceFileAtomically } from './atomic-file.js';
+import { BROWSER_FALLBACK_VALUES, BROWSER_MODE_PRIORITY } from './host-status.js';
 import { PROFILES_DIR } from './constants.js';
 import { findPluginRoot } from './project.js';
 import { ensureDir } from './utils.js';
@@ -62,6 +97,17 @@ export type ProjectKeySpec =
 const COUNT: NumberSpec = { kind: 'number', integer: true, min: 0 };
 
 /**
+ * The key that says whether a UI change is verified in a real browser before
+ * it lands.
+ *
+ * Named here, where the schema and the default table both state it, because
+ * `spechub config check` reports the flag and has to name the key the user
+ * would go and set. A second spelling over there is a row one rename away
+ * from sending the user to a key nothing reads.
+ */
+export const FRONTEND_VERIFICATION_KEY = 'workflow.frontend_verification';
+
+/**
  * Every key `spechub/project.yaml` holds, in the order docs/config-reference.md
  * documents them. This table is the schema: a key absent from it is a key
  * `spechub config set` refuses, so adding a documented key here is the whole
@@ -78,7 +124,7 @@ export const PROJECT_KEYS: Readonly<Record<string, ProjectKeySpec>> = {
   'workflow.grilling.questions': { kind: 'enum', values: ['tool', 'inline'] },
   'workflow.tdd.strict': { kind: 'boolean' },
   'workflow.tdd.orchestrator_strict': { kind: 'boolean' },
-  'workflow.frontend_verification': { kind: 'boolean' },
+  [FRONTEND_VERIFICATION_KEY]: { kind: 'boolean' },
   'workflow.maps.tracker': { kind: 'enum', values: ['github', 'files'] },
   'workflow.maps.persist': { kind: 'boolean' },
   'workflow.handoff.agent': { kind: 'string' },
@@ -111,10 +157,11 @@ export const PROJECT_KEYS: Readonly<Record<string, ProjectKeySpec>> = {
   'frontend.commands.build': { kind: 'string' },
   'frontend.commands.lint': { kind: 'string' },
   'frontend.commands.test': { kind: 'string' },
-  'frontend.browser.mode': { kind: 'enum', values: ['remote', 'headless', 'local'] },
-  // Only `none` acts at read time, but a typo is still worth catching, so the
-  // three mode names it could plausibly be confused with are named too.
-  'frontend.browser.fallback': { kind: 'enum', values: ['none', 'remote', 'headless', 'local'] },
+  // Both lists come from host-status.ts, which owns the mode names and reads
+  // them at run time. A schema spelling them again would be a second list to
+  // keep in step, and the file that resolves a mode would not know it existed.
+  'frontend.browser.mode': { kind: 'enum', values: BROWSER_MODE_PRIORITY },
+  'frontend.browser.fallback': { kind: 'enum', values: BROWSER_FALLBACK_VALUES },
   'frontend.browser.cdp_port': { kind: 'number', integer: true, min: 1, max: 65535 },
 };
 
@@ -138,13 +185,9 @@ function profileNames(): readonly string[] {
     .sort();
 }
 
-function invalidValue(key: string, raw: string, expected: string): ConfigValidationError {
-  return new ConfigValidationError(`Invalid value "${raw}" for ${key}. ${expected}`);
-}
-
 function parseEnum(key: string, raw: string, values: readonly string[]): string {
   if (values.includes(raw)) return raw;
-  throw invalidValue(key, raw, `Allowed values: ${values.join(', ')}`);
+  throw invalidEnumValue(key, raw, values);
 }
 
 /**
@@ -316,7 +359,8 @@ function splicedSource(
  * assertion about the target key alone would never see.
  *
  * A parse that throws is a failed verification, not an error to report. The
- * caller has an answer that always works to fall back to.
+ * caller has a second way to write to fall back to, and a refusal to fall
+ * back on when that one fails the same check.
  */
 function holdsSameDataAs(candidate: string, expected: ReturnType<typeof parseDocument>): boolean {
   try {
@@ -336,15 +380,39 @@ function holdsSameDataAs(candidate: string, expected: ReturnType<typeof parseDoc
 type LineEnding = '\n' | '\r\n';
 
 /**
- * The line ending `src` arrived with.
+ * The line ending most of `src` already uses.
  *
- * The first break decides. A file has one convention, and a file that mixes
- * them has no answer worth guessing at, so the first one wins rather than a
- * count. An empty file, or one with no break at all, takes LF.
+ * The majority decides, because a mixed file is ordinary: a repository with
+ * no `.gitattributes` rule collects both endings one hunk at a time, from one
+ * contributor on Windows and one on Linux. Following the first break instead
+ * answers with whichever editor happened to touch line one, which turns a
+ * one-key write into a diff over every line of the smaller half.
+ *
+ * A tie takes LF, as does an empty file and one with no break at all: LF is
+ * what the document interface emits when nothing in the file settles it.
  */
 function lineEndingOf(src: string): LineEnding {
-  const first = src.indexOf('\n');
-  return first > 0 && src[first - 1] === '\r' ? '\r\n' : '\n';
+  const crlf = (src.match(/\r\n/g) ?? []).length;
+  const lf = (src.match(/\n/g) ?? []).length - crlf;
+  return crlf > lf ? '\r\n' : '\n';
+}
+
+/** U+FEFF, the byte-order mark, as a UTF-8 read decodes its three bytes. */
+const BYTE_ORDER_MARK = '\uFEFF';
+
+/**
+ * `text` carrying the leading byte-order mark `src` arrived with.
+ *
+ * The mark is not content: it is what an editor put at the front of the file
+ * to say how the rest is encoded, and Windows editors write one unasked. The
+ * splice keeps it for free, because it copies byte 0 across untouched, but
+ * the document interface builds its text from a parse that never held the
+ * mark - so a re-emit would change byte 0 of a file the user asked to set one
+ * key in. A file that arrived without one gains nothing here.
+ */
+function withByteOrderMark(text: string, src: string): string {
+  if (!src.startsWith(BYTE_ORDER_MARK) || text.startsWith(BYTE_ORDER_MARK)) return text;
+  return BYTE_ORDER_MARK + text;
 }
 
 /**
@@ -428,6 +496,63 @@ function readSource(file: string): string {
 }
 
 /**
+ * Put `text` in `file`'s place, as a whole file rather than as a truncate and
+ * a refill.
+ *
+ * `replaceFileAtomically` states why a temp file and a rename, and owns both.
+ * What this adds is everything a rename would otherwise take from the user:
+ *
+ * The link is resolved before anything is replaced, because a rename replaces
+ * the NAME. `spechub/project.yaml` is a symlink whenever one file is shared
+ * between checkouts, and renaming a temp over the link leaves a regular file
+ * where the link was, the real file still holding the old value, and the
+ * command exiting 0 about a change nothing will ever read. Resolving first
+ * puts the temp file beside the real file and renames over that.
+ *
+ * The mode is copied onto the temp file before the rename. A fresh file gets
+ * whatever the umask gives it, so renaming one over a 0o640 project.yaml
+ * silently changes who on the machine can read it.
+ *
+ * The owner is not copied, and cannot be: a rename gives the new file whoever
+ * wrote it as its owner, and its group too outside a setgid directory. A
+ * second name for the same inode - a hardlink - keeps the old bytes, because
+ * the rename moves this name onto a different inode rather than changing the
+ * one both names point at. Both are the price of never leaving a truncated
+ * file behind, and both are paid on every write.
+ *
+ * A file the user may not write is refused here rather than by the rename,
+ * which checks the DIRECTORY's mode and so succeeds over a read-only target -
+ * turning a refusal into a silent write of a file somebody locked on purpose.
+ * The check is a moment ahead of the rename, so a mode changed in between is
+ * a mode this does not see; nothing in this module locks, and the answer to a
+ * file that changed underneath a write is the same as for two writers at once.
+ */
+function replaceFile(file: string, text: string): void {
+  const present = existsSync(file);
+  const target = present ? realpathSync(file) : file;
+  const existing = present ? statSync(target) : null;
+  if (existing) accessSync(target, fsConstants.W_OK);
+
+  // The directory is named rather than the file, because the directory is
+  // what the user has to go and fix: the new bytes are written here before
+  // they take the target's name, so a writable file in a directory nobody may
+  // write is still a write that cannot happen.
+  const directory = dirname(target);
+  try {
+    accessSync(directory, fsConstants.W_OK);
+  } catch (err) {
+    throw new ConfigFileError(
+      `Could not write ${file}: ${fsReason(err)} on ${directory}. The new file is written ` +
+        'there and renamed over the target, so that directory has to be writable too.'
+    );
+  }
+
+  replaceFileAtomically(target, text, temp => {
+    if (existing) chmodSync(temp, existing.mode & 0o777);
+  });
+}
+
+/**
  * Write `text` over `file`, creating the directory holding it as needed.
  *
  * The only place either writer touches the disk. A read-only file, a
@@ -439,24 +564,68 @@ function readSource(file: string): string {
 function writeSource(file: string, text: string): void {
   try {
     ensureDir(dirname(file));
-    writeFileSync(file, text, 'utf-8');
+    replaceFile(file, text);
   } catch (err) {
+    // A failure `replaceFile` already put into words names the path it is
+    // about, which is not always this one. Re-wrapping it would bury that
+    // path inside a sentence about a different one.
+    if (err instanceof ConfigFileError) throw err;
     throw new ConfigFileError(`Could not write ${file}: ${fsReason(err)}`);
   }
 }
 
 /**
- * Re-emit `doc` over `file`, in the line endings the source used.
+ * Re-emit `doc` over `file`, carrying across what `src` held and the parse
+ * did not: its line endings and its leading byte-order mark. Refuses where
+ * the text it built does not read back as the data `doc` holds.
  *
  * The fallback both writers share, and the only place either of them calls
- * `toString`, so neither can re-emit a document without this correction.
+ * `toString`, so neither can re-emit a document without both corrections.
+ *
+ * docs/adr/0009 checks the splice against this writer and takes this writer
+ * as the answer that always works. It is not one. Replacing a block scalar's
+ * value keeps the old node's block-literal type, so a value of spaces is
+ * emitted as a content line holding only spaces - which every parser reads
+ * back as the empty string, and the user is told the value was set. So the
+ * emission is checked the way the splice is, against the same whole-document
+ * comparison, and the write the splice already refused is refused here too
+ * rather than landing a file that means something else.
  */
 function writeDocument(
   file: string,
+  key: string,
   doc: ReturnType<typeof parseDocument>,
-  ending: LineEnding
+  src: string
 ): void {
-  writeSource(file, withLineEnding(doc.toString(), ending));
+  const text = withByteOrderMark(withLineEnding(emitDocument(file, doc), lineEndingOf(src)), src);
+  if (!holdsSameDataAs(text, doc)) {
+    throw new ConfigValidationError(
+      `Cannot write ${key} to ${file} safely: what the writer emits reads back as a ` +
+        'different value, so nothing was written. Change the value, or edit the key by hand.'
+    );
+  }
+  writeSource(file, text);
+}
+
+/**
+ * `doc` as YAML text, or a refusal the user can act on.
+ *
+ * Removing the key an anchor sits on leaves every alias to it pointing at
+ * nothing, and the emitter refuses such a document with a plain `Error` - one
+ * the command's reporter passes straight through as a stack trace naming the
+ * bundler's internals. The document is refused either way. What changes here
+ * is that the user is told which alias is in the way, and the throw lands
+ * before any write, so the file is still byte for byte as it was.
+ */
+function emitDocument(file: string, doc: ReturnType<typeof parseDocument>): string {
+  try {
+    return doc.toString();
+  } catch (err) {
+    throw new ConfigValidationError(
+      `Could not rewrite ${file}: ${err instanceof Error ? err.message : String(err)}. ` +
+        'Remove the alias, or point it at a key the file still states, and try again.'
+    );
+  }
 }
 
 /** Whether `node` is a YAML scalar holding null, however the file spelled it. */
@@ -502,9 +671,29 @@ function emptyBlockFor(node: unknown, doc: ReturnType<typeof parseDocument>): YA
  * leave the file exactly as it was. A mapping is the only shape that can hold
  * the key, which is why a list is refused rather than descended into: `setIn`
  * throws on one the same way it throws on a scalar.
+ *
+ * The document itself is the same question one level up, and the loop below
+ * cannot ask it: a file holding only `hello`, or only a list of commands, has
+ * no depth above the leaf to walk. So the shape of the contents is settled
+ * first, and a document that is neither empty nor a mapping names the file
+ * rather than reaching `setIn` and throwing the library's own sentence.
  */
-function ensureBlocksAbove(doc: ReturnType<typeof parseDocument>, path: string[]): void {
+function ensureBlocksAbove(
+  file: string,
+  doc: ReturnType<typeof parseDocument>,
+  path: string[]
+): void {
   if (isNullScalar(doc.contents)) doc.contents = emptyBlockFor(doc.contents, doc);
+  // A document with no contents at all - an empty file, or one holding only a
+  // comment - is not a refusal: `setIn` builds the mapping and every block
+  // under it, which is how the command creates a project.yaml from nothing.
+  if (doc.contents != null && !isMap(doc.contents)) {
+    throw new ConfigValidationError(
+      `Cannot set ${path.join('.')}: ${file} holds ` +
+        `${isSeq(doc.contents) ? 'a list' : 'a value'}, not a block of keys. ` +
+        'Rewrite the file as a block of keys and try again.'
+    );
+  }
 
   for (let depth = 1; depth < path.length; depth += 1) {
     const above = path.slice(0, depth);
@@ -529,45 +718,97 @@ function ensureBlocksAbove(doc: ReturnType<typeof parseDocument>, path: string[]
 }
 
 /**
- * Write `value` to the dotted `key` of the project.yaml at `file`, creating
- * the file and every block above the key as needed.
+ * One change to a project.yaml, stated as the three things that differ
+ * between changing a key and removing one.
+ *
+ * A writer says what its change is. Which text to trust, and what to do when
+ * no text can be trusted, is `writeProjectEdit`'s answer and is given once -
+ * so a second writer cannot arrive with a fifth way to corrupt a user's file
+ * behind a green success message.
+ */
+interface ProjectEdit {
+  /**
+   * Make the document ready to take the change, and say whether there is a
+   * change to make - both asked of the document as it was read.
+   *
+   * Not a predicate: a change that needs the blocks above the key to exist
+   * creates them here, and a block that cannot hold the key is refused here,
+   * because both have to happen before the splice is built against the old
+   * ranges. So this mutates `doc`, and it throws.
+   */
+  prepare(doc: ReturnType<typeof parseDocument>, path: string[]): boolean;
+
+  /**
+   * The source with the change made to the bytes, or null where no such
+   * change fits the shape. A candidate, not an answer.
+   */
+  candidate(src: string, doc: ReturnType<typeof parseDocument>, path: string[]): string | null;
+
+  /** The same change made through the document interface. */
+  apply(doc: ReturnType<typeof parseDocument>, path: string[]): void;
+}
+
+/**
+ * Make one change to the project.yaml at `file`, reporting whether it wrote.
  *
  * There are two ways to write, and the data they produce is the same. The
- * document interface is correct by construction: it sets the value on the
- * parsed document and re-emits the file, carrying the comments and the key
- * order across but normalising the whitespace before an inline comment, so a
- * run of spaces ahead of a `#` anywhere in the file shortens to one.
+ * document interface changes the parsed document and re-emits the file,
+ * carrying the comments and the key order across but normalising the
+ * whitespace before an inline comment, so a run of spaces ahead of a `#`
+ * anywhere in the file shortens to one.
  *
- * Splicing overwrites the old value's byte range in the source and leaves
- * every other byte exactly as it was, which is what keeps a hand-edited file
+ * Splicing edits the bytes of the line the change touches and leaves every
+ * other byte exactly as it was, which is what keeps a hand-edited file
  * intact. It is also the riskier one, because a rendering that reads as an
  * ordinary value in one context is syntax in another - `,` `{` `}` `[` `]`
- * inside a flow collection - and the range says nothing about the context
- * around it.
+ * inside a flow collection - and a node's range says nothing about the
+ * context around it.
  *
- * So the splice is not trusted, it is checked: parse what it produced and
- * compare the data against what the document interface would have written.
- * A write takes the splice when the two agree and the document interface
- * otherwise, which costs one extra parse per write and holds for shapes
- * nobody has thought of yet.
+ * So neither writer is trusted, both are checked: parse the text a writer
+ * produced and compare the data against the change the caller asked for. A
+ * write takes the splice when the two agree, the document interface when its
+ * own text agrees, and refuses when neither does - which costs one extra
+ * parse per write and holds for shapes nobody has thought of yet. The
+ * comparison covers the whole document, and docs/adr/0009 says why it is not
+ * narrowed to the key that changed.
  */
-export function setProjectKey(file: string, key: string, value: unknown): void {
+function writeProjectEdit(file: string, key: string, edit: ProjectEdit): boolean {
   const src = readSource(file);
   const doc = parseProjectDocument(file, src);
 
   const path = key.split('.');
-  ensureBlocksAbove(doc, path);
+  if (!edit.prepare(doc, path)) return false;
 
-  // Built against the old node's range, so before `setIn` replaces that node.
-  const spliced = splicedSource(src, doc, path, value);
+  // Built against the old nodes' ranges, so before `apply` replaces them.
+  const candidate = edit.candidate(src, doc, path);
 
-  doc.setIn(path, value);
-  if (spliced !== null && holdsSameDataAs(spliced, doc)) {
-    writeSource(file, spliced);
-    return;
+  edit.apply(doc, path);
+
+  if (candidate !== null && holdsSameDataAs(candidate, doc)) {
+    writeSource(file, candidate);
+    return true;
   }
 
-  writeDocument(file, doc, lineEndingOf(src));
+  writeDocument(file, key, doc, src);
+  return true;
+}
+
+/**
+ * Write `value` to the dotted `key` of the project.yaml at `file`, creating
+ * the file and every block above the key as needed.
+ *
+ * Always a write: the caller asked for a value, and a file already holding it
+ * is still the file the caller asked to state it.
+ */
+export function setProjectKey(file: string, key: string, value: unknown): void {
+  writeProjectEdit(file, key, {
+    prepare: (doc, path) => {
+      ensureBlocksAbove(file, doc, path);
+      return true;
+    },
+    candidate: (src, doc, path) => splicedSource(src, doc, path, value),
+    apply: (doc, path) => doc.setIn(path, value),
+  });
 }
 
 /**
@@ -585,7 +826,7 @@ export const PROJECT_KEY_DEFAULTS: Readonly<Record<string, string>> = {
   'workflow.grilling.questions': 'tool',
   'workflow.tdd.strict': 'true',
   'workflow.tdd.orchestrator_strict': 'true',
-  'workflow.frontend_verification': 'false',
+  [FRONTEND_VERIFICATION_KEY]: 'false',
   'workflow.maps.persist': 'false',
   'workflow.handoff.agent': 'claude',
   'workflow.handoff.ack_turns': '5',
@@ -604,6 +845,31 @@ export const PROJECT_KEY_DEFAULTS: Readonly<Record<string, string>> = {
 /** The documented default for `key`, or undefined where the reference gives none. */
 export function projectKeyDefault(key: string): string | undefined {
   return PROJECT_KEY_DEFAULTS[key];
+}
+
+/**
+ * The documented default for a boolean `key`, for the readers that apply one
+ * rather than print it.
+ *
+ * The table above spells every default the way the reference spells it, which
+ * is text, and a reader deciding whether to run a step holds a yes or a no.
+ * The two meet here, so a caller needing the boolean names this instead of
+ * writing the value down a second time - and `config get` then reports the
+ * default `config check` acted on.
+ *
+ * A key the reference gives no default for has no answer to give. Standing in
+ * `false` would apply a decision nobody documented, and it would apply it
+ * silently, so this refuses instead - as a plain `Error`, keeping its stack.
+ * Nothing a user typed reaches here: the key is written into the source of
+ * whichever reader asked, so the reader is the thing to go and fix, and a red
+ * line and exit 1 would file that as a value somebody mistyped.
+ */
+export function projectKeyDefaultFlag(key: string): boolean {
+  const stated = projectKeyDefault(key);
+  if (stated === undefined) {
+    throw new Error(`${key} has no documented default to apply.`);
+  }
+  return parseBooleanWord(key, stated);
 }
 
 /** What one project key holds, or that the file states no value for it. */
@@ -660,6 +926,25 @@ function isBlock(node: unknown): node is Record<string, unknown> {
   );
 }
 
+/** One line of the listing: what the file states, and whether the schema knows it. */
+export interface ProjectKeyRow {
+  /** The dotted path `spechub config set` takes for this value. */
+  key: string;
+  /** The value the file states, as plain data. */
+  value: unknown;
+  /**
+   * Whether `config get` and `config set` work on this key. A row a listing
+   * prints exactly like its neighbours says those two commands work on it, so
+   * the reader is told here instead of by an exit 1 they went and earned.
+   *
+   * `rowIsKnown` decides it, and the schema settles only part of the answer:
+   * a literal dotted key is unreachable however known its path looks, and a
+   * block header the tool's own `unset` left behind is not the user's mistake
+   * to be warned about.
+   */
+  known: boolean;
+}
+
 /**
  * Every value the project.yaml at `file` states, by the dotted path
  * `spechub config set` takes, in the order the file states them.
@@ -668,23 +953,67 @@ function isBlock(node: unknown): node is Record<string, unknown> {
  * present with its default, because a listing of defaults would read as a set
  * of decisions this project made.
  *
- * Keys no schema knows are listed too. The question this answers is what the
- * file says, and a line the user wrote is a line they may want to find -
- * hiding it would make the listing disagree with the file it is listing.
+ * Keys no schema knows are listed too, carrying `known: false`. The question
+ * this answers is what the file says, and a line the user wrote is a line
+ * they may want to find - hiding it would make the listing disagree with the
+ * file it is listing. Marking it is what keeps the listing honest about which
+ * rows the other commands accept.
  */
-export function listProjectKeys(file: string): [string, unknown][] {
-  const rows: [string, unknown][] = [];
+export function listProjectKeys(file: string): ProjectKeyRow[] {
+  const rows: ProjectKeyRow[] = [];
 
   const walk = (node: unknown, path: string[]): void => {
     if (isBlock(node)) {
       for (const [name, child] of Object.entries(node)) walk(child, [...path, name]);
       return;
     }
-    if (path.length > 0) rows.push([path.join('.'), node]);
+    if (path.length === 0) return;
+    rows.push({ key: path.join('.'), value: node, known: rowIsKnown(path, node) });
   };
 
   walk(parseProjectDocument(file, readSource(file)).toJS(), []);
   return rows;
+}
+
+/** Whether the file states nothing at this key, which is what an emptied block holds. */
+function statesNothing(value: unknown): boolean {
+  if (value === null) return true;
+  return typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
+/** Whether the schema knows any key UNDER `key`, and so knows `key` as a block. */
+function knowsKeysUnder(key: string): boolean {
+  return PROJECT_KEY_LIST.some(known => known.startsWith(`${key}.`));
+}
+
+/**
+ * Whether `config get` and `config set` work on the row at `path`, which is
+ * what the listing's mark is about.
+ *
+ * Three answers, and the schema settles only one of them.
+ *
+ * A segment holding a dot is a key nothing can reach. YAML lets a mapping key
+ * hold one, so `"workflow.spec_sync": true` is a key whose name contains a
+ * dot rather than the `spec_sync` of a `workflow` block - and the dotted path
+ * every command takes walks the blocks, so it reads the nested spelling and
+ * never this line. However known the path it spells looks, this row is one
+ * nothing reads and nothing writes.
+ *
+ * A row holding nothing at a path the schema knows keys under is the tool's
+ * own residue: removing a block's last key leaves the block header standing,
+ * by design, and `workflow:` with nothing after the colon is what is left.
+ * Marking that would be the tool warning the user about a line it wrote
+ * itself, and sending them to look for a mistake that is not there.
+ *
+ * A row holding nothing at a path nothing is stated under is a different
+ * thing: no removal could have left it, so it keeps the mark.
+ */
+function rowIsKnown(path: string[], value: unknown): boolean {
+  if (path.some(part => part.includes('.'))) return false;
+
+  const key = path.join('.');
+  if (projectKeySpec(key) !== undefined) return true;
+  return statesNothing(value) && knowsKeysUnder(key);
 }
 
 /** The index just past the next line break at or after `from`, or the end of `src`. */
@@ -765,30 +1094,14 @@ function collapseEmptied(doc: ReturnType<typeof parseDocument>, path: string[]):
  * A key the file does not state is not an error and is not a write. The state
  * the caller asked for is the state the file is already in, and rewriting it
  * to change nothing would still cost the user their formatting.
- *
- * The write follows the same rule as `setProjectKey`, for the same reason.
- * The splice takes the pair's line out and leaves every other byte as it was;
- * whether what is left still holds the right data is settled by parsing it
- * and comparing against what the document interface would have produced.
  */
 export function unsetProjectKey(file: string, key: string): boolean {
-  const src = readSource(file);
-  const doc = parseProjectDocument(file, src);
-
-  const path = key.split('.');
-  if (!doc.hasIn(path)) return false;
-
-  // Built against the pair's range, so before `deleteIn` takes the pair out.
-  const removed = removedSource(src, doc, path);
-
-  doc.deleteIn(path);
-  collapseEmptied(doc, path);
-
-  if (removed !== null && holdsSameDataAs(removed, doc)) {
-    writeSource(file, removed);
-    return true;
-  }
-
-  writeDocument(file, doc, lineEndingOf(src));
-  return true;
+  return writeProjectEdit(file, key, {
+    prepare: (doc, path) => doc.hasIn(path),
+    candidate: removedSource,
+    apply: (doc, path) => {
+      doc.deleteIn(path);
+      collapseEmptied(doc, path);
+    },
+  });
 }

@@ -7,7 +7,8 @@
 //
 // A sidecar beats a transcript keyword because it is deliberate: the target
 // had to run a command, not merely happen to type a word.
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { replaceFileAtomically } from './atomic-file.js';
 
 /**
  * The two things a target can say. One list, so the CLI's validation, the
@@ -102,18 +103,17 @@ function normaliseReason(value: unknown): string {
 }
 
 /**
- * Write the sidecar so a poller never catches it half-written: a temp file in
- * the same directory, then a rename, which is atomic within a filesystem.
- * Same directory matters – a rename across filesystems is not a rename.
+ * Write the sidecar so a poller never catches it half-written, and say what to
+ * do instead when the write fails.
+ *
+ * `replaceFileAtomically` owns the temp file and the rename; this owns the
+ * sentence, because a target told only that a path would not open is a target
+ * who now has no way to answer at all.
  */
 function writeAtomically(path: string, body: string): void {
-  const temp = `${path}.${process.pid}.tmp`;
   try {
-    writeFileSync(temp, body, 'utf-8');
-    renameSync(temp, path);
+    replaceFileAtomically(path, body);
   } catch (err) {
-    // Leave no puzzle behind for whoever looks in this directory next.
-    rmSync(temp, { force: true });
     throw new Error(
       `Could not write the ack sidecar at ${path}: ${(err as Error).message}. ` +
         'Reply with a message beginning ACCEPT or DECLINE instead, so the sender still hears back.'

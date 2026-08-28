@@ -27,6 +27,9 @@ export const BROWSER_AXIS_KEYS: Readonly<Record<BrowserMode, string>> = {
   local: 'host.browser.local',
 };
 
+/** The three `host.browser.*` axis keys, in priority order, as one readable list. */
+export const BROWSER_AXIS_LIST = BROWSER_MODE_PRIORITY.map(mode => BROWSER_AXIS_KEYS[mode]).join(', ');
+
 const BROWSER_AXIS_KEY_SET = new Set<string>(Object.values(BROWSER_AXIS_KEYS));
 
 /** Whether `key` names one of the three `host.browser.*` axes. */
@@ -240,6 +243,20 @@ export function projectHostContext(projectYaml: unknown, hasProject = true): Pro
 export const FALLBACK_FORBIDDEN = 'none';
 
 /**
+ * Every word `frontend.browser.fallback` accepts: the one that acts, and then
+ * the three mode names.
+ *
+ * Only the forbidden word acts at read time, but a typo is still worth
+ * catching, so the names it could plausibly be confused with are accepted
+ * beside it. The list is built from the two constants above rather than
+ * spelled again, so a mode renamed there is renamed here.
+ */
+export const BROWSER_FALLBACK_VALUES: readonly string[] = [
+  FALLBACK_FORBIDDEN,
+  ...BROWSER_MODE_PRIORITY,
+];
+
+/**
  * Whether this project accepts a browser mode other than the one it prefers.
  *
  * Only the literal `none` forbids it. Every other value, including one naming
@@ -423,13 +440,25 @@ export function frontendHelpersDir(projectYaml: unknown): string | null {
 }
 
 /**
- * The boolean a project states at `workflow.<key>`, or `whenUnstated` when it
- * states nothing there - or states something no boolean can be read out of.
+ * The boolean a project states at `workflow.<flag>`, or what `whenUnstated`
+ * gives for that key when it states nothing there - or states something no
+ * boolean can be read out of.
  *
- * The default is the caller's to name rather than this function's, because
- * the two keys `check` reads default opposite ways: spec sync runs unless a
- * project turns it off, and frontend verification stays off until a project
- * turns it on.
+ * The caller names the flag once, and this composes the dotted key from it:
+ * the same key names the message a bad value is refused with and the default
+ * that stands in for a missing one, so a caller spelling it a second time to
+ * look the default up would be one edit away from applying `workflow.x`'s
+ * default to `workflow.y`.
+ *
+ * The default arrives as a function of the key rather than as a value,
+ * because that is what a caller can pass without spelling the key: it is
+ * resolved here, at once, so a key with no documented default is still a
+ * throw at the call rather than one that waits for a file to omit the flag.
+ *
+ * Which default belongs to which key is the caller's to say rather than this
+ * function's: the two keys `check` reads default opposite ways, spec sync
+ * running unless a project turns it off and frontend verification staying off
+ * until a project turns it on.
  *
  * A string goes through the same parser `spechub config set` writes these
  * keys with. `off`, `on`, `yes` and `no` are words the command accepts and
@@ -443,15 +472,22 @@ export function frontendHelpersDir(projectYaml: unknown): string | null {
  * decision: taking any non-empty string as true would turn `mabye` into an
  * answer the user never gave.
  */
-export function workflowFlag(projectYaml: unknown, key: string, whenUnstated: boolean): boolean {
-  const value = record(record(projectYaml)?.workflow)?.[key];
+export function workflowFlag(
+  projectYaml: unknown,
+  flag: string,
+  whenUnstated: (key: string) => boolean
+): boolean {
+  const key = `workflow.${flag}`;
+  const fallback = whenUnstated(key);
+
+  const value = record(record(projectYaml)?.workflow)?.[flag];
   if (typeof value === 'boolean') return value;
-  if (typeof value !== 'string') return whenUnstated;
+  if (typeof value !== 'string') return fallback;
 
   try {
-    return parseBooleanWord(`workflow.${key}`, value);
+    return parseBooleanWord(key, value);
   } catch {
-    return whenUnstated;
+    return fallback;
   }
 }
 

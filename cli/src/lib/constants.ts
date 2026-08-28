@@ -10,6 +10,30 @@ export const PROJECT_FILE = 'project.yaml';
 export const DOMAIN_MAP_FILE = 'domain-map.yaml';
 
 /**
+ * One file under a project's `spechub/`, either as an absolute path or - with
+ * no `root` to give - as the relative path a message names it by.
+ *
+ * Functions rather than constants like `GLOBAL_CONFIG_FILE`, because the root
+ * is only known once a project has been found. Written here anyway, beside
+ * the names they join, so the several readers and writers of each file cannot
+ * end up naming it in several ways.
+ */
+function spechubFile(name: string, root?: string): string {
+  const relative = join(SPECHUB_DIR, name);
+  return root === undefined ? relative : join(root, relative);
+}
+
+/** The project.yaml `spechub config` reads and writes. */
+export function projectFile(root?: string): string {
+  return spechubFile(PROJECT_FILE, root);
+}
+
+/** The domain map spec sync reads, and `spechub config check` reports on. */
+export function domainMapFile(root?: string): string {
+  return spechubFile(DOMAIN_MAP_FILE, root);
+}
+
+/**
  * Where the per-project-type starting configurations live, relative to the
  * plugin root. `/spechub:setup` copies one into a new project.yaml, and
  * `spechub config set profile <name>` validates against the names here.

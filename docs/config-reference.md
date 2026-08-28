@@ -42,6 +42,12 @@ The message names the documented default where a table below gives a literal one
 
 `spechub config list` takes no key, so it refuses nothing. It prints what the project states and what the host declares, each under the name of the file it came out of. Outside a SpecHub project it prints the host side alone. It lists stated keys only. A key the file omits takes its default, and printing it here would read as a decision the project made.
 
+A stated key no schema knows keeps its place in the file's order and carries `(unknown key)`, because `spechub config get` refuses that key and `spechub config set` will not write it. A block header that holds nothing carries no mark where the schema knows keys under it. The command `spechub config unset` leaves that line standing when it removes a block's last key. The tool wrote `workflow:` itself, so the listing does not warn about it.
+
+A key holding a dot is a key of its own. YAML reads `"workflow.spec_sync": true` as one key whose name contains a dot, and the same file may state the nested spelling as well. Both are lines in the file, so the listing prints both rows. It marks the literal one, because every command walks the blocks and answers out of the nested spelling.
+
+The `--json` output gives the project side as a list of rows, in the file's own order. Each row reads `{"key": "<dotted path>", "value": ..., "known": true|false}`. The rows are a list, not an object keyed by the dotted path. Two rows share one dotted path whenever a file states it both ways.
+
 A write keeps the file as you wrote it. Comments, blank lines, key order and quoting all survive. Only one of the two ways it writes leaves the rest of the file untouched.
 
 The command first tries to change the key in place, rewriting the bytes of the old value and leaving every other byte alone. Then it checks its own work. It parses the file it just built and compares the data, in full, against the data the second way would have written. It keeps the in-place change only when the two agree.
