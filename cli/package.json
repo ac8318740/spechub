@@ -1,6 +1,6 @@
 {
   "name": "spechub-cli",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "description": "CLI for spec-driven development with SpecHub",
   "type": "module",
   "license": "MIT",
