@@ -140,8 +140,11 @@ So the result decides which path a write takes, and never the shape of the key.
     - That is the common case
     - It is the path such a file needs
 - Anything the check cannot vouch for gets re-emitted
-    - That is always correct
-    - It costs only formatting
+    - The command checks that emission too, because the YAML document interface can itself write a line no parser reads back
+    - It costs only formatting when the check passes
+- A write neither path can vouch for gets refused
+    - The command exits 1 and names the key
+    - The file stays byte for byte as it was
 - Losing the alignment of a comment beats losing the key that follows a block scalar
 
 ### 1.6. Four file shapes that get a decision rather than a crash
@@ -160,13 +163,34 @@ So the result decides which path a write takes, and never the shape of the key.
     - That value is yours rather than the command's
         - The file stays byte for byte as it was
 
-Two refusals protect a file neither command can handle.
+Three refusals protect a file neither command can handle.
 
 - Both `set` and `unset` refuse a file whose bytes are not valid UTF-8
     - Neither one can re-encode a byte it could not decode
     - A write would stand the replacement character in its place and report success
 - Both refuse a file the process may not write
+- Both refuse a document that is a scalar or a list, because no key hangs under either
 - Both name the file and the reason
+
+### 1.7. What `spechub config list` reports
+
+*The listing answers what the file states, and `get` answers what the schema knows.*
+
+- The listing prints every key the file states, in the file's own order
+- A stated key no schema knows carries `(unknown key)`
+    - `spechub config get` refuses that key
+    - `spechub config set` will not write it
+- A block header holding nothing carries no mark where the schema knows keys under it
+    - `spechub config unset` leaves that line standing when it removes a block's last key
+    - The tool wrote `workflow:` itself, so the listing does not warn about it
+- A key holding a dot is a key of its own
+    - YAML reads `"workflow.spec_sync": true` as one key whose name contains a dot
+    - The same file may state the nested spelling as well
+    - The listing prints both rows, and marks the literal one
+    - Every command walks the blocks, so all of them answer out of the nested spelling
+- The `--json` output gives the project side as a list of rows, in the file's own order
+    - Each row reads `{"key": "<dotted path>", "value": ..., "known": true|false}`
+    - The rows are a list, so two rows can share one dotted path
 
 ## 2. profile
 
