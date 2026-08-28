@@ -4,7 +4,7 @@
 
 One file, `spechub/project.yaml`, holds every setting that belongs to a project.
 
-- **It names what to run**: the test, build, lint, typecheck and format commands
+- **It names what to run**: the test, build, lint, typecheck, and format commands
 - **It names where to look**: the source and test directories, and the frontend
 - **It names how strict to be**: whether tests come first, and whether Claude may write code itself
 - **Every skill and every agent reads it** before it runs anything
@@ -50,7 +50,7 @@ flowchart TD
     - On a project that already has the file, the skill leads with the health check and offers a menu of changes
 - `spechub config set <key> <value>` changes one key without an interview
 - A key the file omits takes the default the tables below give it
-    - The `commands`, `directories` and `frontend` keys have no such default
+    - The `commands`, `directories`, and `frontend` keys have no such default
     - The setup skill copies them from a profile
         - An omitted one names nothing at all
 
@@ -103,7 +103,7 @@ Three commands read the file and change nothing.
 
 ### 1.4. What `unset` leaves behind
 
-*It takes the key out, and it prunes nothing else.*
+*`spechub config unset` takes the key out. It prunes nothing else.*
 
 - Removing a key the file does not state is not an error
     - The command writes nothing at all
@@ -115,9 +115,9 @@ Three commands read the file and change nothing.
 
 ### 1.5. How a write preserves the rest of the file
 
-*Two write paths, and the result of the first decides which one runs.*
+*Two write paths exist. The result of the first decides which one runs.*
 
-A write keeps the file as you wrote it. Comments, blank lines, key order and quoting all survive.
+A write keeps the file as you wrote it. Comments, blank lines, key order, and quoting all survive.
 
 - The command first tries to change the key in place, rewriting the bytes of the old value and leaving every other byte alone
 - It then checks its own work
@@ -179,7 +179,7 @@ Two refusals protect a file neither command can handle.
 
 ## 3. workflow: the switches
 
-*Four booleans sit in the block, and each one changes how much discipline SpecHub applies. A fifth key decides how grilling asks.*
+*Four booleans sit in the block. Each one changes how much discipline SpecHub applies. A fifth key decides how Claude asks you a question.*
 
 | Key | Values | Default | What changes |
 | --- | --- | --- | --- |
@@ -191,8 +191,8 @@ Two refusals protect a file neither command can handle.
 How a boolean reads:
 
 - Every boolean key in this document takes the same six spellings as a `host.*` axis, and case does not matter
-    - `true`, `yes` and `on` all read as true
-    - `false`, `no` and `off` all read as false
+    - `true`, `yes`, and `on` all read as true
+    - `false`, `no`, and `off` all read as false
 - The tables show `true` and `false`
     - That is what the file holds after `spechub config set` writes one
 - `workflow.spec_sync` reads as on unless the file states one of the three false spellings outright
@@ -206,12 +206,12 @@ How a boolean reads:
 
 ### 3.1. What `workflow.tdd.strict` moves
 
-*It reorders the first two phases, and it drops none of them.*
+*`workflow.tdd.strict` reorders the first two phases. It drops none of them.*
 
 - The default `true` runs test-writer, then task-executor, then task-checker
 - A `false` runs task-executor, then test-writer, then task-checker
 - All three agents run either way
-- Six files read the key: `orchestrator/AGENTS.md`, `skills/implement/SKILL.md`, `agents/test-writer.md`, `agents/task-executor.md`, `agents/task-checker.md` and `skills/setup/SKILL.md`
+- Six files read the key: `orchestrator/AGENTS.md`, `skills/implement/SKILL.md`, `agents/test-writer.md`, `agents/task-executor.md`, `agents/task-checker.md`, and `skills/setup/SKILL.md`
 - Relaxed TDD, the name for `false`, means nobody writes the tests first
     - It does not mean the work goes unverified
     - The rule of a checker after every executor does not move
@@ -243,13 +243,13 @@ What the checker gates on moves with the key.
 
 ## 4. workflow.maps
 
-*Two keys record where a map's nodes live, and what happens to them at the end.*
+*Two keys record where a map's nodes live, and what happens to those nodes at the end.*
 
 A **map** is a graph of question nodes and work nodes. A **tracker** is the backend that stores those nodes.
 
 | Key | Values | Default | What changes |
 | --- | --- | --- | --- |
-| `workflow.maps.tracker` | `github`, `files` | none | the `map`, `implement` and `archive` skills read the matching backend document and use its operations |
+| `workflow.maps.tracker` | `github`, `files` | none | the `map`, `implement`, and `archive` skills read the matching backend document and use its operations |
 | `workflow.maps.persist` | `true`, `false` | `false` | `true` moves a cleared map's node files to `spechub/archive/[YYYY-MM-DD]-[name]/nodes/`; `false` deletes `spechub/maps/<name>/` |
 
 - An absent `workflow.maps.tracker` means nobody has chosen yet
@@ -284,7 +284,7 @@ A **map** is a graph of question nodes and work nodes. A **tracker** is the back
 How the hook decides to speak:
 
 - The hook runs on every stop
-- It reads the last assistant record in the transcript and adds three usage fields: `input_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens`
+- It reads the last assistant record in the transcript and adds three usage fields: `input_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens`
 - That sum is the context the turn sent to the model
 - The hook then finds the highest rung at or below that number
 - It speaks when that rung sits above the rung it last spoke for
@@ -360,7 +360,7 @@ Three rules decide the window, in order.
 
 ### 6.4 Why only the session's own stop
 
-*The hook nudges the session that could act on it, and nobody else.*
+*The hook nudges the session that could act on it. It nudges nobody else.*
 
 - `hooks/hooks.json` registers it for two events only
     - A `Stop` event fires when the session's own turn finishes
@@ -402,11 +402,11 @@ Two limits are worth knowing.
 
 ## 7. commands, directories, test_markers and venv
 
-*What every agent runs, and where it looks.*
+*What every agent runs, and where every agent looks.*
 
 | Key | Values | Default | What changes |
 | --- | --- | --- | --- |
-| `commands.test` | a shell command, or `null` | from the profile | the test-writer, task-executor and task-checker run it; the task-checker fails a task whose tests do not pass |
+| `commands.test` | a shell command, or `null` | from the profile | the test-writer, task-executor, and task-checker run it; the task-checker fails a task whose tests do not pass |
 | `commands.test_collect` | a shell command, or `null` | from the profile | the task-checker counts tests with it and compares the count against `.test-baseline`; `null` skips the baseline check |
 | `commands.build` | a shell command, or `null` | from the profile | the task-checker verifies the build with it |
 | `commands.lint` | a shell command, or `null` | from the profile | the pipeline lints with it, usually with a fix flag |
@@ -482,7 +482,7 @@ Only the literal `none` gives `frontend.browser.fallback` any effect.
 
 ## 10. What is not a project.yaml key
 
-*Two sets of settings look like they belong here. Neither one does.*
+*Two sets of settings look like they belong here. Neither set does.*
 
 - The `outputStyle` setting is not a `project.yaml` key
     - Claude Code owns it
@@ -500,7 +500,7 @@ Only the literal `none` gives `frontend.browser.fallback` any effect.
 
 ## 11. Every default in one block
 
-*What SpecHub does with a file that states none of it.*
+*What SpecHub does with a `project.yaml` that states none of these keys.*
 
 ```yaml
 workflow:
@@ -526,6 +526,6 @@ workflow:
     # context_thresholds and context_window have no default
 ```
 
-- The `commands`, `directories`, `test_markers`, `venv` and `frontend` blocks have no defaults of their own
+- The `commands`, `directories`, `test_markers`, `venv`, and `frontend` blocks have no defaults of their own
 - `/spechub:setup` copies them from the profile it detects
 - Section 7 gives the values each profile proposes

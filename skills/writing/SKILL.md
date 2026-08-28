@@ -5,6 +5,18 @@ description: One plain-language standard for every durable artifact. A durable a
 
 # Writing
 
+> ## **IF YOU CAN'T EXPLAIN IT SIMPLY, YOU DON'T UNDERSTAND IT WELL ENOUGH.**
+>
+> **Commonly attributed to Albert Einstein.**
+
+**THIS IS THE WHOLE JOB. READ IT AGAIN.**
+
+**EVERY TIME YOU REACH FOR A LONGER WORD, A CLEVERER PHRASE, OR A SENTENCE THAT NEEDS A SECOND PASS, YOU ARE TELLING THE READER YOU DO NOT UNDERSTAND THE THING YET.**
+
+**THE EXPERT IS THE ONE WHO MAKES IT SIMPLE. NOT THE ONE WHO MAKES IT SOUND HARD.**
+
+**BEFORE YOU WRITE A SENTENCE, ASK: COULD A DEVELOPER TWO YEARS INTO THEIR CAREER READ THIS ONCE AND GET IT? IF NOT, YOU DO NOT UNDERSTAND IT WELL ENOUGH YET. GO BACK.**
+
 SpecHub adopts the writing rules of ASD-STE100 (Simplified Technical English), not its licensed dictionary. ASD-STE100 is an aerospace standard for controlled technical writing. The file `vocabulary.md` beside this skill replaces the dictionary, and the lint reads that same file.
 
 Every rule below is a way to write. Each carries one pair of lines, `Write:` and `Not:`.
@@ -67,10 +79,17 @@ A compound sentence is two clauses joined by a comma, by `and`, `so`, `but`, `wh
 - Write: The map holds nodes. Each node has a status.
 - Not: The map holds nodes. Each item has a status.
 
-### 7. Define a term of art in plain words, at first use and in a glossary entry
+### 7. Define a term of art in plain words, before you first use it
+
+Explain every invented term before the sentence that relies on it, never after. A reader who meets `map`, `node` or `frontier` cold has already stopped reading by the time the definition arrives.
 
 - Write: Work the frontier, the nodes ready to work now.
 - Not: Work the frontier, the unblocked open nodes the tracker returns.
+
+The same rule orders sections. A section that uses a term has to sit after the section that defines it.
+
+- Write: define `map` and `node`, then say what `/spechub:map` does
+- Not: say what `/spechub:map` does, then define `map` in the next subsection
 
 ### 8. Spell out an abbreviation at first use
 
@@ -157,7 +176,14 @@ Pick the phrasing a reader understands on the first pass, every time.
 - Write: The lint warns and never blocks.
 - Not: The lint is fast, focused, and forgiving.
 
-### 22. Write for a developer who has never seen this repository
+### 22. Name the thing a pronoun stands for
+
+A reader arriving at a heading or a takeaway line holds no context from the line above it. Never open one with `one`, `it`, `this` or `that` where the noun is missing.
+
+- Write: Only `/spechub:map` creates a map.
+- Not: Only `/spechub:map` creates one.
+
+### 23. Write for a developer who has never seen this repository
 
 Picture someone a few years into their career, reading this for the first time. Every sentence has to land on that reader without a second pass.
 
@@ -169,19 +195,24 @@ A term this project invented gets its plain meaning on the same line, every time
 - Write: the frontier, meaning the nodes you can work right now
 - Not: work the frontier
 
-### 23. State what you checked, and when
+### 24. State what you checked, and when
 
 - Write: `spechub lint-prose` does not exist yet, as of 2026-08-22.
 - Not: My knowledge has a cutoff, so this may have changed since.
 
 ## Headings and marks
 
-### 24. Connect clauses with a period or a comma, and set an aside off with an en dash
+### 25. Connect clauses with a period or a comma, and set an aside off with an en dash
 
 - Write: The lint warns. It never blocks. The rule – a heuristic – misfires inside tables.
 - Not: The same two sentences joined by an em dash, or by a colon in mid sentence.
 
-### 25. Write a heading in sentence case, and end a fragment with no period
+**Always use the Oxford comma.** A list of three or more items takes a comma before the final `and` or `or`.
+
+- Write: proposals, designs, and tasks
+- Not: proposals, designs and tasks
+
+### 26. Write a heading in sentence case, and end a fragment with no period
 
 - Write: `## Before you finish`, and a table cell that reads `make sure`
 - Not: `## Before You Finish.`, and a table cell that reads `make sure.`
@@ -190,22 +221,22 @@ A bullet never ends in a period, however long it runs. A cell follows the same r
 the `visual-docs` skill owns bullet shape. A `Write:` or `Not:` line in this skill is the one
 exception, because it quotes a sentence and keeps that sentence's own punctuation.
 
-### 26. Give a heading content that its paragraph does not repeat
+### 27. Give a heading content that its paragraph does not repeat
 
 - Write: `## Sentences`
 - Not: `## This section covers the rules that apply to sentences`
 
-### 27. Bold a single term for emphasis
+### 28. Bold a single term for emphasis
 
 - Write: **fog** names whatever nobody can state precisely yet.
 - Not: **SpecHub** ships a **CLI** that **many** skills call.
 
-### 28. Carry the meaning in words
+### 29. Carry the meaning in words
 
 - Write: Done. 12 tests pass.
 - Not: The same line with a tick emoji in front and a rocket after.
 
-### 29. End with the last fact
+### 30. End with the last fact
 
 - Write: The build passes. The baseline holds at 214 tests.
 - Not: Let me know if you would like me to help with anything else.

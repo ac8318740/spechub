@@ -6,10 +6,9 @@ SpecHub is a Claude Code plugin. It makes Claude plan before it codes, write the
     - Claude starts building before the requirements are clear
     - Claude writes code, then creates tests that pass against the code it just wrote
 - **SpecHub introduces structure around how your agent works**
-    - Every change goes through a test-writer, an implementer and a checker
+    - Every change goes through a test-writer, an implementer, and a checker
+    - Every commit updates your specs from the diff
 - **Downside: this structure may make your agent take longer on small tweaks than necessary**
-- **You get three commands** (see section 1)
-- **Install it with two commands** (see section 2)
 
 ```mermaid
 flowchart TD
@@ -21,12 +20,12 @@ flowchart TD
     QF --> C
 ```
 
-Every box above is section 1. The rest of this file is reference.
+Every box above is section 2. The rest of this file is reference.
 
 | What you want | Where |
 | ------------- | ----- |
-| The three commands, and which one to use | section 1 |
-| Install | section 2 |
+| Quickstart | section 1 |
+| The three commands, and which one to use | section 2 |
 | Configure a project and a machine | section 3 |
 | The CLI | section 4 |
 | Every skill | section 5 |
@@ -36,9 +35,38 @@ Every box above is section 1. The rest of this file is reference.
 | Design principles | section 9 |
 | Licence and credits | section 10 |
 
-## 1. Three commands, and which one to use
+## 1. Quickstart
+
+You need the [Claude Code](https://claude.com/claude-code) CLI and Node.js 20 or later.
+
+Install the plugin:
+
+```
+/plugin marketplace add ac8318740/ac-agentic-coding
+/plugin install spechub@ac-agentic-coding
+```
+
+Then, in your project:
+
+```
+/spechub:setup
+```
+
+- `/spechub:setup` detects the project type, then writes `spechub/project.yaml` with workflow settings
+- The SessionStart hook loads the orchestrator instructions whenever it detects a spechub project
+- Your CLAUDE.md stays clean for project-specific content
+- Upgrading from a version before 0.8.0 means deleting one stale `@import` line (see [docs/migrate-0.8.md](docs/migrate-0.8.md))
+
+## 2. The three commands, and which one to use
 
 *Pick by what is in your way: nothing, a bug, or an unanswered question.*
+
+Two words first, because the third command below uses them.
+
+- **A map** is a to-do graph SpecHub keeps for one piece of work
+- **A node** is one entry on that graph: one question to answer, or one piece of work to do
+
+The three commands:
 
 - **The request is clear enough to build** – run `/spechub:implement`
     - It runs the four agents of section 6 on your request
@@ -48,18 +76,13 @@ Every box above is section 1. The rest of this file is reference.
 - **The request still has open questions** – run `/spechub:map`
     - Claude interviews you one round at a time
     - Each round asks every question it can answer next
-    - Each question comes with Claude's recommended answer
-        - You confirm instead of composing
-    - A single question ends there
-    - Claude writes the decision down as a short note under `docs/adr/`
-    - A big feature needs dozens of questions
-    - Claude stores those as a to-do graph you work through across several sessions
+    - Each question comes with Claude's recommended answer, so you confirm instead of composing
+    - A single question ends there, and Claude writes the decision down as a short note under `docs/adr/`
+    - A big feature needs dozens of questions, and Claude stores those as a map you work through across several sessions
 
-### 1.1. The to-do graph, if your work needs one
+### 2.1. What a map holds
 
-*Only `/spechub:map` creates one. It does that only when a single conversation cannot settle everything.*
-
-SpecHub calls the graph a **map** and each entry a **node**. A node is one question to answer, or one piece of work to do.
+*`/spechub:map` builds a map only when a single conversation cannot settle every question.*
 
 Each node carries one of five statuses.
 
@@ -71,49 +94,22 @@ Each node carries one of five statuses.
 | `resolved` | done |
 | `out-of-scope` | dropped on purpose |
 
-The rest of what a node holds:
+Each node also records four things.
 
-- **Each node records what raised it**
-    - You can read the decisions back in the order they happened
-- **Each node lists what must finish first**
-    - SpecHub uses that to tell you what is ready to start
-- **Each node says who answers it**: you, or Claude working alone
-- **The nodes ready to start right now** are the open ones with nothing unfinished blocking them
+- **What raised it**, so you can read the decisions back in the order they happened
+- **What must finish first**, so SpecHub can tell you what is ready to start
+- **Who answers it**: you, or Claude working alone
+- **Where it lives**: a GitHub issue by default, or a markdown file under `spechub/maps/` with no GitHub remote
+
+Two things SpecHub does with a finished map.
+
+- **It works through the nodes that are ready to start**, meaning the open ones with nothing unfinished blocking them
     - SpecHub calls that set the **frontier**
-    - `/spechub:map` works through it
-- **The nodes live in GitHub issues by default**
-    - With no GitHub remote they live in markdown files under `spechub/maps/`
-- **One command packs a map into a single brief**
-    - A fresh Claude session then picks up where the last one stopped
+- **It packs the whole map into a single brief**, so a fresh Claude session picks up where the last one stopped
 
 Every rule in SpecHub exists because something went wrong without it, over months of real product development with Claude Code.
 
 For the full picture, each step and how they connect, read [docs/workflows.md](docs/workflows.md).
-
-## 2. Install
-
-*Two commands install the plugin. One more sets it up in a project.*
-
-Prerequisites:
-
-- [Claude Code](https://claude.com/claude-code) CLI
-- node.js 20 or later, for the SpecHub CLI
-
-```
-/plugin marketplace add ac8318740/ac-agentic-coding
-/plugin install spechub@ac-agentic-coding
-```
-
-Then in your project:
-
-```
-/spechub:setup
-```
-
-- `/spechub:setup` detects the project type, then writes `spechub/project.yaml` with workflow settings
-- The SessionStart hook loads the orchestrator instructions whenever it detects a spechub project
-- Your CLAUDE.md stays clean for project-specific content
-- Upgrading from a version before 0.8.0 means deleting one stale `@import` line (see [docs/migrate-0.8.md](docs/migrate-0.8.md))
 
 ## 3. Configure a project and a machine
 
@@ -135,7 +131,7 @@ Then in your project:
 
 *Four storage operations carry the whole map. One fixed path makes the CLI reachable from any Claude session.*
 
-SpecHub ships a Node.js CLI: `spechub config`, `spechub list`, `spechub node ...` and `spechub archive`.
+SpecHub ships a Node.js CLI: `spechub config`, `spechub list`, `spechub node ...`, and `spechub archive`.
 
 - The storage behind a map provides four operations and nothing more: create, read, update, list
     - GitHub issues are the default
@@ -294,7 +290,7 @@ How to turn it on:
 
 - **[OpenSpec](https://github.com/Fission-AI/OpenSpec)** – SpecHub forks its CLI from OpenSpec
     - OpenSpec was the core spec engine under the original workflow
-    - The spec-driven concepts all originate there: proposals, designs, tasks, living specs, change management and archiving
+    - The spec-driven concepts all originate there: proposals, designs, tasks, living specs, change management, and archiving
 - **[Taskmaster AI](https://github.com/eyaltoledano/claude-task-master)** – Taskmaster's task management model inspired the orchestrator pattern and the agent coordination approach
 - **[Skills for Real Engineers](https://github.com/mattpocock/skills)** by Matt Pocock – the Wayfinder map, the round-by-round interview, and the durability rule for agent briefs
     - SpecHub's node graph is a direct adaptation of Wayfinder

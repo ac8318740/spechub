@@ -50,7 +50,7 @@ TROUBLESHOOTING.md           – downstream install diagnostics for Claude Code
 
 ## 2. Assets and helper scripts
 
-*`assets/` holds what a skill installs rather than reads, and one duplicate key there costs the user their whole config file.*
+*`assets/` holds what a skill installs rather than reads. One duplicate key there costs the user their whole config file.*
 
 Today that is `assets/terminal-workspace/setup.sh`, which installs the optional terminal workspace.
 
@@ -68,7 +68,7 @@ Two rules govern it.
 
 ### 2.1. Merging into a user's TOML config
 
-*TOML forbids a duplicate key, so the managed block either claims a key or concedes it.*
+*TOML forbids a duplicate key. The managed block therefore either claims a key or concedes it.*
 
 - herdr rejects a config that holds a duplicate, and yazi throws its config away and falls back to presets
 - The block **claims** each key it writes, meaning it deletes the user's own copy of that key first
@@ -90,7 +90,7 @@ Merging into an existing `[keys]` produces **two** managed regions rather than o
 `yazi.toml` is the same case, and stricter.
 
 - A yazi config that falls back to presets loses every setting the user has
-- The managed block writes into four namespaces: `mgr`, `opener.markdown`, `plugin.prepend_previewers` and `open.prepend_rules`
+- The managed block writes into four namespaces: `mgr`, `opener.markdown`, `plugin.prepend_previewers`, and `open.prepend_rules`
 - Every one of them is a claimed-key case
 - An array-of-tables entry adds to the config only where the name is free, or where it already holds an array of tables
     - `[[plugin.prepend_previewers]]` is fine under a `[plugin]` that leaves `prepend_previewers` unset
@@ -158,10 +158,10 @@ bash tests/test-terminal-workspace.sh
 
 ## 3. CLI build discipline
 
-*The CLI ships pre-built and bundled, so `cli/dist/index.js` has to work with no `node_modules/` beside it.*
+*The CLI ships pre-built and bundled. `cli/dist/index.js` has to work with no `node_modules/` beside it.*
 
 - `cli/dist/index.js` is a single self-contained file
-- esbuild inlines every runtime dependency into it: commander, chalk, fast-glob, yaml and zod
+- esbuild inlines every runtime dependency into it: commander, chalk, fast-glob, yaml, and zod
 - Claude Code clones and runs a marketplace plugin directly, with no `npm install` step downstream
 
 After any change in `cli/src/`:
@@ -189,7 +189,7 @@ mv node_modules /tmp/nm-park && node bin/spechub.js --help; mv /tmp/nm-park node
 
 ### 3.1. The recommended pre-commit hook
 
-*It saves you a red run, and CI is what actually enforces the two generated sets.*
+*The pre-commit hook saves you a red run. CI is what actually enforces the two generated sets.*
 
 Drop this into `.git/hooks/pre-commit` inside the spechub clone, not the marketplace parent. Then run `chmod +x .git/hooks/pre-commit`. Git ignores hook files, so this stays per-clone.
 
@@ -231,7 +231,7 @@ fi
 
 ### 3.2. What `npm run build` does to the version
 
-*It syncs `cli/package.json` for tidiness, and `spechub --version` never depends on that.*
+*`npm run build` syncs `cli/package.json` for tidiness. `spechub --version` never depends on that sync.*
 
 - `npm run build` syncs `cli/package.json`'s version from `.claude-plugin/plugin.json`, then runs esbuild
 - That is why both the pre-commit hook and the `git add` recipe above stage `cli/package.json` alongside `dist/`
@@ -261,7 +261,7 @@ Why the hook installs them:
     - It leaves alone an agent of yours that shares a name
 - It does nothing at all on a machine with no `~/.codex`
 
-The generator emits only the three keys Codex applies: `name`, `description` and `developer_instructions`. It deliberately omits others.
+The generator emits only the three keys Codex applies: `name`, `description`, and `developer_instructions`. It deliberately omits others.
 
 - `model` – ours says `opus`, a Claude alias that means nothing to Codex
     - Omitting it makes a subagent inherit the parent's model, which is what we want
@@ -326,13 +326,13 @@ spechub/**
 
 ### 6.2. Picking the level
 
-*The gate checks that the version went up, and you pick the level.*
+*The gate checks that the version went up. You pick the level.*
 
 - Use semver: patch for a fix, minor for a feature, major for a breaking change
 
 ### 6.3. The no-bump label
 
-*It is the exception, and never a way past a red check.*
+*The `no-bump` label is the exception. It is never a way past a red check.*
 
 - Add the `no-bump` label to the pull request to pass the gate without a bump
 - This is for a change that touches a shipped path but genuinely should not roll out
@@ -356,7 +356,7 @@ spechub/**
 
 ### 6.6. Why the CLI is not on npm
 
-*The CLI ships only as part of the plugin, and that is deliberate.*
+*The CLI ships only as part of the plugin. That is deliberate.*
 
 Installing it is not a step.
 
@@ -394,7 +394,7 @@ Revisit this only if a machine needs the CLI with **no plugin installed at all**
 
 ### 6.7. Who owns `spechub` on PATH
 
-*The SessionStart hook defers, and agents are outside this entirely.*
+*The SessionStart hook defers to a `spechub` already on PATH. Agents are outside this entirely.*
 
 - The hook leaves an existing `spechub` on PATH alone if it is not the hook's own symlink
 - It says where the winner came from
@@ -407,8 +407,8 @@ Revisit this only if a machine needs the CLI with **no plugin installed at all**
 
 *Two skills own every durable artifact this repository ships, the skill files and these docs included.*
 
-- Prose follows the `writing` skill in `skills/writing/`, which owns words, sentences, paragraphs and heading style
-- Shape follows the `visual-docs` skill in `skills/visual-docs/`, which owns the Minto pyramid, diagram-first structure and bullet discipline
+- Prose follows the `writing` skill in `skills/writing/`, which owns words, sentences, paragraphs, and heading style
+- Shape follows the `visual-docs` skill in `skills/visual-docs/`, which owns the Minto pyramid, diagram-first structure, and bullet discipline
     - Section 3 of that skill holds the bullet rules
         - 90% or more of the body in bullets, one sentence each, no trailing period
         - Markdown nests four spaces per level

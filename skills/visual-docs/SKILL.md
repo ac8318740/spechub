@@ -118,7 +118,12 @@ Two rules keep the opening honest.
 
 ### 2.3. The horizontal rule
 
-*Sibling sections must be the same kind of thing, mutually exclusive, and collectively cover the parent.*
+*Siblings must be the same kind of thing, mutually exclusive, and collectively cover the parent. This binds every bullet, not only every section.*
+
+Apples-to-apples applies at every level. Under one heading, at one indent, every bullet answers the same question. A bullet about what the tool does cannot sit beside a bullet about where to install it.
+
+- Write: three bullets, each naming one failure mode the tool solves
+- Not: two bullets naming a failure mode, a third naming the install command
 
 Three failures to check for:
 
@@ -224,7 +229,7 @@ flowchart LR
 
 *Diagram before prose. Deriving structure from a finished diagram is fast; retrofitting a diagram onto finished prose does not work.*
 
-1. **Establish the shape.** Read the code, config and entry points. Do not start from existing docs – they are what you are replacing, and their errors propagate
+1. **Establish the shape.** Read the code, config, and entry points. Do not start from existing docs – they are what you are replacing, and their errors propagate
 2. **Draw the lead diagram first.** Getting it right forces the structure. If you cannot draw it, you do not yet understand the thing well enough to document it
 3. **Derive the section list from the diagram nodes.** One section per node, headings reusing node labels
 4. **Write the opening sentence.** Do this before the body, so the body has a claim to support

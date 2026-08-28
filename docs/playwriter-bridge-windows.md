@@ -11,5 +11,5 @@ Where each part went:
 
 The scripts still ship under `plugins/spechub/assets/playwriter-bridge/`.
 
-- `stop.ps1`, `doctor.ps1` and `vm-free-port.sh` are new since this relocation
+- `stop.ps1`, `doctor.ps1`, and `vm-free-port.sh` are new since this relocation
 - The Windows runbook covers their use

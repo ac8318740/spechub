@@ -5,7 +5,7 @@ This is an optional setup for running several coding agents on a remote machine,
 - **Your code lives on a machine you reach over the network**
 - You run agents on it
 - **A plain terminal session dies with its connection**, taking every running agent with it
-- **The tools worth reviewing code in assume a desktop**, meaning a clipboard, a browser and a display
+- **The tools worth reviewing code in assume a desktop**, meaning a clipboard, a browser, and a display
 - **That remote machine has none of them**
     - A copy or an "open in browser" goes nowhere
 - **SpecHub needs none of this setup**
@@ -48,7 +48,7 @@ flowchart TD
 | herdr client | 4. How you attach |
 | herdr server and its panes | 5. The herdr server |
 | Terminal emulator | 6. Freeing your emulator's keys |
-| Reading code and markdown | 7. Reading code, markdown and diagrams |
+| Reading code and markdown | 7. Reading code, markdown, and diagrams |
 | Diffs and pull requests | 8. Diffs and pull requests |
 | Clipboard and browser | 9. What crosses back to your machine |
 | A link on screen for you to click | 9.2. spechub-open: the browser |
@@ -127,7 +127,7 @@ The `/spechub:terminal-workspace` skill runs `assets/terminal-workspace/setup.sh
 
 What `uninstall` removes:
 
-- It strips the managed blocks from the herdr, tuicr and yazi configs
+- It strips the managed blocks from the herdr, tuicr, and yazi configs
 - It unsets the delta git settings
 - It deletes the helper scripts
 - It removes the keybindings it wrote into gh-dash
@@ -138,7 +138,7 @@ What the config holds:
 - The script reads `~/.config/spechub/terminal-workspace.yaml`, which the skill copies from `assets/terminal-workspace/config.example.yaml`
 - The config holds eight components, each with its own `enabled` key
     - You turn a part off there and run `apply` again
-- Six components name a tool: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr` and `yazi`
+- Six components name a tool: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, and `yazi`
 - The other two name a feature
     - `markdown` covers `spechub-md` with mermaid-ascii and glow
     - `remote` covers the clipboard and browser helpers
@@ -312,7 +312,7 @@ herdr
 
 ### 4.3. What differs, and why it decides your keymap
 
-*Each attach path can carry a different set of chords, so bind the family that survives both.*
+*Each attach path can carry a different set of chords. Bind the family that survives both.*
 
 | | `herdr --remote` | `ssh`, then `herdr` |
 | --- | --- | --- |
@@ -450,11 +450,11 @@ The `ctrl` and `shift` modifiers are not options for a fourth list, and which on
 - A `shift+<digit>` chord arrives as punctuation on both paths
 - A `ctrl+<digit>` chord reaches herdr under `herdr --remote` but not over SSH
 - A binding you make on one path is therefore silently dead on the other (see the table in section 4.3)
-- The three chords above, `alt+N`, `prefix+N` and `prefix+alt+N`, are what both attach paths carry
+- The three chords above, `alt+N`, `prefix+N`, and `prefix+alt+N`, are what both attach paths carry
 
 ### 5.2. One config file, validated without a restart
 
-*Everything above lives in `~/.config/herdr/config.toml`, and two choices in it are worth explaining.*
+*Everything above lives in `~/.config/herdr/config.toml`. Two choices in that file are worth explaining.*
 
 - Validate with `herdr config check`
 - Apply without restarting with `herdr server reload-config`
@@ -580,7 +580,7 @@ Two choices worth explaining.
 
 ### 5.3. When the sidebar numbers stop matching
 
-*Creating a worktree moves the sidebar rows and not the stored order, so one helper realigns them.*
+*Creating a worktree moves the sidebar rows and not the stored order. One helper realigns them.*
 
 - Collapse the sidebar with `alt+s` and each workspace shows a number
 - That number is its position in herdr's stored list
@@ -636,9 +636,9 @@ To confirm an emulator is eating a chord rather than herdr ignoring it, run `cat
 - Never try to edit a client-side emulator config from the dev machine
 - Never paste your local config onto the dev machine so that something there can rewrite it
 
-## 7. Reading code, markdown and diagrams
+## 7. Reading code, markdown, and diagrams
 
-*A file tree with live preview, and markdown that draws its mermaid diagrams as text.*
+*A file tree with live preview. Markdown that draws its mermaid diagrams as text.*
 
 ### 7.1. The file tree
 
@@ -721,13 +721,13 @@ A wide diagram cannot fit a narrow pane.
     - Tighter padding buys roughly a third of the height back and very little width
 - Section 10.3 explains why the note exists at all
 - Terminal mode replaces each mermaid fence with a box-drawing rendering
-- `mermaid-ascii` handles `graph`, `flowchart` and `sequenceDiagram`
+- `mermaid-ascii` handles `graph`, `flowchart`, and `sequenceDiagram`
 - Anything else keeps its source visible with a note rather than disappearing
 
 Two things `spechub-md` normalises first, because `mermaid-ascii` handles
 neither:
 
-- `style`, `classDef`, `class`, `linkStyle` and `click` lines, which it would
+- `style`, `classDef`, `class`, `linkStyle`, and `click` lines, which it would
   otherwise draw as if each were a node
 - node shapes other than `[square]` – `{decision}`, `((circle))`, `([stadium])`,
   `[(database)]`, `{{hexagon}}` – whose syntax would otherwise leak into the label
@@ -1134,7 +1134,7 @@ Two gaps, and three gh-dash keys fall into them:
 - It is bytes in the terminal stream
     - It crosses SSH for free
 - herdr forwards it from a pane to whatever terminal hosts it
-- Windows Terminal, iTerm2, kitty and Ghostty all act on it
+- Windows Terminal, iTerm2, kitty, and Ghostty all act on it
 
 ```bash
 spechub-clip "some text"      # copy the arguments
@@ -1235,7 +1235,7 @@ One trap belongs to your SSH config rather than to herdr.
 
 ### 9.4. On a machine with none of this
 
-*The link route needs only a terminal, and one environment variable buys back a real one-key open.*
+*The link route needs only a terminal. One environment variable buys back a real one-key open.*
 
 The link route works over SSH, through herdr, and under `herdr --remote`. To get a real one-key open instead, give `spechub-open` something that can do it:
 
@@ -1328,7 +1328,7 @@ The opener rides the same machinery as the bridge.
 
 ### 10.3. Why a wide diagram becomes a note
 
-*Nothing can shrink a diagram, and wrapping box-drawing art destroys it.*
+*Nothing can shrink a diagram. Wrapping box-drawing art destroys it.*
 
 - A diagram's width comes from its node labels
     - Nothing can shrink a wide one into a narrow pane
@@ -1347,7 +1347,7 @@ The opener rides the same machinery as the bridge.
 *Declaring anything twice would make yazi reject the whole file, so `apply` gives up whatever you already set.*
 
 - `setup.sh apply` reads your `yazi.toml` first and leaves alone anything you have set
-    - That covers your `mgr` settings, your markdown opener, your `plugin.prepend_previewers` and your `open.prepend_rules`
+    - That covers your `mgr` settings, your markdown opener, your `plugin.prepend_previewers`, and your `open.prepend_rules`
     - Whichever of the four it skipped, it says so
 - Declaring any of them a second time would make yazi reject the whole config and fall back to presets
     - It concedes them instead
@@ -1411,7 +1411,7 @@ A document bound for the opener is the third case.
 
 ### 10.7. Why the bridge and the opener must prove themselves
 
-*`agent-browser` launches a headless Chrome when it cannot attach, and reports success to nobody.*
+*`agent-browser` launches a headless Chrome when it cannot attach. It then reports success to nobody.*
 
 - `agent-browser` launches a headless Chrome on the dev machine when it cannot attach to the endpoint you gave it
 - That Chrome navigates perfectly happily, reports success, and shows nobody anything
@@ -1471,7 +1471,7 @@ The opener proves itself the same way and for the same reason.
     - `spechub-gh`, which `spechub-dash` puts on `$PATH` as `gh`, turns that into a notification quoting gh
     - Approving your own pull request is the one you will hit
 - **A dev machine has no clipboard and no browser**
-    - The `o`, `y` and `Y` keys in gh-dash all fail there until `apply` installs `spechub-clip` and `spechub-open`
+    - The `o`, `y`, and `Y` keys in gh-dash all fail there until `apply` installs `spechub-clip` and `spechub-open`
     - The `setup.sh status` command says which browser route a machine ended up with
 - **diffnav aborts on one very long line**
     - delta dies on `SIGABRT`, and diffnav quits with `FATA signal: aborted (core dumped)`, showing none of the diff

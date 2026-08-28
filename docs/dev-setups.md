@@ -57,7 +57,7 @@ Where the file lives, and how the CLI reads a value:
 - `spechub config show` prints every axis with the project's settings
 - The CLI matches an enum value case-sensitively
     - `stagewise` works, and `Stagewise` does not
-- The CLI matches a boolean loosely: `true`, `yes` and `on` all mean true, and `false`, `no` and `off` all mean false
+- The CLI matches a boolean loosely: `true`, `yes`, and `on` all mean true, and `false`, `no`, and `off` all mean false
 
 ## 2. Orchestrator axes
 
@@ -67,7 +67,7 @@ Where the file lives, and how the CLI reads a value:
     - An answer about herdr says nothing about Orca
 - Answering no to both is a real answer
     - The worktree skills then use plain git under `.claude/worktrees`
-- `skills/new-worktree/detect-orchestrator.sh` prints six lines: `declared_herdr`, `declared_orca`, `detected`, `active`, `owner` and `warning`
+- `skills/new-worktree/detect-orchestrator.sh` prints six lines: `declared_herdr`, `declared_orca`, `detected`, `active`, `owner`, and `warning`
     - `detected` reads the markers an orchestrator sets in its terminals
     - `active` always equals it
     - herdr sets `HERDR_ENV` and `HERDR_PANE_ID`
@@ -119,7 +119,7 @@ Neither tool sees the other's sessions.
     - That is the stated `frontend.browser.cdp_port`, else `19988` when the project's mode is `remote`, else `9555`
     - Check 3 knocks on it
 - **headless** launches headless Chromium here and needs no display
-    - It needs `chromium`, `chromium-browser`, `google-chrome` or `google-chrome-stable` on `PATH`
+    - It needs `chromium`, `chromium-browser`, `google-chrome`, or `google-chrome-stable` on `PATH`
 - **local** launches a visible browser here
     - It needs one of those binaries and a graphical display
 

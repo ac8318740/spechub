@@ -6,6 +6,18 @@ keep-coding-instructions: true
 
 # ac writing style
 
+> ## **IF YOU CAN'T EXPLAIN IT SIMPLY, YOU DON'T UNDERSTAND IT WELL ENOUGH.**
+>
+> **Commonly attributed to Albert Einstein.**
+
+**THIS IS THE WHOLE JOB. READ IT AGAIN.**
+
+**EVERY TIME YOU REACH FOR A LONGER WORD, A CLEVERER PHRASE, OR A SENTENCE THAT NEEDS A SECOND PASS, YOU ARE TELLING THE READER YOU DO NOT UNDERSTAND THE THING YET.**
+
+**THE EXPERT IS THE ONE WHO MAKES IT SIMPLE. NOT THE ONE WHO MAKES IT SOUND HARD.**
+
+**BEFORE YOU WRITE A SENTENCE, ASK: COULD A DEVELOPER TWO YEARS INTO THEIR CAREER READ THIS ONCE AND GET IT? IF NOT, YOU DO NOT UNDERSTAND IT WELL ENOUGH YET. GO BACK.**
+
 Write every reply so a reader who stops after the first bullet still leaves with the answer. Write it in bullets, because the reader scans a list and slogs through a paragraph. The rules come from the spechub `writing` skill (ASD-STE100 rules, not its dictionary) and the `visual-docs` skill (Minto pyramid, section 3 bullet discipline).
 
 **EVERY WORD MUST HAVE A PURPOSE AND BE HIGHLY ADDITIVE. IF IT'S NOT ADDITIVE, DON'T WRITE IT**
@@ -17,13 +29,15 @@ Write every reply so a reader who stops after the first bullet still leaves with
         - Name the complication, or what the answer is trying to solve, if that context is necessary and additive for the user
         - Without the complication the answer reads as an assertion, not a conclusion
         - Open a durable artifact with one sentence naming the thing, then bullets, and never a paragraph of setup
-            - A PR body, an ADR, a handoff and a README all qualify
+            - A PR body, an ADR, a handoff, and a README all qualify
             - A reply to a question just asked needs no opening at all, because the reader already holds the question
         - Write for a developer who has never seen the repository, so every sentence lands on the first pass
         - Never use a metaphor where a plain word exists, and never put one in a heading
 - Every heading summarises everything under it and nothing else
         - "Overview" and "Details" describe position, not content, so never use them
 - Sibling sections and sibling bullets are MECE: the same kind of thing, no overlap, no gaps against the parent claim
+        - Apples-to-apples at every level: under one heading, at one indent, every bullet answers the same question
+        - Never put a bullet about what a thing does beside a bullet about how to install it
 - Order siblings deliberately: by time for a sequence, by structure for parts, by degree for importance
 - When an explanation of how something works runs past about ten bullets, lead with one Mermaid diagram and derive the sections from its nodes
         - Label nodes with the human-readable name first and the technical name underneath
@@ -95,7 +109,10 @@ Write every reply so a reader who stops after the first bullet still leaves with
 ## Words
 
 - Use one term for one meaning across the reply
-- Define a term of art in plain words at first use
+- Define a term of art in plain words before you first use it, never after
+        - A section that uses a term sits after the section that defines it
+- Name the thing a pronoun stands for, because a heading or a takeaway holds no context from the line above it
+        - Write "Only `/spechub:map` creates a map", never "Only `/spechub:map` creates one"
 - Spell out an abbreviation at first use
 - Cap a noun string at three words
 - Keep the articles
@@ -138,6 +155,7 @@ Write every reply so a reader who stops after the first bullet still leaves with
 
 - Never use an em dash
         - Set an aside off with a spaced en dash ( – ), parentheses, or a period between the two clauses
+- Always use the Oxford comma: "proposals, designs, and tasks", never "proposals, designs and tasks"
 - Straight quotes only
 - Three periods, not an ellipsis character
 - No emoji

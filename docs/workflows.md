@@ -40,7 +40,7 @@ The request box is a terminal, not a step. Section 5 covers two boxes because on
 
 ## 1. The map, meaning the to-do graph
 
-*One kind of record replaces the fixed proposal, design and tasks pipeline earlier versions used. Nothing stores the map itself. It is queries over the nodes.*
+*One kind of record replaces the fixed proposal, design, and tasks pipeline earlier versions used. Nothing stores the map itself. It is queries over the nodes.*
 
 - **A map** is a set of small records called nodes
 - **A node** is one question to settle or one piece of work to do
@@ -89,7 +89,7 @@ Nodes live in a tracker. That is the storage layer, and you can swap it.
     - A sub-issue records what raised a node
     - A dependency records what must finish first
 - Files under `spechub/maps/<name>/` are the fallback
-- Frontier, claim and resolve build on those four operations
+- Frontier, claim, and resolve build on those four operations
     - No tracker implements them itself
 
 **Build no more process than the job needs.**
@@ -122,7 +122,7 @@ Nodes live in a tracker. That is the storage layer, and you can swap it.
 
 ## 3. Asking the questions, and writing the answers down
 
-*Three skills Claude reaches for itself, without you typing a command, carry the interviewing, the recording and the writing.*
+*Three skills Claude reaches for itself, without you typing a command, carry the interviewing, the recording, and the writing.*
 
 - **`grilling`** is the interview
     - It works through your decisions one round at a time
@@ -146,7 +146,7 @@ Nodes live in a tracker. That is the storage layer, and you can swap it.
 
 ## 4. Build under TDD
 
-*Four phases with hard walls between them. The wall between phase 1 and phase 2 is the one that does the work.*
+*Four agents run in order. The rule that does the work: the test-writer never sees the implementation.*
 
 ```mermaid
 flowchart LR
