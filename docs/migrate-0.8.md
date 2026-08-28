@@ -14,7 +14,8 @@ As of 0.8.0 a SessionStart hook loads the orchestrator instructions, and it alwa
 
 *Three reasons, and any one of them is enough.*
 
-- **Silent staleness** – the path pins your project to a single plugin version, so an upgrade leaves the `@import` pointing at old orchestrator rules
+- **Silent staleness** – the path pins your project to a single plugin version
+    - An upgrade leaves the `@import` pointing at old orchestrator rules
 - **Time-bomb breakage** – Claude Code cleans an orphaned plugin version out of its cache after 7 days, and the pinned path then 404s
 - **Duplication** – leaving the line in place under 0.8.0 or later loads the same content twice
 

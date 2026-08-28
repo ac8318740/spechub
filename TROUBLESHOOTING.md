@@ -4,8 +4,10 @@
 
 **Claude Code instances act on this file.** Find the symptom the user reported below, run its diagnostic, then apply its fix.
 
-- **The SessionStart hook maintains everything here**, so almost every symptom is that hook not having run
-- **Restarting Claude Code fixes most of them**, because the hook runs again
+- **The SessionStart hook maintains everything here**
+    - Almost every symptom below is that hook not having run
+- **Restarting Claude Code fixes most of them**
+    - The hook runs again on the new session
 - **Each section below is one symptom**, with the command to confirm it and the command to fix it
 
 ```mermaid
@@ -36,7 +38,8 @@ Where the plugin lives, and what points at it:
     - It is useful only when `~/.local/bin` is on `PATH`
     - No plugin functionality rests on it
 - Both symlinks refresh on every SessionStart and point at the current plugin cache version
-- Fix the agent-facing path first, because nothing in the plugin works without it
+- Fix the agent-facing path first
+    - Nothing in the plugin works without it
 
 ---
 
@@ -64,7 +67,8 @@ ls -d ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/ 2>&1
         ln -sfn ~/.claude/plugins/cache/ac-agentic-coding/spechub/$SPECHUB_VERSION/cli/bin/spechub.js ~/.claude/spechub/bin/spechub
         ```
 - **Plugin cache missing entirely**: the second `ls` returned nothing
-    - Fix: the user has not installed the plugin, so run `/plugin install` for `ac8318740/spechub` in Claude Code
+    - Fix: the user has not installed the plugin
+    - Run `/plugin install` for `ac8318740/spechub` in Claude Code
 
 ---
 
@@ -72,7 +76,7 @@ ls -d ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/ 2>&1
 
 **Symptom**: the user runs `spechub --help` at the terminal and the shell reports `command not found`, while agents continue to work.
 
-This is a **human-ergonomics issue, not a plugin issue.** Agents use `~/.claude/spechub/bin/spechub` directly, so this does not affect them. Fix it only if the user types `spechub` at terminals.
+This is a **human-ergonomics issue, not a plugin issue.** Agents use `~/.claude/spechub/bin/spechub` directly. This does not affect them. Fix it only if the user types `spechub` at terminals.
 
 **Diagnose**:
 
@@ -84,7 +88,8 @@ echo "PATH=$PATH" | tr ':' '\n' | grep -F "$HOME/.local/bin" || echo "MISSING"
 **Possible causes and fixes**:
 
 - **Symlink missing**: the SessionStart hook never ran, or ran and could not write
-    - Fix: ask the user to restart Claude Code, because the hook recreates the human symlink on every session start
+    - Fix: ask the user to restart Claude Code
+    - The hook recreates the human symlink on every session start
 - **PATH missing** (the symlink exists but `MISSING` printed): `~/.local/bin` is not on `$PATH`
     - Fix: add this line to the user's shell rc, then ask them to restart their shell:
         ```bash
@@ -143,7 +148,7 @@ readlink ~/.claude/spechub/bin/spechub
 ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/
 ```
 
-**Cause**: an older session set the symlink target, the plugin cache now holds a newer version, and the SessionStart hook has not relinked it yet.
+**Cause**: an older session set the symlink target. The plugin cache now holds a newer version. The SessionStart hook has not relinked it yet.
 
 **Fix**:
 
@@ -160,7 +165,7 @@ ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/
 
 ## 5. The SessionStart hook did not run
 
-**Symptom**: no `spechub:` lines appear in Claude Code's startup logs, and `~/.claude/spechub/bin/spechub` is missing.
+**Symptom**: no `spechub:` lines appear in Claude Code's startup logs. `~/.claude/spechub/bin/spechub` is missing.
 
 **Diagnose**:
 
@@ -184,11 +189,14 @@ cat ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/hooks/hooks.json
 
 **Cause**: the hook uses `python3` to emit `orchestrator/AGENTS.md` as JSON for `additionalContext` injection.
 
-- Without `python3` the orchestrator instructions do not load at all, because nothing else reads that file
-- Claude Code does not auto-load instructions from a plugin's own directory, so injection is the only path
-- This does not affect the CLI symlinks, so the `spechub` command keeps working
+- Without `python3` the orchestrator instructions do not load at all
+    - Nothing else reads that file
+- Claude Code does not auto-load instructions from a plugin's own directory
+    - Injection is the only path
+- This does not affect the CLI symlinks
+    - The `spechub` command keeps working
 
-**Fix**: install Python 3, which most systems already have.
+**Fix**: install Python 3. Most systems already have it.
 
 ```bash
 # Debian/Ubuntu
@@ -201,7 +209,7 @@ brew install python3
 
 ## 7. When none of the above matches
 
-*This section describes the document, not the plugin, so no box in the diagram holds it.*
+*This section describes the document, not the plugin. No box in the diagram holds it.*
 
 The CLI is a normal Node.js ESM package. To validate the install end to end:
 
@@ -210,5 +218,5 @@ SPECHUB_VERSION=$(ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/ | sort -
 node ~/.claude/plugins/cache/ac-agentic-coding/spechub/$SPECHUB_VERSION/cli/bin/spechub.js --help
 ```
 
-- The CLI is fine and the issue is the symlink, if that prints help
-- The issue is the cache contents, if that errors, so jump to section 3
+- If that prints help, the CLI is fine and the issue is the symlink
+- If that errors, the issue is the cache contents (see section 3)

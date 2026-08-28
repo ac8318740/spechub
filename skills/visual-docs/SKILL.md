@@ -9,9 +9,11 @@ description: "Write or restructure documentation that leads with a diagram and d
 
 This skill makes a doc lead with a diagram, then derive its sections from that diagram.
 
-- **Most technical docs explain in reading order rather than importance order**, so the reader builds the picture themselves and learns what mattered last
+- **Most technical docs explain in reading order rather than importance order**
+    - The reader builds the picture themselves and learns what mattered last
 - **One diagram carries the whole shape**, and every section maps to a part of it
-- **The prose rules live in the `writing` skill**, and this skill owns shape alone
+- **The prose rules live in the `writing` skill**
+- This skill owns shape alone
 
 This skill owns document shape. Prose follows the `writing` skill.
 
@@ -53,9 +55,11 @@ Three exemptions, and only these three.
 - **Start and end boxes** – a box for what comes in, or what remains after, is not a step and needs no section
     - In a workflow diagram, the incoming request and the final stored output are both this
 - **Two boxes, one command** – two boxes are sometimes worth drawing separately because they are two ideas, though one command does both
-    - Give them one section and name both in the heading, so the reader can tell it covers both
+    - Give them one section and name both in the heading
+        - The reader can tell it covers both
 - **Sections about the document** – a section on what this doc leaves out, or what is about to change, is housekeeping for the reader
-    - It describes the document rather than the system, so no box should exist for it
+    - It describes the document rather than the system
+        - No box should exist for it
 
 **Start and end boxes.** A box for what comes in, or what remains after, is not
 a step and needs no section. In a workflow diagram, the
@@ -109,7 +113,8 @@ Two rules keep the opening honest.
 - Put one italic line under every H2 and H3, stating the section's point
 - Test it by deleting the section body
 - It was a label rather than a summary, if the takeaway no longer tells the reader what they need
-- A heading like "Overview" or "Details" always fails this, because it describes the section's position instead of its content
+- A heading like "Overview" or "Details" always fails this
+    - It describes the section's position instead of its content
 
 ### 2.3. The horizontal rule
 
@@ -143,7 +148,8 @@ Ten rules govern a bullet. Each one is a way to write.
 - **Nest as far as the argument needs, then stop** – depth costs nothing while every level adds a point
 - **Cut a level that restates its parent** – that one costs the reader everything
 - **Indent a markdown file by four spaces per level** – a `- ` marker opens its content at column 2
-    - Eight spaces sit four past that column, so CommonMark renders the child as a code block
+    - Eight spaces sit four past that column
+        - CommonMark renders the child as a code block
 - **Use parallel grammar across siblings** – the same kind of thing then reads as the same kind of thing
 - **Cut any bullet that narrates, softens or restates**
 
@@ -163,7 +169,8 @@ The indent is the one rule that differs by medium.
 
 - A terminal reply indents the first level eight spaces, then four more per level
     - The wider first step separates a child from its parent at a glance
-- A markdown file cannot afford that step, so it indents four per level throughout
+- A markdown file cannot afford that step
+    - It indents four per level throughout
 
 ## 4. Diagrams
 

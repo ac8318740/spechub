@@ -51,7 +51,8 @@ flowchart TD
 - `spechub config set <key> <value>` changes one key without an interview
 - A key the file omits takes the default the tables below give it
     - The `commands`, `directories` and `frontend` keys have no such default
-    - The setup skill copies them from a profile, so an omitted one names nothing at all
+    - The setup skill copies them from a profile
+        - An omitted one names nothing at all
 
 Three commands read the file and change nothing.
 
@@ -65,8 +66,10 @@ Three commands read the file and change nothing.
 
 *The key decides, and the key alone.*
 
-- A `host.*` key describes the machine, so it goes to the global config at `~/.config/spechub/config.json`
-- Every other key in this document describes the project, so it goes to `spechub/project.yaml`
+- A `host.*` key describes the machine
+    - It goes to the global config at `~/.config/spechub/config.json`
+- Every other key in this document describes the project
+    - It goes to `spechub/project.yaml`
 - Section 10 covers the `host.*` keys
 - `spechub config get <key>` and `spechub config unset <key>` read the same key table and route the same way
 
@@ -76,13 +79,15 @@ Three commands read the file and change nothing.
 
 - `spechub config set` refuses a value outside the set a table gives
 - It refuses a key neither schema knows, and names the keys it does know
-- It refuses a project key outside a SpecHub project, because no file is there to hold it
+- It refuses a project key outside a SpecHub project
+    - No file is there to hold it
 - It holds a numeric key to the range its reader honours, not merely to being a number
     - A count of turns or of tokens takes a whole number of 0 or more
     - A CDP port takes a whole number from 1 to 65535
     - A refusal names the range
     - A value the reader would reject otherwise fails somewhere else entirely, long after the command that accepted it exited 0
-- `get` and `unset` both refuse a key neither schema knows, and both refuse a project key outside a SpecHub project
+- `get` and `unset` both refuse a key neither schema knows
+- Both refuse a project key outside a SpecHub project
 
 ### 1.3. What `get` prints, and what it exits
 
@@ -90,18 +95,23 @@ Three commands read the file and change nothing.
 
 - A string prints as written, and anything else prints as JSON
 - The command exits 2 when the file states no value
-- An unset `host.*` axis already gives that code, so a caller branches on "no value here" without knowing which file holds the key
+- An unset `host.*` axis already gives that code
+    - A caller branches on "no value here" without knowing which file holds the key
 - The message names the documented default where a table below gives a literal one
-- The message names no default where a table describes the default instead, because there is none to name
+- The message names no default where a table describes the default instead
+    - There is none to name
 
 ### 1.4. What `unset` leaves behind
 
 *It takes the key out, and it prunes nothing else.*
 
 - Removing a key the file does not state is not an error
-    - The command writes nothing at all, so the file stays byte for byte as it was
-- A block the removal emptied keeps its key with nothing after the colon, which reads as the default to every reader
-- The command prunes nothing, because pruning would take any comment on that block with it
+    - The command writes nothing at all
+        - The file stays byte for byte as it was
+- A block the removal emptied keeps its key with nothing after the colon
+    - Every reader treats that as the default
+- The command prunes nothing
+    - Pruning would take any comment on that block with it
 
 ### 1.5. How a write preserves the rest of the file
 
@@ -114,7 +124,8 @@ A write keeps the file as you wrote it. Comments, blank lines, key order and quo
     - It parses the file it just built and compares the data, in full, against the data the second path would have written
     - It keeps the in-place change only when the two agree
 - The write goes through the YAML document instead, when the two disagree or when the file it built does not parse
-    - That path carries every comment across, and it re-emits the whole file
+    - That path carries every comment across
+    - It re-emits the whole file
     - A run of spaces before an inline comment shortens to one
 - A collection stated in flow style stays in flow style
 - Line endings survive either path
@@ -125,8 +136,10 @@ A write keeps the file as you wrote it. Comments, blank lines, key order and quo
 
 So the result decides which path a write takes, and never the shape of the key.
 
-- A hand-edited file with ordinary one-line values gets the byte-for-byte path, which is the common case and the one such a file needs
-- Anything the check cannot vouch for gets re-emitted, which is always correct and costs only formatting
+- A hand-edited file with ordinary one-line values gets the byte-for-byte path
+    - That is the common case, and the one such a file needs
+- Anything the check cannot vouch for gets re-emitted
+    - That is always correct, and it costs only formatting
 - Losing the alignment of a comment beats losing the key that follows a block scalar
 
 ### 1.6. Four file shapes that get a decision rather than a crash
@@ -135,18 +148,23 @@ So the result decides which path a write takes, and never the shape of the key.
 
 - A project that holds `spechub/` and no `project.yaml` gets the file created
 - A block stating nothing takes a key underneath it, whether the file spells that block as a bare colon, as `null` or as `~`
-    - That is the state `spechub config unset` leaves behind, so the tool accepts its own output
-- A document stating nothing at all takes a key too, so a file holding only `---` works the way an empty file already does
-- The command refuses a key holding a value where the path wants a block, and it names that key
+    - That is the state `spechub config unset` leaves behind
+        - The tool accepts its own output
+- A document stating nothing at all takes a key too
+    - A file holding only `---` works the way an empty file already does
+- The command refuses a key holding a value where the path wants a block
+- It names that key
     - Writing there would mean discarding the value already in the file
-    - That value is yours rather than the command's, so the file stays byte for byte as it was
+    - That value is yours rather than the command's
+        - The file stays byte for byte as it was
 
 Two refusals protect a file neither command can handle.
 
 - Both `set` and `unset` refuse a file whose bytes are not valid UTF-8
     - Neither one can re-encode a byte it could not decode
     - A write would stand the replacement character in its place and report success
-- Both refuse a file the process may not write, and both name the file and the reason
+- Both refuse a file the process may not write
+- Both name the file and the reason
 
 ## 2. profile
 
@@ -175,13 +193,15 @@ How a boolean reads:
 - Every boolean key in this document takes the same six spellings as a `host.*` axis, and case does not matter
     - `true`, `yes` and `on` all read as true
     - `false`, `no` and `off` all read as false
-- The tables show `true` and `false`, which is what the file holds after `spechub config set` writes one
+- The tables show `true` and `false`
+    - That is what the file holds after `spechub config set` writes one
 - `workflow.spec_sync` reads as on unless the file states one of the three false spellings outright
     - The `commit` skill treats a missing key and an explicit `true` the same way
 - `workflow.frontend_verification` reads as off unless the file states one of the three true spellings outright
     - The frontend-verifier is the only reader
     - `orchestrator/AGENTS.md` and the `browser-verify` skill both run it on an explicit `true` alone
-    - The defaults block in section 11 shows `true` for this key, which is what `/spechub:setup` writes for a project with a frontend
+    - The defaults block in section 11 shows `true` for this key
+    - That is what `/spechub:setup` writes for a project with a frontend
     - That is what setup writes, and not what an absent key means
 
 ### 3.1. What `workflow.tdd.strict` moves
@@ -198,16 +218,19 @@ How a boolean reads:
 
 Relaxed costs the test-writer part of its independence.
 
-- Under `true` it cannot read an implementation, because none exists when it runs
+- Under `true` it cannot read an implementation
+    - None exists when it runs
 - Under `false` the implementation sits in the working tree beside it, and only its instructions keep it from reading that code
 - The two settings do not give equal independence, and `agents/test-writer.md` states the weaker guarantee as the cost of relaxed
 
 What the checker gates on moves with the key.
 
 - Under `true` the checker holds the task's new tests to failing before the executor and passing after
-- Under `false` the implementation came first, so nothing can show those tests failing without it
+- Under `false` the implementation came first
+    - Nothing can show those tests failing without it
     - The checker then holds the new tests to existing and passing
-    - It holds the full suite to passing, and the test count to not dropping
+    - It holds the full suite to passing
+    - The test count to not dropping
 
 ### 3.2. How Claude asks you a question
 
@@ -236,7 +259,8 @@ A **map** is a graph of question nodes and work nodes. A **tracker** is the back
     - The key records where the node records already are
     - Dropping it strands every one of them on a backend no later session looks at
 - `workflow.maps.persist` acts on the files tracker only
-    - The GitHub tracker has nothing to dispose of, because a closed issue is already the archive
+    - The GitHub tracker has nothing to dispose of
+        - A closed issue is already the archive
     - The default deletes, because keeping the nodes leaves a second copy of every decision and the two copies drift apart
 
 ## 5. workflow.handoff: launching and acknowledging
@@ -250,7 +274,8 @@ A **map** is a graph of question nodes and work nodes. A **tracker** is the back
 | `workflow.handoff.self_invoke` | `true`, `false` | `true` | `false` stops the agent from invoking the `handoff` skill on its own initiative; it then tells the user a handoff looks warranted and asks first |
 
 - `workflow.handoff.self_invoke` gets a behavioural check at the skill's first step, rather than a frontmatter flag
-- Frontmatter model-invocation flags are static, so no project could turn one off for itself
+- Frontmatter model-invocation flags are static
+    - No project could turn one off for itself
 
 ## 6. workflow.handoff: the context-pressure ladder
 
@@ -262,7 +287,8 @@ How the hook decides to speak:
 - It reads the last assistant record in the transcript and adds three usage fields: `input_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens`
 - That sum is the context the turn sent to the model
 - The hook then finds the highest rung at or below that number
-- It speaks when that rung sits above the rung it last spoke for, and it records the new rung
+- It speaks when that rung sits above the rung it last spoke for
+- It records the new rung
 - So a long session gets one nudge per rung, not one per stop
 
 ### 6.1 The default thresholds, and the gap above them
@@ -275,13 +301,16 @@ How the hook decides to speak:
 
 Three guards protect the ladder from a value that would break it.
 
-- The hook raises a `nudge_warn` below 1 to 1, because a rung of 0 would block every single turn
-- It raises `nudge_severe` to `nudge_warn` when the file states a lower one, because a severe mark below the warn mark could never fire
+- The hook raises a `nudge_warn` below 1 to 1
+    - A rung of 0 would block every single turn
+- It raises `nudge_severe` to `nudge_warn` when the file states a lower one
+    - A severe mark below the warn mark could never fire
 - It treats a `nudge_step` below 1 as an instruction to stop the ladder at its top rung
 
 What the severe wording changes:
 
-- The severe wording leans harder towards handing over, and it never halts the run
+- The severe wording leans harder towards handing over
+- It never halts the run
 - Both tiers close with the same clause
     - The agent decides for itself
     - It asks the user only when it genuinely cannot tell
@@ -303,7 +332,8 @@ All three of the other keys still act under an explicit ladder.
 - `nudge_step` extends the ladder past the last listed rung, exactly as it does by default
 - `nudge_severe` places no rung any more, and only picks the wording
     - A nudge reads as severe once the rung that fired sits at or above it
-- `nudge_warn` places no rung either, and it still moves that wording threshold
+- `nudge_warn` places no rung either
+- It still moves that wording threshold
 - The hook raises `nudge_severe` to meet a higher `nudge_warn` before it builds the ladder
 
 ### 6.3 What a percentage is a percentage of
@@ -325,7 +355,8 @@ Three rules decide the window, in order.
 | anything else, including the 5.x families and a record with no model id at all | 1,000,000 |
 
 - The `[1m]` marker outranks the second rule
-- A million-token model says so in its own id, so `claude-sonnet-4-5[1m]` resolves to 1,000,000 rather than 200,000
+- A million-token model says so in its own id
+    - `claude-sonnet-4-5[1m]` resolves to 1,000,000 rather than 200,000
 
 ### 6.4 Why only the session's own stop
 
@@ -335,8 +366,10 @@ Three rules decide the window, in order.
     - A `Stop` event fires when the session's own turn finishes
     - `SessionStart` fires when a session opens
 - A `SubagentStop` payload, should one ever arrive, exits silently and creates no state
-- Neither a subagent nor an in-process teammate can hand the user's work over, so a nudge there would only spend a turn
-- The measurement follows the same rule, so the hook skips every transcript record marked `isSidechain`
+- Neither a subagent nor an in-process teammate can hand the user's work over
+    - A nudge there would only spend a turn
+- The measurement follows the same rule
+    - The hook skips every transcript record marked `isSidechain`
     - A subagent's tokens are not this session's context
 
 ### 6.5 The ladder is per session, and a compaction resets it
@@ -349,17 +382,21 @@ Three rules decide the window, in order.
 - The `.quiet` file is a marker
     - The `handoff` and `compact-and-continue` skills leave it behind when they finish
     - The hook stays silent for the rest of the session while it exists
-- A compaction deletes both files, so the ladder starts again at its first rung
+- A compaction deletes both files
+    - The ladder starts again at its first rung
     - A compaction throws the session's context away and rebuilds it much smaller
     - The recorded rung then describes context that no longer exists
     - The quiet marker records a handover the fresh context knows nothing about
 
 Two limits are worth knowing.
 
-- The hook reads these five keys with its own small YAML parser, because pyyaml may not exist on the machine
+- The hook reads these five keys with its own small YAML parser
+    - pyyaml may not exist on the machine
     - That parser hands each value to Python's `int()` and accepts whatever `int()` accepts
-    - A `_` digit separator works, so `200_000` reads as 200,000
-    - Exponent and float notation do not, so `2e5` and `2.0` fall back to the default
+    - A `_` digit separator works
+        - `200_000` reads as 200,000
+    - Exponent and float notation do not
+        - `2e5` and `2.0` fall back to the default
 - The hook opens `spechub/project.yaml` relative to the working directory
     - A session running outside the project root therefore gets the defaults, whatever the file says
 
@@ -381,12 +418,14 @@ Two limits are worth knowing.
 | `venv.activate` | a shell command, or `null` | `null` for Node, `source .venv/bin/activate` for Python | every agent prefixes each command with it when the file states one |
 
 - One rule places the format step under both TDD settings
-    - It runs immediately before the task-checker, so under relaxed TDD it falls after the test-writer and formats the new tests too
+    - It runs immediately before the task-checker
+        - Under relaxed TDD it falls after the test-writer and formats the new tests too
 - A non-zero exit from `commands.format` gets reported, and never counts as a failed implementation
     - Formatting is not correctness
     - The task-checker runs afterwards, and its own gate decides whether the work passes
 - `spechub config show` lists a `commands` entry only when its value is a non-empty string
-    - A `null`, a number or a nested block does not name a command anyone could run, so the listing leaves it out
+    - A `null`, a number or a nested block does not name a command anyone could run
+        - The listing leaves it out
 
 ## 8. frontend
 
@@ -427,28 +466,33 @@ The two defaults come from two different browsers.
 
 The port default applies wherever the CLI needs a number.
 
-- `spechub config check` holds a project that states no `cdp_port` to the default its mode implies, and it fails when `agent-browser.json` names a different port
+- `spechub config check` holds a project that states no `cdp_port` to the default its mode implies
+- It fails when `agent-browser.json` names a different port
 - `spechub config show` behaves the other way, printing only what the project states
     - "What did the project say" and "which port do we dial" are different questions
 
 Only the literal `none` gives `frontend.browser.fallback` any effect.
 
 - Every other value, `headless` included, leaves the host's own order alone: remote first, then headless, then local
-- A project that wanted a particular mode would have named it as its `mode`, so a second mode name here changes nothing
+- A project that wanted a particular mode would have named it as its `mode`
+    - A second mode name here changes nothing
 - The reader ignores any word other than `none`, and `spechub config set` still holds the key to the four names above
-    - A typo would read as a fallback the project never asked for, so the command refuses it rather than storing it
+    - A typo would read as a fallback the project never asked for
+        - The command refuses it rather than storing it
 
 ## 10. What is not a project.yaml key
 
 *Two sets of settings look like they belong here. Neither one does.*
 
-- The `outputStyle` setting is not a `project.yaml` key, because Claude Code owns it
+- The `outputStyle` setting is not a `project.yaml` key
+    - Claude Code owns it
     - It lives in three settings files
     - `.claude/settings.local.json` wins over `.claude/settings.json`, which in turn wins over `~/.claude/settings.json`
     - `spechub config check` reads all three and reports which file selects which style
     - No SpecHub command writes it, and `spechub config set` refuses it as a key neither schema knows
     - `/spechub:setup` offers to write it for you, and asks first
-- The `host.*` keys are not `project.yaml` keys either, because they describe the machine rather than the project
+- The `host.*` keys are not `project.yaml` keys either
+    - They describe the machine rather than the project
     - The same repository opens on several machines with different setups
     - They live in the global config at `~/.config/spechub/config.json`
     - `spechub config set` is what writes them

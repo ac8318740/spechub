@@ -2,12 +2,12 @@
 
 *Every request ends the same way, with your specs updated from the diff. What changes is how many questions you settle first.*
 
-SpecHub routes a request down one of three paths, and every path ends at a commit that updates your specs.
+SpecHub routes a request down one of three paths. Every path ends at a commit that updates your specs.
 
 - **The path depends on what is in your way**: nothing, a bug, or an unanswered question
-- **A clear request goes straight to the four TDD agents**, covered in section 4
-- **A bug goes to root-cause analysis first**, covered in section 2
-- **A request with open questions becomes a to-do graph** you work through, covered in section 1
+- **A clear request goes straight to the four TDD agents** (see section 4)
+- **A bug goes to root-cause analysis first** (see section 2)
+- **A request with open questions becomes a to-do graph** you work through (see section 1)
 - **The rest of this document** is the detail behind one box of the diagram below
 
 ```mermaid
@@ -36,11 +36,11 @@ flowchart TD
 | Archive               | section 6 |
 | Living specs          | section 7 |
 
-The request box is a terminal, not a step. Section 5 covers two boxes because one command does both. Section 8 describes this document, so no box holds it.
+The request box is a terminal, not a step. Section 5 covers two boxes because one command does both. Section 8 describes this document. No box holds it.
 
 ## 1. The map, meaning the to-do graph
 
-*One node primitive replaces the fixed proposal, design and tasks ladder that earlier versions used. Nothing stores the map, because it is queries over the nodes.*
+*One kind of record replaces the fixed proposal, design and tasks pipeline earlier versions used. Nothing stores the map itself. It is queries over the nodes.*
 
 - **A map** is a set of small records called nodes
 - **A node** is one question to settle or one piece of work to do
@@ -48,8 +48,9 @@ The request box is a terminal, not a step. Section 5 covers two boxes because on
     - It charts a map when none exists, opening with a grill, a round of questions that fixes the destination and surfaces the fog
     - The destination is what finished looks like
     - It works the frontier instead when a map exists
-- SpecHub never sorts requests into sizes, and nothing picks a different process for a big one
-    - There is one path, and only the node count varies with the fog
+- SpecHub never sorts requests into sizes
+    - Nothing picks a different process for a big one
+    - There is one path, and only the node count changes
 
 A node carries one of five statuses.
 
@@ -61,17 +62,17 @@ A node carries one of five statuses.
 | `resolved` | settled |
 | `out-of-scope` | deliberately dropped |
 
-A node carries a `mode` too, and two link types connect the nodes.
+A node carries a `mode` too. Two link types connect the nodes.
 
 - **`mode`** says who settles the node: `hitl` for a human, `afk` for an agent alone
 - **`answers`** names the one node whose answer raised this one
-    - The parent links form a tree, so they give reading order
+    - The parent links form a tree, which gives you a reading order
     - An agent packages a handoff by walking that tree
 - **`blocked-by`** names any number of nodes that must resolve before this one starts
     - The blocking edges form a directed acyclic graph, meaning the edges never loop back
     - These edges tell you what you can work right now
 
-SpecHub derives depth from `answers`, and nobody declares it. The map itself is five queries.
+SpecHub works depth out from `answers`. Nobody declares it. The map itself is five queries.
 
 | The question | The query |
 | --- | --- |
@@ -81,32 +82,40 @@ SpecHub derives depth from `answers`, and nobody declares it. The map itself is 
 | What is not yet specified? | the `fog` nodes |
 | What did we drop? | the `out-of-scope` nodes |
 
-Nodes live in a tracker, the storage layer, which is swappable.
+Nodes live in a tracker. That is the storage layer, and you can swap it.
 
 - A tracker provides four operations and nothing more: create, read, update, list
-- GitHub issues are the default, because a sub-issue records what raised a node and a dependency records what must finish first
+- GitHub issues are the default
+    - A sub-issue records what raised a node
+    - A dependency records what must finish first
 - Files under `spechub/maps/<name>/` are the fallback
-- Frontier, claim and resolve build on those four operations, so no tracker implements them
+- Frontier, claim and resolve build on those four operations
+    - No tracker implements them itself
 
 **Build no more process than the job needs.**
 
 - You create a map only when the fog will outlive the session
-- You grill one question in conversation, and it leaves an architecture decision record (ADR), not a map
+- You settle one question in conversation
+    - That leaves an architecture decision record (ADR), not a map
 
 ## 2. Implement
 
-*A unit of work carries its own size. One node is a quick change, forty is a long effort, and nothing declares which.*
+*A unit of work carries its own size. One node is a quick change. Forty is a long effort. Nothing declares which.*
 
 - `/spechub:implement` claims `afk` work nodes from the frontier when a map exists
     - It treats the request itself as the work item when none does
     - Either way, parallel explorer subagents run over the relevant code before anyone writes anything
-- The command resolves paths at claim time, because a node describes behaviour and can sit on the frontier for weeks
+- The command resolves paths at claim time
+    - A node describes behaviour
+    - It can sit unstarted for weeks
 - The test-driven development (TDD) pipeline of section 4 runs to completion inside each claim
 - A node only ever moves `open -> claimed -> resolved`
-    - The agent releases the claim when work stalls, and the node is plainly open again
-- Progress is a frontier query, not a checkbox file, so resuming never means re-reading an effort end to end
+    - The agent releases the claim when work stalls
+    - The node is plainly open again
+- Progress is a query, not a checkbox file
+    - Resuming never means re-reading an effort end to end
 
-`/spechub:quick-fix` stays separate, because broken is a different axis from foggy.
+`/spechub:quick-fix` stays separate. A broken thing is a different problem from an unanswered question.
 
 - A bug has a root cause to find, not a decision to settle
 - `/spechub:quick-fix` therefore never creates a node
@@ -115,19 +124,23 @@ Nodes live in a tracker, the storage layer, which is swappable.
 
 *Three skills Claude reaches for itself, without you typing a command, carry the interviewing, the recording and the writing.*
 
-- **`grilling`** is the interview, and it works through your decisions one round at a time
+- **`grilling`** is the interview
+    - It works through your decisions one round at a time
     - A round asks the whole frontier, every question whose prerequisites have resolved, numbered, each with a recommended answer
     - It then recomputes the frontier and repeats
-    - Facts are the agent's job, never the user's, so it sends a question an environment fact would answer to explorer subagents
+    - Facts are the agent's job, never yours
+    - It sends any question a look at the environment would answer to a subagent instead
     - Presentation follows `workflow.grilling.questions`, the host's question tool by default
     - It falls back to inline prose past 4 questions, or for a question with no discrete options
-    - There is no question cap, because the frontier bounds itself
+    - There is no question cap
+    - The set of answerable questions bounds itself
 - **`record-context`** fires when a decision lands
     - It writes an ADR under `docs/adr/` only when the decision is hard to reverse *and* surprising *and* a real trade-off
     - It writes a glossary term when a term got settled, in root `CONTEXT.md` for cross-domain vocabulary
     - It writes a domain term in `spechub/specs/<domain>/CONTEXT.md` instead
     - It can write both, or neither
-    - SpecHub generates the ADR index from the files, and nobody hand-edits it
+    - SpecHub generates the ADR index from the files
+    - Nobody hand-edits it
 - **`writing`** holds the standard every durable artifact follows: node answers, ADRs, glossary entries, specs and handoffs
     - The words to avoid live in `skills/writing/vocabulary.md`
 
@@ -153,8 +166,9 @@ flowchart LR
 
 The separation is the mechanism, not a formality.
 
-- **test-writer** sees requirements and acceptance criteria, and never the implementation plan
-    - Tests encode what should happen, so the implementation cannot shape them
+- **test-writer** sees requirements and acceptance criteria, never the implementation plan
+    - Tests then encode what should happen
+    - The implementation cannot shape them
 - **task-executor** receives the failing tests and cannot modify anything in the test directory
     - It has to make the specification pass instead of editing it
 - **task-checker** is a binary gate
@@ -162,7 +176,8 @@ The separation is the mechanism, not a formality.
     - It checks the test count against `.test-baseline` and audits mocks for circular assertions
     - It confirms the executor left the tests alone
 - **frontend-verifier** drives a real browser over the Chrome DevTools Protocol (CDP)
-    - It takes before and after screenshots, and reports on the evidence
+    - It takes before and after screenshots
+    - It reports on that evidence
 
 Which phases run, and in what order:
 
@@ -172,7 +187,8 @@ Which phases run, and in what order:
     - The frontend-verifier runs under three conditions: `spechub/project.yaml` configures a frontend, frontend files changed, and verification is on
 - `workflow.tdd.strict: false` reverses phase 1 and phase 2
     - The order becomes task-executor, then test-writer, then task-checker
-    - It drops no phase, and all three agents run
+    - It drops no phase
+    - All three agents run
     - Relaxed TDD means nobody writes the tests first, never that the work goes unverified
 
 Relaxed weakens one wall, the one this section calls the important one.
@@ -180,21 +196,24 @@ Relaxed weakens one wall, the one this section calls the important one.
 - Under `false` the test-writer works beside an implementation it must not read, instead of one that does not exist yet
 - Its independence then rests on its instructions rather than on context isolation
 - That is the cost of relaxed TDD
-- The checker pays for it too, because no run can show the new tests failing without the implementation
+- The checker pays for it too
+    - No run can show the new tests failing without the implementation
     - It holds them to existing and passing instead
 
 The format step sits immediately before phase 3.
 
 - The pipeline runs `commands.format` over the files the work touched
-- Under relaxed that puts the format step after the test-writer, so the new tests get formatted too
+- Under relaxed that puts the format step after the test-writer
+    - The new tests get formatted too
 - A project whose `commands.format` is `null` gets no format step
-- A non-zero exit gets reported, and never counts as a failed implementation
+- A non-zero exit gets reported
+    - It never counts as a failed implementation
 
 ## 5. Commit and sync specs
 
-*Spec sync runs on every commit on every path. It reads the diff, so specs describe what you built rather than what you planned.*
+*Spec sync runs on every commit on every path. It reads the diff. Your specs therefore describe what you built, not what you planned.*
 
-`/spechub:commit` groups changes into MECE commits, mutually exclusive and collectively exhaustive, so no change appears twice and no change goes missing. Before writing them it does five things.
+`/spechub:commit` groups changes into MECE commits. MECE means mutually exclusive and collectively exhaustive: no change appears twice, and no change goes missing. Before writing them it does five things.
 
 1. Reads `spechub/domain-map.yaml` to map each changed file to a domain.
 2. Works out what the diff adds, modifies or removes, for each affected domain with a `spec.md`.
@@ -206,7 +225,8 @@ On the glossary check:
 
 - It says so when the diff renames or deletes an identifier matching a glossary term
 - It never edits the glossary
-- For specs the code wins, and for the glossary the human wins
+- For specs the code wins
+- For the glossary the human wins
 
 Four cases stop sync.
 
@@ -229,20 +249,26 @@ Four cases stop sync.
 - It then disposes of the nodes
     - It deletes them by default
     - It moves them to `spechub/archive/<date>-<name>/nodes/` when `workflow.maps.persist` is `true`
-    - Keeping nodes is off by default, because a kept map is a second copy of every decision and the two drift
-    - On the GitHub tracker there is nothing to dispose, because a closed issue is already the archive
+    - Keeping nodes is off by default
+    - A kept map is a second copy of every decision
+    - The two drift apart
+    - On the GitHub tracker there is nothing to dispose
+    - A closed issue is already the archive
 - Archive runs either way
     - The user types `/spechub:archive`
-    - `/spechub:map` hands off to it once the frontier empties, and the disposal step then asks first
-- Legacy `spechub/changes/` directories from the pre-map workflow still archive the old way, so an upgrade never strands work
+    - `/spechub:map` hands off to it once every node resolves
+    - The disposal step then asks you first
+- Legacy `spechub/changes/` directories from the pre-map workflow still archive the old way
+    - An upgrade therefore never strands work
 
 ## 7. Living specs
 
-*The durable output. Maps are scaffolding, and `spechub/specs/` is what the project keeps.*
+*What the project keeps. Maps are scaffolding. `spechub/specs/` outlives them.*
 
 - Specs live at `spechub/specs/<domain>/spec.md`, organised by the domains in `domain-map.yaml`
 - Each spec states numbered functional requirements (`FR-NNN`) in Given, When, Then form
-- They are cumulative, and they describe only what the code already does
+- They are cumulative
+- They describe only what the code already does
 - A roadmap item in a living spec is a bug in the spec
 
 Two rules keep them honest.
@@ -255,11 +281,11 @@ Two rules keep them honest.
     - Any agent that finds a spec contradicting the code corrects the spec immediately
     - It rewrites wrong behaviour, appends missing requirements, and deletes stale references
 
-`/spechub:bootstrap` generates the first set from an existing codebase, so a project does not start from an empty directory.
+`/spechub:bootstrap` generates the first set from an existing codebase. A project never starts from an empty directory.
 
 ## 8. Where the design record lives
 
-*This section describes the document, not the system, so no diagram box holds it.*
+*This section describes the document, not the system. No diagram box holds it.*
 
 - The reasoning behind this design lives in the issues labelled `wayfinder` on this repository
 - That covers why one node type, why four tracker operations, and why no tiers

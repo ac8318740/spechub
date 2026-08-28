@@ -1,12 +1,14 @@
 # Dev setups
 
-*One file per machine records what that machine has installed, so a skill never guesses.*
+*One file per machine records what that machine has installed. A skill never has to guess.*
 
-You run SpecHub on more than one machine, and those machines are not the same.
+You run SpecHub on more than one machine. Those machines are not the same.
 
-- **One has herdr installed, another has Orca, and a third has neither**
-- **One can drive a real Chrome window, and another has no display at all**
-- **A skill cannot guess which**, so each machine answers eight questions once, with `/spechub:host`
+- **One has herdr installed, another has Orca, a third has neither**
+- **One can drive a real Chrome window**
+- **Another has no display at all**
+- **A skill cannot guess which**
+    - Each machine answers eight questions once, with `/spechub:host`
 - **The answers live in `~/.config/spechub/config.json`** as `host.*` keys
 - **The worktree skills and the frontend verifier read them** instead of probing
 
@@ -53,23 +55,29 @@ Where the file lives, and how the CLI reads a value:
     - It moves under `$XDG_CONFIG_HOME` when you set that variable
     - Run `~/.claude/spechub/bin/spechub config path` for the real location
 - `spechub config show` prints every axis with the project's settings
-- The CLI matches an enum value case-sensitively, so `stagewise` works and `Stagewise` does not
+- The CLI matches an enum value case-sensitively
+    - `stagewise` works, and `Stagewise` does not
 - The CLI matches a boolean loosely: `true`, `yes` and `on` all mean true, and `false`, `no` and `off` all mean false
 
 ## 2. Orchestrator axes
 
-*Each orchestrator is its own yes-or-no. Declared means installed, and the environment says which one hosts this session.*
+*Each orchestrator is its own yes-or-no. Declared means installed. The environment says which one hosts this session.*
 
-- A machine can have both installed, one, or neither, so an answer about herdr says nothing about Orca
-- Answering no to both is a real answer, and the worktree skills then use plain git under `.claude/worktrees`
+- A machine can have both installed, one, or neither
+    - An answer about herdr says nothing about Orca
+- Answering no to both is a real answer
+    - The worktree skills then use plain git under `.claude/worktrees`
 - `skills/new-worktree/detect-orchestrator.sh` prints six lines: `declared_herdr`, `declared_orca`, `detected`, `active`, `owner` and `warning`
-    - `detected` reads the markers an orchestrator sets in its terminals, and `active` always equals it
-    - herdr sets `HERDR_ENV` and `HERDR_PANE_ID`, and Orca sets `ORCA_PANE_KEY`
+    - `detected` reads the markers an orchestrator sets in its terminals
+    - `active` always equals it
+    - herdr sets `HERDR_ENV` and `HERDR_PANE_ID`
+    - orca sets `ORCA_PANE_KEY`
 - `owner` comes from the checkout's path root, not from the session
-    - Orca owns `~/orca/workspaces/<repo>/`
+    - orca owns `~/orca/workspaces/<repo>/`
     - herdr owns everything under its worktree root, `~/.herdr/worktrees` by default
     - Any other path is plain git
-    - The session's host creates a checkout, and the checkout's owner removes it
+    - The session's host creates a checkout
+    - The checkout's owner removes it
 
 **herdr.**
 
@@ -79,25 +87,32 @@ Where the file lives, and how the CLI reads a value:
 
 **Orca.**
 
-- The Linux executable is `orca-ide`, and some installs put it on `PATH` as plain `orca`
-- Orca runs as a desktop application, or as a headless `orca serve` that the user views through a paired client
+- The Linux executable is `orca-ide`
+    - Some installs put it on `PATH` as plain `orca`
+- orca runs as a desktop application, or as a headless `orca serve` that the user views through a paired client
 - `host.orca.topology` records which one
 - Five limits matter
-    - No command moves a running terminal into a worktree, so the session changes directory instead
-    - `worktree rm` always deletes the branch, and it removes a checkout with live agents in it
+    - No command moves a running terminal into a worktree
+        - The session changes directory instead
+    - `worktree rm` always deletes the branch, and removes a checkout with live agents in it
         - `teardown-worktree` therefore reads `agents[]` and `liveTerminalCount` from `worktree ps --json` first
-    - Nobody has tested Claude Code Agent Teams under `orca serve`, and upstream issue 11739 reports that the tmux-compatibility layer can break them
-    - Nobody has tested Design Mode either, and it needs the browser pane on the developer's own machine
-    - The Orca web client cannot create terminals behind a reverse proxy, so pair a desktop or phone client instead, and upstream issue 9047 tracks it
+    - Nobody has tested Claude Code Agent Teams under `orca serve`
+        - Upstream issue 11739 reports that the tmux-compatibility layer can break them
+    - Nobody has tested Design Mode either
+        - It needs the browser pane on the developer's own machine
+    - The Orca web client cannot create terminals behind a reverse proxy
+        - Pair a desktop or phone client instead
+        - Upstream issue 9047 tracks it
 
 Neither tool sees the other's sessions.
 
-- Orca and a paired phone list herdr checkouts only after you turn on one switch per repository
-- Orca's desktop application holds that switch, named "show in worktree list", and no command sets it
+- orca and a paired phone list herdr checkouts only after you turn on one switch per repository
+- orca's desktop application holds that switch, named "show in worktree list"
+- No command sets it
 
 ## 3. Browser axes
 
-*The three modes are not alternatives. A machine can offer any combination, and each one needs something different.*
+*The three modes are not alternatives. A machine can offer any combination. Each one needs something different.*
 
 - **remote** drives a real browser on the developer's own machine, over the Playwriter bridge
     - Something must answer HTTP on the CDP port the project resolves to
@@ -110,7 +125,8 @@ Neither tool sees the other's sessions.
 
 How the two sides meet:
 
-- The host declares what works, and the project states a preference in `frontend.browser.mode`
+- The host declares what works
+- The project states a preference in `frontend.browser.mode`
 - The first mode the host does declare stands in, when the host does not declare that mode
 - The order is remote, headless, local
 - Setting `frontend.browser.fallback` to `none` refuses any stand-in and fails instead
@@ -119,7 +135,7 @@ How the two sides meet:
 
 ## 4. Describe this machine once
 
-*Eight steps, and each install plans before it touches anything.*
+*Eight steps. Each install plans before it touches anything.*
 
 1. Run `/spechub:host`. It detects what is here, then asks about every axis.
 2. Detection never decides a required axis. It only pre-fills the recommended answer.

@@ -25,10 +25,30 @@ An instruction is a numbered step, a procedure line, or a handoff next action.
 - Write: Run the tests. Stage the spec files.
 - Not: Run the tests and stage the spec files, then check the baseline count.
 
-### 3. Give each sentence one idea
+### 3. Give each sentence one idea, and never write a compound sentence without a reason
+
+A compound sentence is two clauses joined by a comma, by `and`, `so`, `but`, `which` or `where`. Use one only when the second clause changes what the first one means. Everywhere else, split it or cut it.
 
 - Write: A map holds question nodes and work nodes. The frontier is the set ready to work now.
 - Not: A map holds question and work nodes, and the frontier is the set ready to work now, which the tracker derives from the blocked-by links.
+
+**Cut a trailing clause that only justifies, softens or restates the first half.** This is the most common failure in this repository. It reads as padding, and the sentence is stronger without it.
+
+- Write: Claude starts building before the requirements are clear.
+- Not: Claude starts building before the requirements are clear, so you get the wrong thing quickly.
+
+- Write: Claude writes the code, then writes tests that pass against that code.
+- Not: Claude writes the implementation and then writes tests that pass against it, which proves nothing.
+
+**Never bolt a cross-reference onto a sentence with a comma.** Put it in parentheses.
+
+- Write: You get three commands (see section 1).
+- Not: You get three commands, and section 1 says which one to use.
+- Not: Install it with two commands, covered in section 2.
+
+**Keep a second clause only when it carries a fact the first clause needs.**
+
+- Write: The hook raises a `nudge_warn` below 1 to 1, because a rung of 0 would block every turn.
 
 ### 4. Break a paragraph at six sentences (ASD-STE100)
 
@@ -72,7 +92,13 @@ An instruction is a numbered step, a procedure line, or a handoff next action.
 - Write: Use the bundled CLI. Many nodes stay in fog.
 - Not: Utilize the bundled CLI. Numerous nodes remain in fog.
 
-A metaphor asks the reader to decode it, and a heading is the worst place to make them.
+A metaphor asks the reader to decode it. A heading is the worst place to make them do that.
+
+Pick the phrasing a reader understands on the first pass, every time.
+
+- Write: anything you cannot yet articulate clearly
+- Not: something nobody can state precisely yet
+
 
 - Write: `## Three commands, and which one to use`
 - Not: `## No path selection: the fog picks the size`

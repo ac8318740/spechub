@@ -6,8 +6,10 @@ SpecHub ships as a Claude Code plugin, so an installed copy runs files straight 
 
 - **Two build steps write files this repository commits**: `cli/dist` and `agents/codex`
 - **Regenerate whichever your change invalidates**, or CI fails on the stale copy
-- **Bump the version in `.claude-plugin/plugin.json`**, because the cache only re-pulls when the version changes
-- **CI checks both**, so a red run tells you which one you missed
+- **Bump the version in `.claude-plugin/plugin.json`**
+    - The cache only re-pulls when the version changes
+- **CI checks both**
+    - A red run tells you which one you missed
 
 ```mermaid
 flowchart TD
@@ -57,9 +59,11 @@ Two rules govern it.
 - **Every helper script carries the `spechub-*` prefix and lives in a heredoc inside `setup.sh`**, and never as a separate file
     - One script to install means one file to keep idempotent
     - Editing a helper means editing the heredoc
-    - `uninstall` removes them by that prefix, so a helper named anything else leaks
+    - `uninstall` removes them by that prefix
+        - A helper named anything else leaks
 - **Every edit to a user's config sits between the managed markers**, `# >>> spechub terminal-workspace >>>` and `# <<< ... <<<`
-    - Re-applying replaces only those regions, so hand-written config around them survives
+    - Re-applying replaces only those regions
+        - Hand-written config around them survives
     - Never write outside the markers, and never assume the file is absent
 
 ### 2.1. Merging into a user's TOML config
@@ -97,7 +101,8 @@ How `setup.sh` decides:
 - It asks `tomllib` which namespaces the user has claimed
 - It puts the question in the exact form the block would write it
 - It appends that header to the config outside the markers, then sees whether the whole thing still parses
-- Whatever the parser rejects is a namespace the user already claimed, so `setup.sh` leaves it alone
+- Whatever the parser rejects is a namespace the user already claimed
+    - `setup.sh` leaves it alone
 
 A dict lookup would not do.
 
@@ -115,7 +120,8 @@ The fallback path, for a machine without Python 3.11:
 - That mostly concedes namespaces which would have been safe to write
     - Each of those concessions costs one setting, where guessing the other way costs the file
 - The fallback errs the other way in one place
-    - Text cannot see that a config never parsed, so the fallback writes all four into a file the parsed path would have conceded whole
+    - Text cannot see that a config never parsed
+        - The fallback writes all four into a file the parsed path would have conceded whole
 - `setup.sh` leaves whatever it concedes to the user and names it in a `say` line
     - A config that parses with a setting missing beats one yazi throws out
 
@@ -209,7 +215,8 @@ fi
 
 - Each block fires only when its own source is part of the staged diff, then stages what it regenerates
 - The commit aborts if either command fails
-- The repository commits two sets of generated files, so the hook has two blocks
+- The repository commits two sets of generated files
+    - The hook has two blocks
     - `cli/dist` comes from esbuild
     - `agents/codex/*.toml` comes from `scripts/gen-codex-agents.mjs`, which reads the markdown in `agents/`
     - Editing an agent's markdown and committing without the second block leaves a red run
@@ -247,21 +254,25 @@ node scripts/gen-codex-agents.mjs
 
 Why the hook installs them:
 
-- Codex cannot ship agent definitions inside a plugin, so the SessionStart hook installs them into `~/.codex/agents/`
+- Codex cannot ship agent definitions inside a plugin
+    - The SessionStart hook installs them into `~/.codex/agents/`
 - It re-reconciles on every session
-- It only overwrites a file carrying the generated marker, so it leaves alone an agent of yours that shares a name
+- It only overwrites a file carrying the generated marker
+    - It leaves alone an agent of yours that shares a name
 - It does nothing at all on a machine with no `~/.codex`
 
 The generator emits only the three keys Codex applies: `name`, `description` and `developer_instructions`. It deliberately omits others.
 
 - `model` – ours says `opus`, a Claude alias that means nothing to Codex
-    - Omitting it makes a subagent inherit the parent's model, which is what we want anyway
-- `sandbox_mode` and `mcp_servers` – Codex parses then ignores both, because a child agent may never escalate past its parent
+    - Omitting it makes a subagent inherit the parent's model, which is what we want
+- `sandbox_mode` and `mcp_servers` – Codex parses then ignores both
+    - A child agent may never escalate past its parent
     - Emitting them would imply a guarantee that does not hold
 
 One unrecognised key discards the whole file.
 
-- Codex parses an agent file with `deny_unknown_fields`, and it logs the rejection somewhere nobody reads
+- Codex parses an agent file with `deny_unknown_fields`
+- It logs the rejection somewhere nobody reads
 - CI parses every generated file and fails on any key outside the allowed three
 
 Keep the markdown harness-neutral.
@@ -285,7 +296,8 @@ Keep the markdown harness-neutral.
 - It fails when the change touches a shipped path without raising the version in `.claude-plugin/plugin.json`
 - A **shipped path** is a file an installed copy of the plugin loads or runs
     - A change to one must roll out to every machine
-- A merge to `main` that leaves the version alone is invisible to every installed copy, and that is what the gate exists to prevent
+- A merge to `main` that leaves the version alone is invisible to every installed copy
+- That is what the gate exists to prevent
 
 ### 6.1. Inert paths
 
@@ -309,7 +321,8 @@ spechub/**
 
 - The `INERT_PATHS` array at the top of `scripts/version-gate.sh` holds a second copy of this list
 - Change one and change the other
-- The gate treats a new top-level path as shipped, because it works from a deny-list
+- The gate treats a new top-level path as shipped
+    - It works from a deny-list
 
 ### 6.2. Picking the level
 
@@ -325,7 +338,8 @@ spechub/**
 - This is for a change that touches a shipped path but genuinely should not roll out
     - Reformatting a file with no behavioural effect
     - A fix that has to wait for a later release
-- A version that goes *down* fails even with the label, because an installed copy never downgrades
+- A version that goes *down* fails even with the label
+    - An installed copy never downgrades
 
 ### 6.4. Before you open the pull request
 
@@ -346,7 +360,8 @@ spechub/**
 
 Installing it is not a step.
 
-- The plugin ships `cli/dist/index.js` in the repository, so it arrives already built when Claude Code copies the plugin into its cache
+- The plugin ships `cli/dist/index.js` in the repository
+    - It arrives already built when Claude Code copies the plugin into its cache
 - The SessionStart hook then symlinks it into place
 - There is no npm install, no `node_modules` in the cache, and no network call
 - The only requirement is Node 20 on PATH
@@ -354,8 +369,10 @@ Installing it is not a step.
 Publishing to npm as well would buy a second door to the same code and cost three things.
 
 - **Version skew, which is currently impossible** – skills and CLI ship in one tarball at one version
-    - A globally installed CLI pins the version you installed, so a plugin release with a new CLI flag can break a skill
-    - Preventing that needs a version check at session start, which is more machinery than the symlink it would replace
+    - A globally installed CLI pins the version you installed
+        - A plugin release with a new CLI flag can break a skill
+    - Preventing that needs a version check at session start
+    - That is more machinery than the symlink it would replace
 - **A network dependency on a path that has none** – `npm install -g` fails on no network, a locked-down prefix, or a proxy
     - The bundled CLI works offline
 - **PATH propagation** – a non-interactive agent subshell does not always inherit an npm global bin, notably under nvm
@@ -363,7 +380,8 @@ Publishing to npm as well would buy a second door to the same code and cost thre
 Using SpecHub from another agent harness does not need npm either.
 
 - On any machine with the plugin, the hook creates `~/.local/bin/spechub`, which has no Claude Code dependency
-- It works as a typed command whenever `~/.local/bin` is on PATH, and the hook warns when it is not
+- It works as a typed command whenever `~/.local/bin` is on PATH
+- The hook warns when it is not
 - What another harness lacks is the orchestrator instructions, and not the binary
 
 Revisit this only if a machine needs the CLI with **no plugin installed at all**.
@@ -371,16 +389,19 @@ Revisit this only if a machine needs the CLI with **no plugin installed at all**
 - That means CI, or a device that runs an agent but not Claude Code
 - We keep the package publishable for that day
     - `npm pack --dry-run` from `cli/` shows the file list, and `prepublishOnly` runs the build
-    - The bare `spechub` name on npm belongs to an unrelated project, so the package would be `spechub-cli` with `spechub` as its binary
+    - The bare `spechub` name on npm belongs to an unrelated project
+        - The package would be `spechub-cli` with `spechub` as its binary
 
 ### 6.7. Who owns `spechub` on PATH
 
 *The SessionStart hook defers, and agents are outside this entirely.*
 
-- The hook leaves an existing `spechub` on PATH alone if it is not the hook's own symlink, and it says where the winner came from
+- The hook leaves an existing `spechub` on PATH alone if it is not the hook's own symlink
+- It says where the winner came from
 - Two managers pointing one command name at different copies make a silent race, which PATH order decides
 - The hook should not be one of the racers
-- Skills and agents call `~/.claude/spechub/bin/spechub` by absolute path, which is always the plugin's own CLI regardless of PATH
+- Skills and agents call `~/.claude/spechub/bin/spechub` by absolute path
+    - That is always the plugin's own CLI, whatever PATH says
 
 ## 7. Writing standards
 
@@ -393,4 +414,5 @@ Revisit this only if a machine needs the CLI with **no plugin installed at all**
         - Markdown nests four spaces per level
 - Run `~/.claude/spechub/bin/spechub lint-prose <paths>` before you open the pull request
     - It checks sentence length, paragraph length, passive voice, the `vocabulary.md` deny lists, marks and emoji
-    - It warns and never blocks, and it does not yet check the bullet rules
+    - It warns and never blocks
+    - It does not yet check the bullet rules
