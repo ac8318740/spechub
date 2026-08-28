@@ -2,7 +2,11 @@
 
 *Six symptoms, each with a diagnostic command and a fix command. A Claude Code session reads this file and applies the fix directly.*
 
-**Claude Code instances** act on this file. The SessionStart hook maintains everything below, so almost every symptom here is that hook not having run. If you are a Claude Code session and the user reports any of these symptoms, run the diagnostic, then apply the fix.
+**Claude Code instances act on this file.** Find the symptom the user reported below, run its diagnostic, then apply its fix.
+
+- **The SessionStart hook maintains everything here**, so almost every symptom is that hook not having run
+- **Restarting Claude Code fixes most of them**, because the hook runs again
+- **Each section below is one symptom**, with the command to confirm it and the command to fix it
 
 ```mermaid
 flowchart LR

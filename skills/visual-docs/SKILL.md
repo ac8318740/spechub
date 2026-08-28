@@ -7,7 +7,11 @@ description: "Write or restructure documentation that leads with a diagram and d
 
 *A reader should see the system's shape from one diagram. They then find every detail in a section that maps to a part of it.*
 
-Most technical docs fail the same way. They explain in reading order rather than importance order, so the reader assembles the picture themselves and only knows what mattered at the end. How do you make the shape arrive first? One diagram carries it, and this skill derives the section structure from that diagram.
+This skill makes a doc lead with a diagram, then derive its sections from that diagram.
+
+- **Most technical docs explain in reading order rather than importance order**, so the reader builds the picture themselves and learns what mattered last
+- **One diagram carries the whole shape**, and every section maps to a part of it
+- **The prose rules live in the `writing` skill**, and this skill owns shape alone
 
 This skill owns document shape. Prose follows the `writing` skill.
 
@@ -15,7 +19,7 @@ This skill owns document shape. Prose follows the `writing` skill.
 flowchart TD
     A["Establish the shape<br/>(read code, not existing docs)"] --> B["Draw the lead diagram<br/>(section 4)"]
     B --> C["Derive sections from nodes<br/>(section 1)"]
-    C --> D["Write the SCQA opening<br/>(section 2.1)"]
+    C --> D["Write the opening<br/>(section 2.1)"]
     D --> E["Fill sections in bullets<br/>(sections 2.2 and 3)"]
     E --> F{"Siblings MECE?<br/>(section 2.3)"}
     F -->|no| C
@@ -26,7 +30,7 @@ flowchart TD
 | Step in the diagram      | Detail          |
 | ------------------------ | --------------- |
 | Derive sections          | section 1       |
-| SCQA, vertical, MECE     | section 2       |
+| Opening, vertical, MECE  | section 2       |
 | Bullets carry the body   | section 3       |
 | Draw and label           | section 4       |
 | Headings and duplication | section 5       |
@@ -76,21 +80,27 @@ End the lead diagram with a mapping table when the doc has more than four sectio
 
 *Answer first. Every level summarises the level below it. Siblings are the same kind of thing, and they are complete.*
 
-### 2.1. Open with SCQA
+### 2.1. Open with one sentence, then bullets
 
-*Four beats, usually four sentences, before any heading.*
+*Say what the thing is and who it is for in one sentence. Put everything else in bullets under it.*
 
-| Beat             | What it does                                     |
-| ---------------- | ------------------------------------------------ |
-| **Situation**    | the stable fact the reader already accepts       |
-| **Complication** | what changed or what breaks                      |
-| **Question**     | the question the complication raises             |
-| **Answer**       | your answer, stated flat – this is the takeaway  |
+The opening is never a paragraph. A reader meeting the doc for the first time scans it, and a four-sentence block of setup is the part they skip.
 
-- The answer goes in the opening, and never at the end
-- A reader who stops after four sentences must still leave with the conclusion
-- Compress the situation and complication ruthlessly, because one clause each is often enough
-- Never skip straight to the answer, because an answer with no complication reads as an arbitrary assertion
+- **Sentence one names the thing and what it does**, in words a developer who has never seen this repo already knows
+- **Bullets under it carry the rest**: what problem it solves, what it costs, what it does not do
+- **A bullet that needs context gets a sub-bullet**, and never a second sentence
+
+| Beat | Where it goes |
+| ---- | ------------- |
+| **What this is** | the opening sentence |
+| **What it solves** | the first bullet |
+| **What it costs, or does not do** | a later bullet |
+| **Where to go next** | the contents table, or the last bullet |
+
+Two rules keep the opening honest.
+
+- The answer goes first, and never at the end
+- A reader who stops after the opening sentence and the first bullet must still leave with the conclusion
 
 ### 2.2. The vertical rule
 
@@ -125,7 +135,7 @@ Then order the siblings deliberately, and say which order you used if it is not 
 
 Ten rules govern a bullet. Each one is a way to write.
 
-- **Bullets carry 90% or more of the body** – prose survives in the SCQA opening and in a section takeaway, and nowhere else
+- **Bullets carry 90% or more of the body** – prose survives in the opening sentence and in a section takeaway, and nowhere else
 - **One sentence per bullet** – split "X and also Y" into two siblings, or nest one under the other
 - **No bullet ends in a period**, however long it runs – a question mark or an exclamation mark is fine
 - **A sub-bullet carries what its parent cannot hold** – it argues for the parent, adds the detail the point needs, or lists the questions under it
@@ -141,7 +151,7 @@ Three shapes stay prose, because a bullet breaks them.
 
 | Shape | Why it stays prose |
 | ----- | ------------------ |
-| the SCQA opening | four beats that work only in sequence, and section 2.1 caps it at four sentences |
+| the opening sentence | one sentence naming the thing, by section 2.1 |
 | a section takeaway | one italic line under the heading, by section 2.2 |
 | a numbered procedure | a step is a step, and rule 1 of the `writing` skill caps it at 20 words |
 
@@ -210,7 +220,7 @@ flowchart LR
 1. **Establish the shape.** Read the code, config and entry points. Do not start from existing docs – they are what you are replacing, and their errors propagate
 2. **Draw the lead diagram first.** Getting it right forces the structure. If you cannot draw it, you do not yet understand the thing well enough to document it
 3. **Derive the section list from the diagram nodes.** One section per node, headings reusing node labels
-4. **Write the SCQA opening.** Do this before the body, so the body has a claim to support
+4. **Write the opening sentence.** Do this before the body, so the body has a claim to support
 5. **Fill each section.** Takeaway line first, then detail
 6. **Check MECE across siblings**, then verify every node has a section and every section has a node
 7. **Verify the diagram renders.** Mermaid fails silently in some viewers. Check that the fenced block parses, with no unescaped quote or bracket in any label

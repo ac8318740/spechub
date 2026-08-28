@@ -2,13 +2,19 @@
 
 *Every key in `spechub/project.yaml`, the values it takes, its default, and what changes when you change it.*
 
-One file holds every project-scoped setting SpecHub has: `spechub/project.yaml`. It names the commands to run, the directories to read, the workflow rules to apply, and the frontend to drive. Which key does what, and what happens when you leave one out? Every skill and every agent reads this file before it runs anything, so this document lists each key against the reader that acts on it.
+One file, `spechub/project.yaml`, holds every setting that belongs to a project.
+
+- **It names what to run**: the test, build, lint, typecheck and format commands
+- **It names where to look**: the source and test directories, and the frontend
+- **It names how strict to be**: whether tests come first, and whether Claude may write code itself
+- **Every skill and every agent reads it** before it runs anything
+- **A key you leave out takes the default** this document gives it
 
 Three terms first.
 
 - **A key** is one dotted path into the file, such as `workflow.tdd.strict`
 - **A default** is what SpecHub does when the file states no value
-- **A rung** is one token count at which the context-pressure hook speaks
+- **A rung** is one token count at which the context-pressure hook speaks up, telling the session to consider handing over
 
 ```mermaid
 flowchart TD
@@ -203,7 +209,7 @@ What the checker gates on moves with the key.
     - The checker then holds the new tests to existing and passing
     - It holds the full suite to passing, and the test count to not dropping
 
-### 3.2. How grilling asks
+### 3.2. How Claude asks you a question
 
 | Key | Values | Default | What changes |
 | --- | --- | --- | --- |
@@ -259,7 +265,7 @@ How the hook decides to speak:
 - It speaks when that rung sits above the rung it last spoke for, and it records the new rung
 - So a long session gets one nudge per rung, not one per stop
 
-### 6.1 The default ladder: two rungs and a stride
+### 6.1 The default thresholds, and the gap above them
 
 | Key | Values | Default | What changes |
 | --- | --- | --- | --- |

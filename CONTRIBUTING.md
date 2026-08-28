@@ -1,8 +1,13 @@
 # Contributing to SpecHub
 
-*Two sets of generated files and one version gate decide whether your pull request goes green.*
+*Two sets of generated files and one version check decide whether your pull request goes green.*
 
-SpecHub ships as a Claude Code plugin, so an installed copy loads files straight out of a plugin cache. Two build steps write files the repository commits, and the cache only re-pulls when the version changes. What does that ask of a contributor? Regenerate what your change invalidates, bump the version, and let CI check both.
+SpecHub ships as a Claude Code plugin, so an installed copy runs files straight out of a plugin cache.
+
+- **Two build steps write files this repository commits**: `cli/dist` and `agents/codex`
+- **Regenerate whichever your change invalidates**, or CI fails on the stale copy
+- **Bump the version in `.claude-plugin/plugin.json`**, because the cache only re-pulls when the version changes
+- **CI checks both**, so a red run tells you which one you missed
 
 ```mermaid
 flowchart TD

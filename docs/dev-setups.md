@@ -1,8 +1,14 @@
 # Dev setups
 
-*One file per machine declares what that machine can do, and the worktree skills and the frontend verifier read the answers from it.*
+*One file per machine records what that machine has installed, so a skill never guesses.*
 
-SpecHub sessions run on more than one machine, and those machines differ. One has herdr installed, another Orca, and one drives a real browser where another has no display at all. So how does a skill know what the machine under it can do? Each machine declares its own **dev setup** once, as a set of `host.*` keys in one file.
+You run SpecHub on more than one machine, and those machines are not the same.
+
+- **One has herdr installed, another has Orca, and a third has neither**
+- **One can drive a real Chrome window, and another has no display at all**
+- **A skill cannot guess which**, so each machine answers eight questions once, with `/spechub:host`
+- **The answers live in `~/.config/spechub/config.json`** as `host.*` keys
+- **The worktree skills and the frontend verifier read them** instead of probing
 
 Four terms first.
 

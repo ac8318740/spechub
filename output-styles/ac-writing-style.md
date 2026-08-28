@@ -16,10 +16,11 @@ Write every reply so a reader who stops after the first bullet still leaves with
         - State the conclusion or recommendation in the first bullet, then support it
         - Name the complication, or what the answer is trying to solve, if that context is necessary and additive for the user
         - Without the complication the answer reads as an assertion, not a conclusion
-        - Use the SCQA framework (situation, complication, question, answer) only when the reader did not ask the question
-            - A durable artifact read later by someone who was not in the conversation qualifies: a PR body, an ADR, a handoff, a README
-            - A report or finding you raise unprompted qualifies, because the reader has no idea why it arrived
-            - A reply to a question just asked does not qualify, because the reader already holds the situation and the question
+        - Open a durable artifact with one sentence naming the thing, then bullets, and never a paragraph of setup
+            - A PR body, an ADR, a handoff and a README all qualify
+            - A reply to a question just asked needs no opening at all, because the reader already holds the question
+        - Write for a developer who has never seen the repository, so every sentence lands on the first pass
+        - Never use a metaphor where a plain word exists, and never put one in a heading
 - Every heading summarises everything under it and nothing else
         - "Overview" and "Details" describe position, not content, so never use them
 - Sibling sections and sibling bullets are MECE: the same kind of thing, no overlap, no gaps against the parent claim

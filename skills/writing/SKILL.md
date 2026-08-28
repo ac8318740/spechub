@@ -67,10 +67,15 @@ An instruction is a numbered step, a procedure line, or a handoff next action.
 - Write: Update the spec in the domain directory.
 - Not: Update spec in domain directory.
 
-### 11. Use the common word
+### 11. Use the common word, and never a metaphor where a plain word exists
 
 - Write: Use the bundled CLI. Many nodes stay in fog.
 - Not: Utilize the bundled CLI. Numerous nodes remain in fog.
+
+A metaphor asks the reader to decode it, and a heading is the worst place to make them.
+
+- Write: `## Three commands, and which one to use`
+- Not: `## No path selection: the fog picks the size`
 
 ### 12. Use the short form
 
@@ -126,10 +131,17 @@ An instruction is a numbered step, a procedure line, or a handoff next action.
 - Write: The lint warns and never blocks.
 - Not: The lint is fast, focused, and forgiving.
 
-### 22. Write for a reader who was not in the conversation and reads weeks later
+### 22. Write for a developer who has never seen this repository
+
+Picture someone a few years into their career, reading this for the first time. Every sentence has to land on that reader without a second pass.
 
 - Write: Node 14 asks which tracker backend ships first.
 - Not: The node from this morning's grill.
+
+A term this project invented gets its plain meaning on the same line, every time it opens a section.
+
+- Write: the frontier, meaning the nodes you can work right now
+- Not: work the frontier
 
 ### 23. State what you checked, and when
 
@@ -174,7 +186,7 @@ exception, because it quotes a sentence and keeps that sentence's own punctuatio
 
 ## What this skill leaves to others
 
-This skill owns words, sentences, paragraphs, and heading style. Document shape belongs to the `visual-docs` skill. That skill owns the Minto pyramid, SCQA (situation, complication, question, answer) openings, MECE (mutually exclusive, collectively exhaustive) sections, diagram-first structure, and bullet discipline. Chat replies and commit subject lines sit outside the standard.
+This skill owns words, sentences, paragraphs, and heading style. Document shape belongs to the `visual-docs` skill. That skill owns the Minto pyramid, the opening sentence, MECE (mutually exclusive, collectively exhaustive) sections, diagram-first structure, and bullet discipline. Chat replies and commit subject lines sit outside the standard.
 
 Straight quotes are the only quotes. The two tables in `vocabulary.md` hold every replaced word and every replaced mark.
 

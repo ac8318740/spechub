@@ -1,59 +1,81 @@
 # SpecHub
 
-SpecHub is a Claude Code plugin for spec-driven test-driven development (TDD). Planning machinery normally comes in fixed sizes, so a typo fix pays for the ladder a fifty-question effort needs. How much structure should one request get? Exactly as much as the fog demands, where fog is the part of the work nobody can state precisely yet.
+SpecHub is a Claude Code plugin. It makes Claude plan before it codes, write the tests before the implementation, and keep your docs matching the code.
+
+- **It solves the two ways Claude goes wrong on a real codebase**
+    - Claude starts building before the requirements are clear, so you get the wrong thing quickly
+    - Claude writes the implementation and then writes tests that pass against it, which proves nothing
+- **You get three commands**, and section 1 says which one to use
+- **The cost is process**: every change goes through a test-writer, an implementer and a checker, so a one-line fix takes longer than typing it yourself
+- **Install it with two commands**, covered in section 2
 
 ```mermaid
 flowchart TD
-    Q{"What stands in the way<br/>of this request?"} -->|"nothing"| IM["Implement<br/>(/spechub:implement)"]
-    Q -->|"it is broken"| QF["Root-cause fix<br/>(/spechub:quick-fix)"]
-    Q -->|"open decisions"| MP["Chart or work a map<br/>(/spechub:map)"]
-    MP -->|"work nodes"| IM
-    IM --> C["Commit, and sync the specs<br/>(/spechub:commit)"]
+    Q{"What kind of<br/>request is this?"} -->|"clear enough to build"| IM["Build it<br/>(/spechub:implement)"]
+    Q -->|"something stopped working"| QF["Find the root cause first<br/>(/spechub:quick-fix)"]
+    Q -->|"still has open questions"| MP["Answer them first<br/>(/spechub:map)"]
+    MP -->|"once the questions are answered"| IM
+    IM --> C["Commit, and update the docs<br/>(/spechub:commit)"]
     QF --> C
 ```
 
 Every box above is section 1. The rest of this file is reference.
 
-| What you want          | Where     |
-| ---------------------- | --------- |
-| How the fog picks the size | section 1 |
-| Install                | section 2 |
+| What you want | Where |
+| ------------- | ----- |
+| The three commands, and which one to use | section 1 |
+| Install | section 2 |
 | Configure a project and a machine | section 3 |
-| The CLI                | section 4 |
-| Every skill            | section 5 |
-| Every agent            | section 6 |
-| Output style           | section 7 |
-| Terminal workspace     | section 8 |
-| Design principles      | section 9 |
-| Licence and credits    | section 10 |
+| The CLI | section 4 |
+| Every skill | section 5 |
+| Every agent | section 6 |
+| Output style | section 7 |
+| Terminal workspace | section 8 |
+| Design principles | section 9 |
+| Licence and credits | section 10 |
 
-## 1. No path selection: the fog picks the size
+## 1. Three commands, and which one to use
 
-*One entry point serves a one-question change and a fifty-question effort, and nothing declares which.*
+*Pick by what is in your way: nothing, a bug, or an unanswered question.*
 
-- **The way is clear** – `/spechub:implement` runs the TDD pipeline of section 6 on the request directly
-    - A small unit of work is simply small
-- **Something broke** – `/spechub:quick-fix` forces root-cause analysis before any edit
-- **Decisions need settling** – `/spechub:map` charts a map when none exists, and works the frontier when one does
-    - You settle a single question in conversation, and SpecHub calls that interview technique grilling
-    - The question leaves an architecture decision record (ADR), a short note stating the decision and the reason
-    - A long effort becomes a map instead, worked across sessions
+- **The request is clear enough to build** – run `/spechub:implement`
+    - It runs the four agents of section 6 on your request
+    - A one-line change stays a one-line change, because nothing extra kicks in for a small job
+- **Something already built stopped working** – run `/spechub:quick-fix`
+    - It makes Claude find the root cause before it edits anything
+- **The request still has open questions** – run `/spechub:map`
+    - Claude interviews you one round at a time, and each round asks every question it can answer next
+    - Each round comes with Claude's recommended answer, so you confirm rather than compose
+    - A single question ends there, and Claude writes the decision down as a short note under `docs/adr/`
+    - A big feature needs dozens of questions, so Claude stores them as a to-do graph you work across several sessions
 
-A map is a set of small records called nodes.
+### 1.1. The to-do graph, if your work needs one
 
-- **A node** is one question to settle or one piece of work to do
-- **A status** is one of five: `fog`, `open`, `claimed`, `resolved` and `out-of-scope`
-    - A `fog` node holds something nobody can state precisely yet
-    - An `open` node is ready to settle, and a `claimed` node is one someone works now
-    - You have settled a `resolved` node, and you have deliberately dropped an `out-of-scope` node
-- **A provenance parent** is the node whose answer raised this one
-- **A blocking edge** names a node that must resolve before this one starts
-- **A mode** says who settles the node: `hitl` for a human, `afk` for an agent working alone
-- **The frontier** is the set of nodes you can work right now, the open nodes with nothing unresolved blocking them
-- **A tracker** is the swappable storage layer behind a map, with GitHub issues first-class and plain files as the fallback
-- **The packaging walk** collects a map into one brief, so a fresh session picks up an effort without re-reading everything
+*Only `/spechub:map` creates one, and only when a single conversation cannot settle everything.*
 
-Every rule in SpecHub exists because something went wrong without it. SpecHub grew over months of real product development with Claude Code.
+SpecHub calls the graph a **map** and each entry a **node**. A node is one question to answer, or one piece of work to do.
+
+Each node carries one of five statuses.
+
+| Status | Meaning |
+| ------ | ------- |
+| `fog` | you cannot describe this precisely yet |
+| `open` | ready to answer or build |
+| `claimed` | someone is working on it now |
+| `resolved` | done |
+| `out-of-scope` | dropped on purpose |
+
+The rest of what a node holds:
+
+- **Each node records what raised it**, so you can read the decisions back in the order they happened
+- **Each node lists what must finish first**, so SpecHub can tell you what is ready to start
+- **Each node says who answers it**: you, or Claude working alone
+- **The nodes ready to start right now** are the open ones with nothing unfinished blocking them
+    - SpecHub calls that set the **frontier**, and `/spechub:map` works through it
+- **The nodes live in GitHub issues by default**, and in markdown files under `spechub/maps/` when you have no GitHub remote
+- **One command packs a map into a single brief**, so a fresh Claude session picks up where the last one stopped
+
+Every rule in SpecHub exists because something went wrong without it, over months of real product development with Claude Code.
 
 For the full picture, each step and how they connect, read [docs/workflows.md](docs/workflows.md).
 
@@ -97,23 +119,23 @@ Then in your project:
 
 ## 4. The CLI
 
-*Four tracker operations carry the whole map, and an invariant path makes the CLI reachable from any agent.*
+*Four storage operations carry the whole map, and one fixed path makes the CLI reachable from any Claude session.*
 
 SpecHub ships a Node.js CLI: `spechub config`, `spechub list`, `spechub node ...` and `spechub archive`.
 
-- A tracker provides four operations and nothing more: create, read, update, list
-    - GitHub issues are the first-class tracker, because they already hold the two links a map needs
-    - Sub-issues carry the provenance parent, and issue dependencies carry the blocking edges
-    - The files tracker is the fallback, and it writes one markdown file per node under `spechub/maps/<name>/`
+- The storage behind a map provides four operations and nothing more: create, read, update, list
+    - GitHub issues are the default, because an issue already holds the two links a map needs
+    - A sub-issue records what raised a node, and an issue dependency records what must finish first
+    - Markdown files are the fallback, one per node under `spechub/maps/<name>/`
 - The CLI builds everything else on those four operations
-    - `spechub node frontier` lists the open nodes with nothing unresolved blocking them, closest to the root node first
-    - `spechub node walk` packages the map for a handoff, reading the nodes in provenance order
-    - The walk includes the root node in full, plus any node marked pinned, which means always worth carrying along
+    - `spechub node frontier` lists what is ready to start now, closest to the original goal first
+    - `spechub node walk` packs the whole map into one brief for a fresh session, in the order the decisions happened
+    - The brief always includes the original goal, plus any node you marked as worth carrying along
     - The skills claim and resolve a node with `update` calls
 
 Two symlinks reach the CLI, and the SessionStart hook maintains both.
 
-- `~/.claude/spechub/bin/spechub` is the invariant absolute path every skill and agent calls
+- `~/.claude/spechub/bin/spechub` is the fixed path every skill and agent calls
     - Agents therefore do not depend on your shell `PATH`
     - The CLI keeps working across plugin version bumps, non-interactive subshells and fresh agent contexts
 - `~/.local/bin/spechub` is for typing `spechub` at a terminal yourself
@@ -130,7 +152,7 @@ If `spechub` does not run after install, read [TROUBLESHOOTING.md](TROUBLESHOOTI
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:implement` | Claim agent-workable (afk) nodes from the map frontier and run the TDD pipeline, or run directly on the request when no map exists |
+| `/spechub:implement` | Build what is ready to start, running the four agents of section 6, whether or not a map exists |
 
 For work with open decisions, chart it with `/spechub:map` first.
 
@@ -138,21 +160,21 @@ For work with open decisions, chart it with `/spechub:map` first.
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:map` | Entry point for planned work, charting a map if none exists and working the frontier if one does |
-| `grilling` | Interview technique, asking the whole frontier per round, each question with a recommended answer (model-invoked) |
-| `record-context` | Writes durable records when a decision lands: an ADR, a glossary term, both, or neither (model-invoked) |
+| `/spechub:map` | Answer the open questions first, building the to-do graph on the first run and working through it after |
+| `grilling` | The interview itself, asking every question it can answer next per round, each with a recommended answer (Claude invokes it) |
+| `record-context` | Writes a decision down when one lands: a short note, a glossary term, both, or neither (Claude invokes it) |
 
 ### 5.3. Operations
 
 | Skill | Description |
 |-------|-------------|
-| `/spechub:commit` | Git commit with mandatory spec sync |
-| `/spechub:archive` | Close out a cleared map, checking the residue landed, then disposing of the nodes |
-| `/spechub:sync` | Update specs from code changes |
+| `/spechub:commit` | Commit, and update the specs under `spechub/specs/` from the diff first |
+| `/spechub:archive` | Close a finished map, after checking the decisions reached your specs and notes, then delete the nodes |
+| `/spechub:sync` | Update the specs from code changes, outside a commit |
 | `/spechub:handoff` | Hand work to a visible agent, a new one in its own pane or one already running, with acknowledgement |
 | `/spechub:compact-and-continue` | Anchor the session's load-bearing state to survive compaction, then continue in place |
 
-The residue is the durable output an effort leaves behind: spec updates, ADRs and glossary entries.
+What an effort leaves behind is what matters: updated specs, decision notes and glossary entries. The nodes themselves are scaffolding.
 
 ### 5.4. Setup and supporting
 
@@ -160,7 +182,7 @@ The residue is the durable output an effort leaves behind: spec updates, ADRs an
 |-------|-------------|
 | `/spechub:setup` | Set up SpecHub in a project, and change how a project already set up is configured |
 | `/spechub:host` | Declare this machine's dev setup once, as the `host.*` axes |
-| `/spechub:bootstrap` | Generate initial living specs from code |
+| `/spechub:bootstrap` | Write the first set of specs by reading your existing code |
 | `/spechub:explore` | Thinking partner mode, read-only |
 | `/spechub:quick-fix` | Structured bug fix workflow with root cause analysis |
 | `/spechub:pre-commit-review` | Deep quality review of all changes since last commit |
@@ -175,7 +197,7 @@ The residue is the durable output an effort leaves behind: spec updates, ADRs an
 
 ## 6. Every agent
 
-*Four phases with hard walls between them, and the wall between phase 1 and phase 2 does the work.*
+*Four agents run in order, and the one rule that matters is that the test-writer never sees the implementation.*
 
 | Agent | Role |
 |-------|------|
@@ -184,8 +206,8 @@ The residue is the durable output an effort leaves behind: spec updates, ADRs an
 | `task-checker` | TDD phase 3, verifying everything: mock skepticism, test baseline, regressions, TDD isolation audit |
 | `frontend-verifier` | TDD phase 4, real browser verification via agent-browser CLI, when `project.yaml` configures a frontend |
 
-- The coordinating session delegates research and implementation to these agents instead of doing the work itself
-- A FAIL from the task-checker routes back to the task-executor with the reason
+- The Claude session you talk to coordinates, and hands every piece of research and code to these agents
+- A fail from the task-checker sends the work back to the task-executor with the reason
 - The frontend-verifier runs under three conditions: a configured frontend, changed frontend files, and verification switched on
 
 ## 7. Output style
@@ -210,7 +232,7 @@ How to turn it on:
 
 ## 8. Terminal workspace for driving several agents
 
-*A keyboard-only terminal for driving several agents on a dev machine, and SpecHub needs none of it.*
+*An optional keyboard-only setup for running several agents on a remote machine, and SpecHub works fine without it.*
 
 - `/spechub:terminal-workspace` installs every tool and writes every config
 - [docs/terminal-workspace.md](docs/terminal-workspace.md) gives the exact config, every key, and the traps worth knowing
@@ -221,21 +243,22 @@ How to turn it on:
 
 ## 9. Design principles
 
-*Five rules explain every default SpecHub ships.*
+*Five rules explain why every default is what it is.*
 
-- **TDD is structural under strict, instructional under relaxed** – the executor cannot touch test files either way
-    - Under strict TDD the test-writer runs first, so no implementation exists for it to see
-    - Under relaxed it runs after the executor, and only its instructions keep it from reading the code it tests
-    - The two settings do not give equal independence, which is why strict is the default
-- **Specs converge toward reality** – every commit updates the living specs via spec sync
-    - Agents fix an inaccuracy on sight
-    - Specs track what the code implements, never what anyone plans
-- **Progressive materialisation** – structure appears only when it has to persist
-    - A typo fix needs no machinery, and a long effort earns a map
-    - The same entry point serves both, and nothing declares which
-- **Planning outweighs coding** – three parallel explorers run before anyone writes code
-    - Mock audits, mutation checks, regression suites and integration wiring follow
-- **Strict defaults, easy to relax** – run `spechub config set` to adjust TDD strictness, orchestrator mode, or how grilling presents questions
+- **Strict TDD holds because of the order the agents run in** – relaxed TDD holds only because the instructions say so
+    - Either way the task-executor cannot edit a test file
+    - Under strict TDD the test-writer runs first, so there is no implementation for it to copy
+    - Under relaxed TDD it runs second, and only its instructions stop it reading the code it is testing
+    - The two are not equally safe, which is why strict is the default
+- **Your docs never drift from the code** – `/spechub:commit` reads the diff and updates the specs under `spechub/specs/` in the same commit
+    - Any agent that spots a spec contradicting the code fixes the spec there and then
+    - A spec describes what the code does today, and never what someone plans to build
+- **Build no more process than the job needs** – a to-do graph appears only when one conversation cannot hold the questions
+    - A typo fix gets no machinery, and a month-long feature gets a map
+    - You type the same command either way, and SpecHub works out which it is
+- **Planning gets more effort than coding** – three agents read the relevant code before anyone writes a line
+    - Mock audits, regression suites and integration checks follow the implementation
+- **Strict defaults, easy to relax** – run `spechub config set` to change how strict the TDD is, how much Claude does itself, or how it asks you questions
 
 ## 10. Licence and credits
 
@@ -244,7 +267,7 @@ How to turn it on:
 - **[OpenSpec](https://github.com/Fission-AI/OpenSpec)** – SpecHub forks its CLI from OpenSpec, which was the core spec engine under the original workflow
     - The spec-driven concepts all originate there: proposals, designs, tasks, living specs, change management and archiving
 - **[Taskmaster AI](https://github.com/eyaltoledano/claude-task-master)** – Taskmaster's task management model inspired the orchestrator pattern and the agent coordination approach
-- **[Skills for Real Engineers](https://github.com/mattpocock/skills)** by Matt Pocock – the Wayfinder map, the grilling technique, and the durability rule for agent briefs
+- **[Skills for Real Engineers](https://github.com/mattpocock/skills)** by Matt Pocock – the Wayfinder map, the round-by-round interview, and the durability rule for agent briefs
     - SpecHub's node graph is a direct adaptation of Wayfinder
     - MIT licensed, and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) records it
 - Additional inspiration comes from [Superpowers](https://github.com/obra/superpowers), [GSD](https://github.com/gsd-build/get-shit-done) and [Spec Kit](https://github.com/github/spec-kit)

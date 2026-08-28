@@ -1,8 +1,14 @@
 # SpecHub workflows
 
-*Every request ends by updating the living specs. The requests differ only in how much fog stood in the way, fog being whatever nobody can state precisely yet.*
+*Every request ends the same way, with your specs updated from the diff. What changes is how many questions you settle first.*
 
-SpecHub is a workflow orchestrator, and planning structure grows only as far as the unknowns demand. A clear request goes straight to implementation, a broken thing gets root-cause discipline, and open decisions become a map. How does one entry point serve all three? It routes on what stands in the way, then works the map frontier by frontier.
+SpecHub routes a request down one of three paths, and every path ends at a commit that updates your specs.
+
+- **The path depends on what is in your way**: nothing, a bug, or an unanswered question
+- **A clear request goes straight to the four TDD agents**, covered in section 4
+- **A bug goes to root-cause analysis first**, covered in section 2
+- **A request with open questions becomes a to-do graph** you work through, covered in section 1
+- **The rest of this document** is the detail behind one box of the diagram below
 
 ```mermaid
 flowchart TD
@@ -16,15 +22,15 @@ flowchart TD
     T --> C
     C --> Y["Sync specs from the diff<br/>(domain-map.yaml)"]
     Y --> L[("Living specs<br/>spechub/specs/")]
-    M -->|"map cleared"| A["Archive<br/>(check the residue,<br/>dispose of nodes)"]
+    M -->|"every question answered"| A["Archive<br/>(check the decisions landed,<br/>then delete the nodes)"]
     A --> L
 ```
 
 | Step in the diagram   | Detail    |
 | --------------------- | --------- |
-| Map                   | section 1 |
+| Map, the to-do graph  | section 1 |
 | Implement             | section 2 |
-| Grilling and records  | section 3 |
+| Asking and recording  | section 3 |
 | Build under TDD       | section 4 |
 | Commit **and** sync   | section 5 |
 | Archive               | section 6 |
@@ -32,7 +38,7 @@ flowchart TD
 
 The request box is a terminal, not a step. Section 5 covers two boxes because one command does both. Section 8 describes this document, so no box holds it.
 
-## 1. The map
+## 1. The map, meaning the to-do graph
 
 *One node primitive replaces the fixed proposal, design and tasks ladder that earlier versions used. Nothing stores the map, because it is queries over the nodes.*
 
@@ -58,7 +64,7 @@ A node carries one of five statuses.
 A node carries a `mode` too, and two link types connect the nodes.
 
 - **`mode`** says who settles the node: `hitl` for a human, `afk` for an agent alone
-- **`answers`** names one provenance parent, the node whose resolution raised this one
+- **`answers`** names the one node whose answer raised this one
     - The parent links form a tree, so they give reading order
     - An agent packages a handoff by walking that tree
 - **`blocked-by`** names any number of nodes that must resolve before this one starts
@@ -70,7 +76,7 @@ SpecHub derives depth from `answers`, and nobody declares it. The map itself is 
 | The question | The query |
 | --- | --- |
 | Where are we going? | the root node |
-| What have we decided? | the `resolved` nodes in provenance order |
+| What have we decided? | the `resolved` nodes, in the order the decisions happened |
 | What can we work now? | the `open` nodes with no unresolved blockers |
 | What is not yet specified? | the `fog` nodes |
 | What did we drop? | the `out-of-scope` nodes |
@@ -78,11 +84,11 @@ SpecHub derives depth from `answers`, and nobody declares it. The map itself is 
 Nodes live in a tracker, the storage layer, which is swappable.
 
 - A tracker provides four operations and nothing more: create, read, update, list
-- GitHub issues are first-class, because sub-issues carry the provenance parent and dependencies carry the blocking edges
+- GitHub issues are the default, because a sub-issue records what raised a node and a dependency records what must finish first
 - Files under `spechub/maps/<name>/` are the fallback
 - Frontier, claim and resolve build on those four operations, so no tracker implements them
 
-**Progressive materialisation**: structure appears only when it has to persist.
+**Build no more process than the job needs.**
 
 - You create a map only when the fog will outlive the session
 - You grill one question in conversation, and it leaves an architecture decision record (ADR), not a map
@@ -105,11 +111,11 @@ Nodes live in a tracker, the storage layer, which is swappable.
 - A bug has a root cause to find, not a decision to settle
 - `/spechub:quick-fix` therefore never creates a node
 
-## 3. Grilling and durable records
+## 3. Asking the questions, and writing the answers down
 
-*Three model-invoked primitives, skills the agent reaches for itself, carry the interviewing, the remembering and the writing.*
+*Three skills Claude reaches for itself, without you typing a command, carry the interviewing, the recording and the writing.*
 
-- **`grilling`** works decisions in rounds
+- **`grilling`** is the interview, and it works through your decisions one round at a time
     - A round asks the whole frontier, every question whose prerequisites have resolved, numbered, each with a recommended answer
     - It then recomputes the frontier and repeats
     - Facts are the agent's job, never the user's, so it sends a question an environment fact would answer to explorer subagents
@@ -216,10 +222,10 @@ Four cases stop sync.
 
 ## 6. Archive
 
-*A map is scaffolding. Archive checks that someone extracted the residue, the durable output meaning spec updates, decision records and glossary entries, then disposes of the nodes.*
+*A map is scaffolding. Archive checks the decisions reached your specs, your decision notes and your glossary, then deletes the nodes.*
 
 - `/spechub:archive` checks for a cleared map: empty frontier, no fog, no claims
-- It spot-checks that living specs, ADRs and glossary entries captured what the effort settled
+- It spot-checks that the specs, the decision notes and the glossary captured what the effort settled
 - It then disposes of the nodes
     - It deletes them by default
     - It moves them to `spechub/archive/<date>-<name>/nodes/` when `workflow.maps.persist` is `true`

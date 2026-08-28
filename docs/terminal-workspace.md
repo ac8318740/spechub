@@ -1,6 +1,12 @@
 # Terminal workspace: herdr, gh-dash, diffnav
 
-Your code lives on a machine you reach over the network, and you drive coding agents on it. A terminal session dies with its connection. The tools worth reviewing code in assume a desktop, meaning a clipboard, a browser and a display. The dev machine – the remote machine your agents run on, a virtual machine in this setup – has none of them. So how do you run several agents there, keep them alive, and review their work without leaving the terminal?
+This is an optional setup for running several coding agents on a remote machine, and reviewing their work without leaving the terminal.
+
+- **Your code lives on a machine you reach over the network**, and you run agents on it
+- **A plain terminal session dies with its connection**, taking every running agent with it
+- **The tools worth reviewing code in assume a desktop**, meaning a clipboard, a browser and a display
+- **That remote machine has none of them**, so a copy or an "open in browser" goes nowhere
+- **SpecHub needs none of this setup**, so skip the whole document if you work locally in an editor
 
 - Run herdr on the dev machine, a terminal multiplexer that holds many terminal sessions
 - herdr keeps every session running after you disconnect
