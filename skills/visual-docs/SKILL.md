@@ -177,6 +177,8 @@ The indent is the one rule that differs by medium.
     - The wider first step separates a child from its parent at a glance
 - A markdown file cannot afford that step
     - It indents four per level throughout
+    - GitHub reads an eight-space child as a continuation of the parent's paragraph
+        - It prints the child onto the end of the parent as run-on text with a literal dash
 
 ## 4. Diagrams
 

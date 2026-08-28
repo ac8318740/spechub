@@ -240,6 +240,7 @@ What an effort leaves behind is what matters: updated specs, decision notes, and
 - A reply leads with the answer and puts 90% or more of what follows in bullets
 - Each bullet holds one sentence and ends without a period
 - Sub-bullets nest as far as the point needs, indented eight spaces at the first level and four more at each level below
+    - A markdown file indents four per level instead, because GitHub reads a wider step as run-on text
 - Every word has to earn its place: no em dash, no emoji, no puffery, and no contrast clause that does no work
 
 How to turn it on:
