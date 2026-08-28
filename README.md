@@ -77,11 +77,12 @@ The three commands:
     - Claude interviews you one round at a time
     - Each round asks every question it can answer next
     - Each question comes with Claude's recommended answer
-    - You confirm instead of composing
-    - A single question ends there
-    - Claude writes the decision down as a short note under `docs/adr/`
-    - A big feature needs dozens of questions
-    - Claude stores those as a map you work through across several sessions
+    - You provide feedback on Claude's recommended answer instead of prompting from scratch
+    - Some requests need only one question
+    - Claude writes that decision down as a short note under `docs/adr/`
+    - A big feature may need dozens of questions
+    - Claude stores those questions as a **map**
+    - You work through the map across several sessions
 
 ### 2.1. What a map holds
 
@@ -99,9 +100,9 @@ Each node carries one of five statuses.
 
 Each node also records four things.
 
-- **What raised it**
-    - You can read the decisions back in the order they happened
-- **What must finish first**
+- **Which earlier answer led to this question**
+    - You can read the decisions back in the order you made them
+- **Which other nodes have to finish before this one starts**
     - SpecHub uses that to tell you what is ready to start
 - **Who answers it**: you, or Claude working alone
 - **Where it lives**: a GitHub issue by default, or a markdown file under `spechub/maps/` with no GitHub remote

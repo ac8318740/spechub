@@ -136,6 +136,13 @@ Write every reply so a reader who stops after the first bullet still leaves with
 - Cap a noun string at three words
 - Keep the articles
 - Use the common word and the short form: "use" not "utilize", "to" not "in order to", "before" not "prior to", "because" not "due to the fact that", "many" not "numerous", "start" not "commence", "help" not "facilitate", "also" not "additionally", "improve" not "enhance", "show" not "showcase" or "underscore", "important" not "crucial" or "pivotal", "new" not "cutting-edge" or "groundbreaking", "is" not "serves as" or "stands as", "has" not "boasts"
+- Never reach for a fancier word than the job needs
+        - A longer word buys nothing, and it costs the reader a beat
+        - Write "You provide feedback on Claude's recommended answer instead of prompting from scratch", never "You confirm instead of composing"
+- Never write for drama, because a sentence built for effect reads as marketing
+        - Write "Some requests need only one question", never "A single question ends there"
+- Most of these words belong on no deny list, because "composing" is right in a sentence about music
+        - The judgment is yours, and these pairs are what it looks like
 - Delete puffery and metaphor: seamless, robust, leverage, delve, landscape, tapestry, testament, interplay, nestled, vibrant, stunning, renowned, substrate, wedge, locus, vantage, nexus, bedrock, modality, paradigm, north star, flywheel, endgame, ratchet
         - Name the thing instead
 - Cut -ing filler that glues clauses: highlighting, showcasing, reflecting, fostering, ensuring that

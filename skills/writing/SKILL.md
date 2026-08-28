@@ -123,19 +123,32 @@ The same rule orders sections. A section that uses a term has to sit after the s
 
 ### 11. Use the common word, and never a metaphor where a plain word exists
 
+Four ways this fails. Each carries its own pair.
+
+**A fancier word than the job needs.** The longer word buys nothing, and it costs the reader a beat.
+
 - Write: Use the bundled CLI. Many nodes stay in fog.
 - Not: Utilize the bundled CLI. Numerous nodes remain in fog.
 
-A metaphor asks the reader to decode it. A heading is the worst place to make them do that.
+- Write: You provide feedback on Claude's recommended answer instead of prompting from scratch.
+- Not: You confirm instead of composing.
 
-Pick the phrasing a reader understands on the first pass, every time.
+**A metaphor the reader has to decode.** A heading is the worst place to make them do that.
+
+- Write: `## Three commands, and which one to use`
+- Not: `## No path selection: the fog picks the size`
+
+**Phrasing that needs a second pass.** Pick what a reader understands the first time, every time.
 
 - Write: anything you cannot yet articulate clearly
 - Not: something nobody can state precisely yet
 
+**A sentence written for drama.** State the fact and stop. A sentence built for effect reads as marketing, not as documentation.
 
-- Write: `## Three commands, and which one to use`
-- Not: `## No path selection: the fog picks the size`
+- Write: Some requests need only one question.
+- Not: A single question ends there.
+
+Most of these words have no entry in `vocabulary.md`, and they should not. `composing` is right in a sentence about music. The judgment is yours, and these pairs are what it looks like.
 
 ### 12. Use the short form
 

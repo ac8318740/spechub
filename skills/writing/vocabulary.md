@@ -57,6 +57,12 @@ Emoji are not listed, because the lint detects them by the Unicode Extended_Pict
 | gold-plating | - | abstract metaphor, name the extra work |
 | ratchet | - | abstract metaphor, name the mechanism |
 | utilize | use | |
+| commence | start | unnecessarily fancy |
+| ascertain | find out | unnecessarily fancy |
+| endeavour | try | unnecessarily fancy |
+| myriad | many | unnecessarily fancy |
+| plethora | many | unnecessarily fancy |
+| elucidate | explain | unnecessarily fancy |
 | leverage | use | |
 | facilitate | help | |
 | numerous | many | |
