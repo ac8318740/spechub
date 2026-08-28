@@ -60,11 +60,23 @@ If tests are wrong or incomplete:
 
 This constraint ensures tests remain an independent specification of requirements, not a mirror of your implementation.
 
+## Never pin an answer nobody chose (mandatory)
+
+A requirement sometimes leaves a decision to nobody. An undecided data shape, an unnamed error case or an unspecified default value is one. Never pick an answer yourself and encode it in the source. Code you invent becomes behaviour nobody chose, and the checker cannot tell the difference.
+
+Investigate first. Read the source, the living specs, and the failing tests when any exist. Use any answer you find.
+
+Then prefer the narrower behaviour. You can usually satisfy the requirement, and any failing tests, without picking the undecided detail. Add no field, no error type and no default value the requirement does not state.
+
+Under strict TDD a test that asserts nothing about the return shape tells you nobody has decided that shape. Under relaxed TDD no test exists yet, so the requirement text is your only evidence. Read it for what it does not say.
+
+Report what you did not build. A requirement you could not build without picking an answer goes in your report, with the question that settles it. So does a requirement you could not build for another reason, such as one needing a live external service. Say what stopped you.
+
 ## Key principles
 
 - Focus on completing one task thoroughly before moving to the next
 - Follow existing code patterns and project conventions
 - Prioritize working code over documentation
-- Ask for clarification if requirements are ambiguous
+- Report a requirement you could not build, and the question that settles it
 - Consider edge cases and error handling
 - NEVER mark a task as 'done' – that's for the task-checker

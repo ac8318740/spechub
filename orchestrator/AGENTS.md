@@ -124,6 +124,14 @@ Relaxed TDD means nobody writes the tests first. It never means the work goes
 unverified, and it drops no phase. All three agents run under both settings.
 Rule 3 above holds either way. A task-checker runs after every executor.
 
+### Never pin an answer nobody chose
+
+A criterion sometimes leaves a decision to nobody. An agent that meets one must not pick an answer and encode it. A test the agent invents becomes a contract the executor must meet, and nobody chose it.
+
+Prefer the narrower test, or the narrower behaviour. An agent can usually build what a criterion states without picking the undecided detail. A narrower test must still fail when the criterion is unmet. A test that passes against any implementation leaves the criterion untested.
+
+An agent that can do neither reports the criterion and the question that settles it. The test-writer and the task-executor carry the operational rules.
+
 ### The four-phase pipeline
 
 **Phase 1: test-writer** – Write failing tests from requirements
