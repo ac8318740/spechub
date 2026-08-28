@@ -2264,12 +2264,12 @@ PY
   # [mgr], which is one key that TOML forbids declaring twice. Only the second
   # collides with the entry below, and telling them apart takes the text - both
   # spellings parse to the same list.
-  SPECHUB_ARGS="$(cfg_get yazi.browser_key "b")|$(cfg_get yazi.line_numbers_key "#")|$BEGIN|$END" \
+  SPECHUB_ARGS="$(cfg_get yazi.browser_key "b")|$(cfg_get yazi.line_numbers_key "#")|$(cfg_get yazi.download_key "D")|$(cfg_get yazi.download_target "")|$BEGIN|$END" \
     py "$HOME/.config/yazi/keymap.toml" <<'PY'
 import os, re, sys
 
 path = sys.argv[1]
-key, numkey, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+key, numkey, dlkey, dltarget, begin, end = os.environ["SPECHUB_ARGS"].split("|")
 text = open(path).read() if os.path.isfile(path) else ""
 # Drop any previous managed region, both to stay idempotent and so what is
 # left to inspect below is exactly the keymap the user wrote.
@@ -2326,6 +2326,23 @@ if not claimed(text):
         "run = [ 'shell --block -- spechub-md --toggle-line-numbers', 'peek --force' ]\n"
         'desc = "Preview markdown as source with line numbers"'
     )
+    # Taildrop is Tailscale's file send. It is the one route off a headless
+    # machine that needs nothing installed on the machine the user sits at,
+    # and no inbound port there either.
+    #
+    # %h, the hovered file, for the same reason the browser key uses it. %* is
+    # not a keybinding placeholder at all - yazi passes it through untouched,
+    # and tailscale then reports `open %*: no such file or directory`.
+    # Measured on yazi 26.8.15.
+    #
+    # --block because a send reports progress, and a refused one reports why.
+    if dltarget:
+        parts.append(
+            "[[mgr.prepend_keymap]]\n"
+            f'on = "{dlkey}"\n'
+            f"""run = 'shell --block -- tailscale file cp "%h" {dltarget}:'\n"""
+            f'desc = "Send this file to {dltarget} over Taildrop"'
+        )
 
 # The markers go down even when the binding was conceded, so the shell below
 # can read the region back and see what is missing from it.
@@ -2340,6 +2357,24 @@ PY
     say "     yourself:  shell --block -- spechub-md --browser \"%h\""
     say "     and:       [ 'shell --block -- spechub-md --toggle-line-numbers', 'peek --force' ]" ;;
   esac
+  # The download key is written from the config alone, so it can be wrong in
+  # three ways the config cannot see. Name whichever one holds, rather than
+  # leaving the user to read `status code: 1` out of a yazi popup.
+  local dltarget; dltarget="$(cfg_get yazi.download_target "")"
+  if [ -n "$dltarget" ]; then
+    if ! have tailscale; then
+      say "yazi: download_target names $dltarget, but this machine has no"
+      say "     tailscale. Install it, or clear the key to drop the binding."
+    elif ! tailscale file cp --targets >/dev/null 2>&1; then
+      say "yazi: tailscale refuses file access to this user account. Run once:"
+      say "       sudo tailscale set --operator=\$USER"
+    elif ! tailscale file cp --targets 2>/dev/null \
+         | awk -F'\t' -v t="$dltarget" '$2 == t { f = 1 } END { exit !f }'; then
+      say "yazi: $dltarget is not a Taildrop target of this machine. Taildrop"
+      say "     only sends between devices one Tailscale account owns on one"
+      say "     tailnet. Check both ends with: tailscale file cp --targets"
+    fi
+  fi
   say "yazi config written"
 }
 

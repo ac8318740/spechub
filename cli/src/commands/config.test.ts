@@ -9,6 +9,9 @@ import {
   writeFileSync,
   chmodSync,
   existsSync,
+  readdirSync,
+  symlinkSync,
+  lstatSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
@@ -268,6 +271,26 @@ function makeProject(yaml: string): string {
   mkdirSync(join(root, 'spechub'), { recursive: true });
   writeFileSync(join(root, 'spechub', 'project.yaml'), yaml);
   return root;
+}
+
+/**
+ * A temp project root whose `spechub/project.yaml` is a SYMLINK to a file
+ * held elsewhere, handing back the root, the link and the file behind it.
+ *
+ * A shared project.yaml is linked in exactly this way: one copy kept in a
+ * dotfiles directory or in the main checkout, and a link to it from every
+ * worktree that reads it. The link is the path every command is handed, and
+ * the file behind it is the one the user edits and the one git tracks.
+ */
+function makeSymlinkedProject(yaml: string): { root: string; link: string; target: string } {
+  const root = mkdtempSync(join(tmpdir(), 'spechub-symlinked-project-'));
+  mkdirSync(join(root, 'spechub'), { recursive: true });
+  mkdirSync(join(root, 'real'), { recursive: true });
+  const target = join(root, 'real', 'project.yaml');
+  writeFileSync(target, yaml);
+  const link = join(root, 'spechub', 'project.yaml');
+  symlinkSync(target, link);
+  return { root, link, target };
 }
 
 /** An isolated cwd guaranteed to have no spechub/ directory anywhere above it. */
@@ -1571,6 +1594,71 @@ describe('spechub config set, project keys', () => {
     });
   });
 
+  /**
+   * A file that states BOTH line endings, through the same fallback write.
+   *
+   * The cases above are all-CRLF files, where "the endings the file arrived
+   * with" has one answer. A file that mixes them has no single answer, and
+   * mixed files are ordinary: a repository without a `.gitattributes` rule
+   * collects them one hunk at a time, from one contributor on Windows and one
+   * on Linux. Reading the FIRST line break and rewriting the whole file to
+   * match answers with whichever editor happened to touch line one, which
+   * turns a one-key write into a diff over every line of the smaller half.
+   *
+   * The rule below is the majority: the ending more of the file's lines
+   * already use wins. A tie keeps LF, because LF is what the writer emits
+   * when nothing in the file settles the question.
+   *
+   * Each fixture puts the MINORITY ending on line one, so a writer that
+   * samples the first break gets the wrong answer on all three.
+   */
+  describe('a fallback write takes the line endings most of the file uses', () => {
+    /** One LF, then two CRLF. */
+    const MOSTLY_CRLF = 'commands:\n  build: "npm run build"\r\n  lint: "npm run lint"\r\n';
+
+    /** One CRLF, then two LF. */
+    const MOSTLY_LF = 'commands:\r\n  build: "npm run build"\n  lint: "npm run lint"\n';
+
+    /** Two CRLF, then two LF - split evenly, with CRLF first. */
+    const HALF_AND_HALF =
+      'commands:\r\n  build: "npm run build"\r\n' +
+      '  lint: "npm run lint"\n  typecheck: "npm run typecheck"\n';
+
+    /**
+     * Set a key the file does not yet state, which has no old value whose
+     * range could be overwritten and so cannot take the in-place splice.
+     */
+    function setUnstatedKey(source: string): string {
+      const root = makeProject(source);
+
+      const result = runSet('commands.test', 'npm test', root);
+
+      expect(result.status).toBe(0);
+      const parsed = parseProjectYamlShowingFile(root);
+      expect(atKey(parsed, 'commands.test')).toBe('npm test');
+      expect(atKey(parsed, 'commands.build')).toBe('npm run build');
+      return readProjectYaml(root);
+    }
+
+    it('re-emits CRLF when more of the file already ends its lines that way', () => {
+      // A bare LF anywhere means the writer followed the single line that
+      // disagreed with the rest of the file.
+      expect(setUnstatedKey(MOSTLY_CRLF)).not.toMatch(/(?<!\r)\n/);
+    });
+
+    it('re-emits LF when more of the file already ends its lines that way', () => {
+      // A CR anywhere means the same mistake pointing the other way: one
+      // CRLF line on top dragged every LF line below it across.
+      expect(setUnstatedKey(MOSTLY_LF)).not.toContain('\r');
+    });
+
+    it('re-emits LF when the file splits evenly between the two', () => {
+      // Nothing in the file settles a tie, so the tie goes to the ending the
+      // writer emits on its own rather than to whichever came first.
+      expect(setUnstatedKey(HALF_AND_HALF)).not.toContain('\r');
+    });
+  });
+
   describe('a project with spechub/ but no project.yaml', () => {
     it('creates spechub/project.yaml holding the key it was given', () => {
       const root = projectWithoutYaml();
@@ -2045,6 +2133,497 @@ describe('spechub config set on a file it may not write', () => {
     } finally {
       chmodSync(file, 0o644);
     }
+  });
+});
+
+/**
+ * A value the file cannot be made to hold is refused, not written and called
+ * a success.
+ *
+ * ADR 0009 made the splice verify its own result against the document
+ * interface, because the splice was the half getting it wrong. The document
+ * interface was the baseline it compared against, and nothing checks the
+ * baseline. This is the shape where the baseline is the one that is wrong.
+ *
+ * Replacing a block scalar with a value of only spaces keeps the old node's
+ * block style, and the emitter writes a content line holding nothing but
+ * spaces. No parser reads that back as spaces - it comes back as the empty
+ * string. So the splice refuses the write, correctly, hands off to the
+ * document interface, and the document interface loses the value behind a
+ * green "Set commands.test" and exit 0.
+ *
+ * The rule the tests below state is about the RESULT, not about either
+ * writer: nothing lands whose re-read value differs from what was asked for.
+ * Where no writer can produce such a file, the command refuses - exit 1, the
+ * file untouched, and one line naming the key.
+ */
+describe('spechub config set when no writer can produce the value asked for', () => {
+  /**
+   * `commands` stating `test` as a block scalar of `style`, with `lint` after
+   * it - the shape the corruption needs. The sibling matters: it is what keeps
+   * the block scalar's content indented, and the space-only line the emitter
+   * writes has to sit inside that indent.
+   */
+  function blockScalarWithSibling(style: string): string {
+    return [
+      'commands:',
+      `  test: ${style}`,
+      '    line one',
+      '    line two',
+      '  lint: eslint',
+      '',
+    ].join('\n');
+  }
+
+  /** The same block scalar with nothing after it, so it ends the file. */
+  function blockScalarAtTheEnd(style: string): string {
+    return [
+      'commands:',
+      '  lint: eslint',
+      `  test: ${style}`,
+      '    line one',
+      '    line two',
+      '',
+    ].join('\n');
+  }
+
+  /**
+   * The cases no writer can take: a block scalar with a sibling after it,
+   * replaced by spaces. Named, then the style, then the value, because `%s`
+   * renders a value of spaces as nothing at all.
+   */
+  const REFUSED: [string, string, string][] = [
+    ['one space over a literal block scalar', '|', ' '],
+    ['two spaces over a literal block scalar', '|', '  '],
+    ['one space over a folded block scalar', '>', ' '],
+    ['two spaces over a folded block scalar', '>', '  '],
+  ];
+
+  it.each(REFUSED)('refuses %s, with no success line anywhere', (_case, style, value) => {
+    const root = makeProject(blockScalarWithSibling(style));
+
+    const result = runSet('commands.test', value, root);
+
+    expect(result.status).toBe(1);
+    expectNoStackTrace(result);
+    // The bug seen from the user's side: a green line saying the value was
+    // set, over a file that no longer holds it.
+    expect(result.stdout + result.stderr).not.toContain('Set commands.test');
+  });
+
+  it.each(REFUSED)(
+    'leaves the file byte-identical when it refuses %s',
+    (_case, style, value) => {
+      const root = makeProject(blockScalarWithSibling(style));
+      const before = readProjectYaml(root);
+      // Read from the file the test wrote, not typed out here: a literal and a
+      // folded scalar of the same lines hold different strings, and restating
+      // either of them would be this test claiming to know YAML's rules.
+      const untouched = atKey(parseYaml(before), 'commands.test');
+
+      const result = runSet('commands.test', value, root);
+
+      expect(result.status).toBe(1);
+      expect(readProjectYaml(root)).toBe(before);
+      // Stated separately from the bytes: this is the value that went missing,
+      // and it is what the failure output should say when a fix half-works.
+      expect(atKey(parseProjectYamlShowingFile(root), 'commands.test')).toBe(untouched);
+      expect(atKey(parseProjectYamlShowingFile(root), 'commands.lint')).toBe('eslint');
+      expect(existsSync(result.globalConfigFile)).toBe(false);
+    }
+  );
+
+  it.each(REFUSED)('says in one line which key it could not write, refusing %s', (_case, style, value) => {
+    const root = makeProject(blockScalarWithSibling(style));
+
+    const result = runSet('commands.test', value, root);
+
+    // One line, because a refusal the user can act on is a sentence, and a
+    // stack trace or a dump of the document is neither readable nor theirs.
+    const lines = result.stderr.trim().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('commands.test');
+    expect(lines[0]).toMatch(/cannot|could not|unable|refus/i);
+    expect(lines[0]).toMatch(/safe|safely|read back|reads back|round-?trip/i);
+  });
+
+  /**
+   * The neighbours the refusal must NOT swallow.
+   *
+   * The same value in the same style writes correctly when the block scalar
+   * ends the file, and every ordinary value writes correctly either way. A
+   * refusal that covers these is a refusal of block scalars, which is a
+   * different and worse command.
+   */
+  const STILL_WRITTEN: [string, string, string][] = [
+    ['one space over a literal block scalar', '|', ' '],
+    ['two spaces over a literal block scalar', '|', '  '],
+    ['one space over a folded block scalar', '>', ' '],
+    ['two spaces over a folded block scalar', '>', '  '],
+  ];
+
+  it.each(STILL_WRITTEN)(
+    'still writes %s when that block scalar ends the file',
+    (_case, style, value) => {
+      const root = makeProject(blockScalarAtTheEnd(style));
+
+      const result = runSet('commands.test', value, root);
+
+      expect(result.status).toBe(0);
+      expectNoStackTrace(result);
+      expect(atKey(parseProjectYamlShowingFile(root), 'commands.test')).toBe(value);
+      expect(atKey(parseProjectYamlShowingFile(root), 'commands.lint')).toBe('eslint');
+    }
+  );
+
+  it.each(['|', '>'])(
+    'still writes an ordinary value over a %s block scalar with a sibling after it',
+    (style) => {
+      const root = makeProject(blockScalarWithSibling(style));
+
+      const result = runSet('commands.test', 'npm test', root);
+
+      expect(result.status).toBe(0);
+      expectNoStackTrace(result);
+      expect(atKey(parseProjectYamlShowingFile(root), 'commands.test')).toBe('npm test');
+      expect(atKey(parseProjectYamlShowingFile(root), 'commands.lint')).toBe('eslint');
+    }
+  );
+
+  it.each(['|', '>'])(
+    'still writes an empty value over a %s block scalar with a sibling after it',
+    (style) => {
+      // The value that LOOKS like the refused one and is not: an empty string
+      // asked for is an empty string read back, so the write is honest and
+      // has to go through.
+      const root = makeProject(blockScalarWithSibling(style));
+
+      const result = runSet('commands.test', '', root);
+
+      expect(result.status).toBe(0);
+      expectNoStackTrace(result);
+      expect(atKey(parseProjectYamlShowingFile(root), 'commands.test')).toBe('');
+      expect(atKey(parseProjectYamlShowingFile(root), 'commands.lint')).toBe('eslint');
+    }
+  );
+});
+
+/**
+ * A project.yaml whose whole document is not a mapping is reported, not
+ * crashed on.
+ *
+ * The walk down to the key settles a null, a value or a list at every depth
+ * ABOVE the leaf, and never asks what the document itself is. So a file
+ * holding one scalar, or one list, reaches the document interface as a
+ * document with no keys to set - and the library throws its own sentence out
+ * of the bundle, with the frames to match.
+ *
+ * Neither file is exotic. A truncated write, a paste into the wrong file, a
+ * project.yaml someone started as a list of commands: each leaves a file the
+ * user can fix in a second once they are told which file and what is wrong
+ * with it.
+ *
+ * `config unset` already answers both correctly, so it is pinned here beside
+ * them - the fix belongs on the write path and must not reach across.
+ */
+describe('spechub config set on a document that is not a mapping', () => {
+  const NOT_A_MAPPING: [string, string][] = [
+    ['a scalar', 'hello\n'],
+    ['a list', '- one\n- two\n'],
+  ];
+
+  it.each(NOT_A_MAPPING)(
+    'refuses with exit 1 and no stack trace when the document is %s',
+    (_case, body) => {
+      const root = makeProject(body);
+
+      const result = runSet('workflow.spec_sync', 'true', root);
+
+      expect(result.status).toBe(1);
+      // The whole case. Today the library's Error goes uncaught, so the user
+      // reads a bundled line number instead of a sentence about their file.
+      expectNoStackTrace(result);
+    }
+  );
+
+  it.each(NOT_A_MAPPING)('names the file and the problem in one line when the document is %s', (_case, body) => {
+    const root = makeProject(body);
+
+    const result = runSet('workflow.spec_sync', 'true', root);
+
+    const lines = result.stderr.trim().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(join(root, 'spechub', 'project.yaml'));
+    expect(lines[0]).toMatch(/mapping|block|keys|collection|section/i);
+  });
+
+  it.each(NOT_A_MAPPING)('leaves the file byte-identical when the document is %s', (_case, body) => {
+    const root = makeProject(body);
+    const before = readProjectYaml(root);
+
+    const result = runSet('workflow.spec_sync', 'true', root);
+
+    expect(result.status).toBe(1);
+    expect(readProjectYaml(root)).toBe(before);
+    expect(existsSync(result.globalConfigFile)).toBe(false);
+  });
+
+  it.each(NOT_A_MAPPING)(
+    'still reports the key was not set, leaving the file alone, when unset meets %s',
+    (_case, body) => {
+      const root = makeProject(body);
+      const before = readProjectYaml(root);
+
+      const result = runUnset('workflow.spec_sync', root);
+
+      expect(result.status).toBe(0);
+      expectNoStackTrace(result);
+      expect(result.stdout).toContain('was not set');
+      expect(readProjectYaml(root)).toBe(before);
+    }
+  );
+});
+
+/**
+ * A byte-order mark the file arrived with is still there afterwards.
+ *
+ * A leading U+FEFF is not content. It is a mark an editor put at the front of
+ * the file to say how the rest is encoded, and Windows editors write one
+ * without being asked. Dropping it changes byte 0 of a file the user only
+ * asked to set one key in, and every other tool that reads the file reads a
+ * different first byte from then on. Inventing one is the same mistake
+ * pointing the other way, and puts a stray character in front of a document
+ * that was fine.
+ *
+ * Both write paths are pinned, because they meet the mark differently. The
+ * splice carries byte 0 across untouched and keeps it for free. The re-emit
+ * builds its text from the parsed document, which never held the mark at all.
+ */
+describe('spechub config set and unset, a leading byte-order mark', () => {
+  /** U+FEFF, the mark itself. A UTF-8 read decodes its three bytes to this. */
+  const BOM = '﻿';
+
+  it('survives a splice write, which overwrites one value in place', () => {
+    const root = makeProject(BOM + HAND_EDITED_PROJECT);
+
+    const result = runSet('commands.test', 'npm test', root);
+
+    expect(result.status).toBe(0);
+    expect(readProjectYaml(root).startsWith(BOM)).toBe(true);
+    expect(atKey(parseProjectYamlShowingFile(root), 'commands.test')).toBe('npm test');
+  });
+
+  it('survives a fallback write, which re-emits the whole document', () => {
+    // `commands.lint` is a key this fixture does not state, so there is no
+    // old value whose range could be overwritten and the write re-emits.
+    const root = makeProject(BOM + HAND_EDITED_PROJECT);
+
+    const result = runSet('commands.lint', 'npm run lint', root);
+
+    expect(result.status).toBe(0);
+    expect(readProjectYaml(root).startsWith(BOM)).toBe(true);
+    const parsed = parseProjectYamlShowingFile(root);
+    expect(atKey(parsed, 'commands.lint')).toBe('npm run lint');
+    expect(atKey(parsed, 'commands.test')).toBe('npm --prefix cli test');
+  });
+
+  it('survives an unset that re-emits the whole document', () => {
+    // Removing one entry of a flow mapping cannot be done by deleting a line,
+    // so this removal takes the re-emitting path rather than the in-place one.
+    const root = makeProject(
+      BOM + 'commands: { test: "npm --prefix cli test", build: "npm run build" }\n'
+    );
+
+    const result = runUnset('commands.test', root);
+
+    expect(result.status).toBe(0);
+    expect(readProjectYaml(root).startsWith(BOM)).toBe(true);
+    const parsed = parseProjectYamlShowingFile(root);
+    expect(atKey(parsed, 'commands.test')).toBeUndefined();
+    expect(atKey(parsed, 'commands.build')).toBe('npm run build');
+  });
+
+  it('is not invented on a file that never had one', () => {
+    const root = makeProject(HAND_EDITED_PROJECT);
+
+    const result = runSet('commands.lint', 'npm run lint', root);
+
+    expect(result.status).toBe(0);
+    // Anywhere in the file, not only at the front: a mark that is not byte 0
+    // is not a mark at all, just a stray character sitting in the document.
+    expect(readProjectYaml(root)).not.toContain(BOM);
+  });
+});
+
+/**
+ * The write replaces project.yaml rather than emptying it and filling it in.
+ *
+ * `writeFileSync` truncates first and writes second, so a process killed
+ * between the two leaves a project.yaml of zero bytes - the user's comments,
+ * their formatting and every key they had set gone, with no copy anywhere to
+ * put back. Writing a temp file beside it and renaming over the target means
+ * the file on disk is only ever the whole old one or the whole new one.
+ *
+ * Beside it, not elsewhere: a rename across filesystems is not a rename, it
+ * is a copy and a delete, which is the truncating write again under another
+ * name. So the temp file belongs in `spechub/`.
+ *
+ * The two things a temp-and-rename breaks if it is written carelessly get
+ * their own tests below - the mode of the file it replaces, and the refusal
+ * to write a file the user made read-only.
+ */
+describe('spechub config set replaces spechub/project.yaml atomically', () => {
+  // Root ignores the mode bits, so the read-only case has nothing to arrange.
+  const asRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+
+  /** Everything `spechub/` holds after the write, sorted. */
+  function spechubDirEntries(root: string): string[] {
+    return readdirSync(join(root, 'spechub')).sort();
+  }
+
+  it('puts a different file in place, rather than rewriting the one it was given', () => {
+    const root = makeProject(HAND_EDITED_PROJECT);
+    const file = join(root, 'spechub', 'project.yaml');
+    const before = statSync(file).ino;
+
+    const result = runSet('workflow.tdd.strict', 'false', root);
+
+    expect(result.status).toBe(0);
+    // The inode is the evidence, and the only evidence a test can collect
+    // without racing the write: truncating keeps the file it was handed, and
+    // renaming puts a file that was built elsewhere in its place.
+    expect(statSync(file).ino).not.toBe(before);
+    expect(atKey(parseProjectYamlShowingFile(root), 'workflow.tdd.strict')).toBe(false);
+  });
+
+  it('leaves no temp file behind in spechub/ after the write lands', () => {
+    const root = makeProject(HAND_EDITED_PROJECT);
+
+    const result = runSet('workflow.tdd.strict', 'false', root);
+
+    expect(result.status).toBe(0);
+    // A half-written file the user has to find and delete themselves is its
+    // own bug, and one that shows up in their next `git status`.
+    expect(spechubDirEntries(root)).toEqual(['project.yaml']);
+  });
+
+  it('keeps the permission mode the file already had', () => {
+    const root = makeProject(HAND_EDITED_PROJECT);
+    const file = join(root, 'spechub', 'project.yaml');
+    chmodSync(file, 0o640);
+
+    const result = runSet('workflow.tdd.strict', 'false', root);
+
+    expect(result.status).toBe(0);
+    // A temp file is created with whatever the process umask gives it, not
+    // with the mode of the file it is about to replace. Renaming one over a
+    // 0o640 project.yaml silently changes who on the machine can read it.
+    expect(statSync(file).mode & 0o777).toBe(0o640);
+  });
+
+  it.skipIf(asRoot)('still refuses a read-only file, and leaves no temp file behind', () => {
+    const root = makeProject(HAND_EDITED_PROJECT);
+    const file = join(root, 'spechub', 'project.yaml');
+    const before = readProjectYaml(root);
+    chmodSync(file, 0o444);
+
+    try {
+      const result = runSet('workflow.tdd.strict', 'false', root);
+
+      // Renaming over a read-only file SUCCEEDS whenever the directory allows
+      // it, because the mode being checked is the directory's. So a write
+      // that only tries and reports what happened turns this refusal into a
+      // silent write of a file the user locked on purpose - and the check has
+      // to happen before the temp file is built, not after.
+      expect(result.status).toBe(1);
+      expectNoStackTrace(result);
+      expect(result.stderr).toContain(file);
+      expect(readProjectYaml(root)).toBe(before);
+      expect(spechubDirEntries(root)).toEqual(['project.yaml']);
+      expect(statSync(file).mode & 0o777).toBe(0o444);
+    } finally {
+      chmodSync(file, 0o644);
+    }
+  });
+});
+
+/**
+ * A write into a symlinked project.yaml follows the link.
+ *
+ * `spechub/project.yaml` is a symlink whenever one file is shared between
+ * checkouts - kept in a dotfiles directory, or in the main clone with every
+ * worktree linking to it. The link is the only path any command here is
+ * handed, and the file behind it is the one that is edited and tracked.
+ *
+ * Writing a temp file beside the link and renaming over it replaces the LINK.
+ * The user is left with a regular file where their link was, holding the new
+ * value, and the real file still holding the old one - so the thing that
+ * reads the config keeps reading the value the user just changed, and the
+ * command that did it exited 0 with a green line saying it had worked. Every
+ * assertion here is therefore about both ends: the link is still a link, and
+ * the file behind it holds the new value.
+ *
+ * Both write paths are pinned, because they build their text differently and
+ * a fix applied to one is not applied to the other. `unset` too - it writes
+ * the same way, and losing a link there costs the same.
+ */
+describe('spechub config set and unset through a symlinked spechub/project.yaml', () => {
+  /** The project the link points at, parsed. Never read through the link. */
+  function parseTarget(target: string): unknown {
+    return parseYaml(readFileSync(target, 'utf-8'));
+  }
+
+  it('writes through the link on the splice path, which overwrites one value in place', () => {
+    const { root, link, target } = makeSymlinkedProject(HAND_EDITED_PROJECT);
+
+    const result = runSet('commands.test', 'vitest run', root);
+
+    expect(result.status).toBe(0);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(atKey(parseTarget(target), 'commands.test')).toBe('vitest run');
+  });
+
+  it('writes through the link on the fallback path, which re-emits the whole document', () => {
+    // `commands.lint` is a key this fixture does not state, so there is no
+    // old value whose range could be overwritten and the write re-emits.
+    const { root, link, target } = makeSymlinkedProject(HAND_EDITED_PROJECT);
+
+    const result = runSet('commands.lint', 'npm run lint', root);
+
+    expect(result.status).toBe(0);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    const parsed = parseTarget(target);
+    expect(atKey(parsed, 'commands.lint')).toBe('npm run lint');
+    expect(atKey(parsed, 'commands.test')).toBe('npm --prefix cli test');
+  });
+
+  it('removes a key through the link, deleting the line the file states it on', () => {
+    const { root, link, target } = makeSymlinkedProject(HAND_EDITED_PROJECT);
+
+    const result = runUnset('workflow.tdd.strict', root);
+
+    expect(result.status).toBe(0);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    const parsed = parseTarget(target);
+    expect(atKey(parsed, 'workflow.tdd.strict')).toBeUndefined();
+    expect(atKey(parsed, 'workflow.tdd.orchestrator_strict')).toBe(true);
+  });
+
+  it('removes a key through the link on the re-emitting path too', () => {
+    // Removing one entry of a flow mapping cannot be done by deleting a line,
+    // so this removal builds its text the other way and is a second write to
+    // get wrong.
+    const { root, link, target } = makeSymlinkedProject(
+      'commands: { test: "npm --prefix cli test", build: "npm run build" }\n'
+    );
+
+    const result = runUnset('commands.test', root);
+
+    expect(result.status).toBe(0);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    const parsed = parseTarget(target);
+    expect(atKey(parsed, 'commands.test')).toBeUndefined();
+    expect(atKey(parsed, 'commands.build')).toBe('npm run build');
   });
 });
 
@@ -2621,6 +3200,97 @@ describe('spechub config unset, project keys', () => {
   });
 });
 
+/**
+ * A removal that would leave a YAML alias with no anchor is refused, not
+ * crashed out of.
+ *
+ * An anchor and an alias are how a hand-edited file states one value twice -
+ * `test: &t npm test` and `lint: *t`. Remove the key carrying the anchor and
+ * the alias below it points at nothing, so the emitter cannot write the
+ * document out and throws. Left uncaught that reaches the user as a stack
+ * trace naming the YAML library's own frames, about a file they can see and a
+ * removal they asked for.
+ *
+ * The file survives either way - the throw happens while the new text is
+ * being built, before anything is written - so what is wrong is only what the
+ * user is told. Every other refusal this command makes is one red sentence,
+ * and this one has to be as well.
+ */
+describe('spechub config unset when the removal would orphan a YAML alias', () => {
+  /** The anchor name, distinctive enough that finding it in a message means something. */
+  const ANCHOR = 'shared_test_command';
+
+  /** `commands.test` carries the anchor; `commands.lint` is the alias to it. */
+  const ANCHORED_PROJECT = [
+    'commands:',
+    `  test: &${ANCHOR} npm test`,
+    `  lint: *${ANCHOR}`,
+    '',
+  ].join('\n');
+
+  let root: string;
+  let result: ReturnType<typeof runUnset>;
+  let before: string;
+
+  beforeAll(() => {
+    root = makeProject(ANCHORED_PROJECT);
+    before = readProjectYaml(root);
+    result = runUnset('commands.test', root);
+  });
+
+  it('reports the problem rather than crashing out of it', () => {
+    expect(result.status).toBe(1);
+    expectNoStackTrace(result);
+  });
+
+  it('names the alias that would be left pointing at nothing', () => {
+    // The user has to know which of their lines is the obstacle. There is
+    // only one anchor in this file and several ways to spell the sentence, so
+    // the anchor name is the whole assertion.
+    expect(result.stderr).toContain(ANCHOR);
+  });
+
+  it('leaves the file byte-identical', () => {
+    expect(readProjectYaml(root)).toBe(before);
+  });
+});
+
+/**
+ * One row under `project` in `spechub config list --json`.
+ *
+ * `key` is the dotted path `config set` takes, `value` is what the file
+ * states, parsed, and `known` says whether any schema knows that key - false
+ * for exactly the keys `config get` refuses, so a caller can find the rows it
+ * cannot act on without matching prose.
+ */
+interface ConfigListProjectRow {
+  key: string;
+  value: unknown;
+  known: boolean;
+}
+
+/**
+ * The `spechub config list --json` output shape, as touched by this file's
+ * assertions. `host` is the global config's own nesting, reported as it is
+ * stored, and is not rows.
+ *
+ * `project` is an ARRAY, in the file's own order, and not an object keyed by
+ * the dotted path. A file is free to state `workflow.spec_sync: true` as one
+ * literal quoted key AND state the same path nested, and both are rows the
+ * human listing prints. Keyed by the dotted path they collide, and the first
+ * of them is dropped without a word. An array cannot collide, and it carries
+ * the order the human listing already promises.
+ */
+interface ConfigListJson {
+  host?: unknown;
+  project?: ConfigListProjectRow[];
+}
+
+/** Every row `list --json` gives for dotted `key`, in the order it reported them. */
+function projectRows(json: ConfigListJson, key: string): ConfigListProjectRow[] {
+  return (json.project ?? []).filter(row => row.key === key);
+}
+
 describe('spechub config list', () => {
   /** A project stating two keys, in two different blocks. */
   const LISTED_PROJECT = [
@@ -2699,6 +3369,311 @@ describe('spechub config list', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('herdr');
+  });
+
+  /**
+   * A key the file states that no schema knows is listed, and marked.
+   *
+   * `list` reports the file rather than the resolved configuration, so a key
+   * nothing knows is still in the listing: hiding it would make the listing
+   * disagree with the file it is listing, and send the user looking for a
+   * line they can plainly see in their editor. But `config get` refuses that
+   * same key and `config set` will not write it, so a row printed exactly
+   * like its neighbours tells the user those two commands are broken. The
+   * mark is what says the key is the problem.
+   *
+   * `venv` is the case that made this worth doing. The schema knows
+   * `venv.activate` and nothing else under `venv`, so a file stating `venv`
+   * as a leaf states a key `config get` refuses and `config set` will not
+   * write - and the mark is what says so.
+   *
+   * The value here is a real one on purpose. A leaf holding NOTHING - `venv:`
+   * with no value, or `venv: {}` - is the shape the tool's own `unset` leaves
+   * behind, and carries no mark; that case has its own suite below.
+   */
+  describe('a key the file states that no schema knows', () => {
+    /** The value the unknown key holds, spelled once so both modes assert the same string. */
+    const VENV_ACTIVATE = 'source .venv/bin/activate';
+
+    /** A project stating a known key, then an unknown one, then a known one. */
+    const UNKNOWN_KEY_PROJECT = [
+      'workflow:',
+      '  tdd:',
+      '    strict: false',
+      '',
+      `venv: "${VENV_ACTIVATE}"`,
+      '',
+      'commands:',
+      '  test: "npm --prefix cli test"',
+      '',
+    ].join('\n');
+
+    /** The note the human listing puts on a row no schema knows. */
+    const UNKNOWN_MARK = '(unknown key)';
+
+    let root: string;
+    let text: ReturnType<typeof listWithHost>;
+    let json: ConfigListJson;
+
+    beforeAll(() => {
+      root = makeProject(UNKNOWN_KEY_PROJECT);
+      text = listWithHost(root, { orchestrators: { herdr: true } });
+      json = JSON.parse(
+        listWithHost(root, { orchestrators: { herdr: true } }, ['--json']).stdout
+      ) as ConfigListJson;
+    });
+
+    it('exits 0, because an unknown key in the file is not an error to report', () => {
+      expect(text.status).toBe(0);
+    });
+
+    it('keeps the row in the place the file states it, ahead of the key below it', () => {
+      // File order, not sorted order and not known-keys-first: the listing is
+      // read beside the file, and a row that moved is a row the user has to
+      // hunt for.
+      const keys = text.stdout
+        .split('\n')
+        .filter(line => /^(workflow\.|venv|commands\.)/.test(line))
+        .map(line => line.split(' ')[0]);
+      expect(keys).toEqual(['workflow.tdd.strict', 'venv', 'commands.test']);
+    });
+
+    it('marks that row, and still prints the value the file states', () => {
+      const line = lineContaining(text.stdout, 'venv =');
+      expect(line).toBeDefined();
+      expect(line).toContain(UNKNOWN_MARK);
+      expect(line).toContain(VENV_ACTIVATE);
+    });
+
+    it('leaves the rows a schema does know unmarked', () => {
+      // The mark means something only if most rows do not carry it.
+      expect(lineContaining(text.stdout, 'workflow.tdd.strict')).not.toContain(UNKNOWN_MARK);
+      expect(lineContaining(text.stdout, 'commands.test')).not.toContain(UNKNOWN_MARK);
+    });
+
+    it('--json says of every row whether a schema knows its key', () => {
+      // Every row, not only the unmarked ones: a caller that has to tell an
+      // absent field from a false one is reading the shape, not the answer.
+      // Asserted as the whole array, because the rows ARE the answer - a
+      // fourth row nobody asked for is as wrong as a missing field.
+      expect(json.project).toEqual([
+        { key: 'workflow.tdd.strict', value: false, known: true },
+        { key: 'venv', value: VENV_ACTIVATE, known: false },
+        { key: 'commands.test', value: 'npm --prefix cli test', known: true },
+      ]);
+    });
+
+    it('changes nothing about what config get does with that key', () => {
+      // The listing marks the key. It does not start accepting it, and `get`
+      // still has exactly one answer for a key no schema knows.
+      const unknown = runGet('venv', root);
+
+      expect(unknown.status).toBe(1);
+      expect(unknown.stderr).toContain('Unknown config key "venv"');
+      expect(runGet('commands.test', root).status).toBe(0);
+    });
+  });
+
+  /**
+   * A file that states one path twice, once literally and once nested.
+   *
+   * YAML lets a key hold a dot. `"workflow.spec_sync": true` is a mapping key
+   * whose name happens to contain one, and it is a completely different key
+   * from `spec_sync` inside a `workflow` block - which the same file is free
+   * to state as well. Both are lines in the file, so both are rows in a
+   * listing that reports the file.
+   *
+   * They are two rows sharing one dotted path, and that is what an object
+   * keyed by the dotted path cannot hold: the second row overwrites the
+   * first, so the listing loses a line the user can plainly see. The rows are
+   * an array for that reason, and file order comes free with it.
+   *
+   * The literal key is UNKNOWN, however known the path it spells looks.
+   * `config get workflow.spec_sync` walks the blocks and never sees it, so
+   * that key reads as unset while a line stating it sits in the file, and
+   * `config set workflow.spec_sync` writes the nested spelling beside it
+   * rather than changing it. A row nothing can read and nothing will write is
+   * exactly what the mark is for.
+   */
+  describe('a file that states one path as a literal dotted key and again nested', () => {
+    /** The literal key first, the nested spelling second, a third key after both. */
+    const DOTTED_KEY_PROJECT = [
+      '"workflow.spec_sync": true',
+      '',
+      'workflow:',
+      '  spec_sync: false',
+      '',
+      'commands:',
+      '  test: "npm --prefix cli test"',
+      '',
+    ].join('\n');
+
+    /** The note the human listing puts on a row no schema knows. */
+    const UNKNOWN_MARK = '(unknown key)';
+
+    let root: string;
+    let text: ReturnType<typeof listWithHost>;
+    let json: ConfigListJson;
+
+    beforeAll(() => {
+      root = makeProject(DOTTED_KEY_PROJECT);
+      text = listWithHost(root, { orchestrators: { herdr: true } });
+      json = JSON.parse(
+        listWithHost(root, { orchestrators: { herdr: true } }, ['--json']).stdout
+      ) as ConfigListJson;
+    });
+
+    it('exits 0, because a file stating a path twice is not an error to report', () => {
+      expect(text.status).toBe(0);
+    });
+
+    it('--json keeps both rows, with the value each of them states', () => {
+      // Two rows, not one: the file states two lines and the listing reports
+      // the file. Which value wins is a question for `get`, not for a listing.
+      expect(projectRows(json, 'workflow.spec_sync').map(row => row.value)).toEqual([true, false]);
+    });
+
+    it("--json reports the rows in the file's own order", () => {
+      // The same order the human listing prints, and the order the user reads
+      // beside their editor. Asserted as the whole array, so a row that moved
+      // or a row that vanished both show here.
+      expect(json.project).toEqual([
+        { key: 'workflow.spec_sync', value: true, known: false },
+        { key: 'workflow.spec_sync', value: false, known: true },
+        { key: 'commands.test', value: 'npm --prefix cli test', known: true },
+      ]);
+    });
+
+    it('--json calls the literal key unknown and the nested one known', () => {
+      // The two rows share a dotted path and differ on this. A caller looking
+      // for the rows it cannot act on gets the literal one and nothing else.
+      expect(projectRows(json, 'workflow.spec_sync').map(row => row.known)).toEqual([false, true]);
+    });
+
+    it('prints both rows in text mode as well, marking only the literal one', () => {
+      const lines = text.stdout.split('\n').filter(line => line.startsWith('workflow.spec_sync '));
+
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toContain(UNKNOWN_MARK);
+      expect(lines[1]).not.toContain(UNKNOWN_MARK);
+    });
+
+    it('answers config get out of the nested spelling, which is why the other is unknown', () => {
+      // The reason the literal row carries the mark, stated as behaviour: the
+      // key `get` answers with is the nested one, whatever the literal line
+      // above it says.
+      const read = runGet('workflow.spec_sync', root);
+
+      expect(read.status).toBe(0);
+      expect(read.stdout.trim()).toBe('false');
+    });
+  });
+
+  /**
+   * A block header the tool's own `unset` left behind is not an unknown key.
+   *
+   * Removing a block's last key removes the key, not the block: `workflow:`
+   * stays, holding nothing, and every reader takes the default for everything
+   * under it. That is the documented behaviour, and it is the tool that wrote
+   * the line.
+   *
+   * A listing that then prints `workflow = null (unknown key)` in yellow is
+   * the tool warning the user about its own residue, and sending them to look
+   * for a mistake in a file where there is none. So a row holding nothing at
+   * a path some key is stated UNDER counts as known, and carries no mark. A
+   * row holding nothing at a path nothing is stated under is a different
+   * thing entirely - nobody wrote it by accident, and it keeps the mark.
+   */
+  describe('a row left holding nothing at a path a schema knows keys under', () => {
+    /** The note the human listing puts on a row no schema knows. */
+    const UNKNOWN_MARK = '(unknown key)';
+
+    /**
+     * List `root`, reading both modes off one arrangement.
+     *
+     * Each case below states its own file, so the arrangement cannot be
+     * shared, and each still wants the text row and the JSON row from it.
+     */
+    function listBothWays(root: string): { text: string; json: ConfigListJson } {
+      const host: HostDeclarations = { orchestrators: { herdr: true } };
+      const text = listWithHost(root, host);
+      expect(text.status).toBe(0);
+      return {
+        text: text.stdout,
+        json: JSON.parse(listWithHost(root, host, ['--json']).stdout) as ConfigListJson,
+      };
+    }
+
+    /** The listed line for dotted `key`, insisting the row was printed at all. */
+    function rowLine(text: string, key: string): string {
+      const line = lineContaining(text, `${key} =`);
+      expect(line, `the listing prints no row for ${key}`).toBeDefined();
+      return line as string;
+    }
+
+    it('leaves no mark on the block header an unset emptied', () => {
+      const root = makeProject(
+        ['workflow:', '  spec_sync: true', '', 'commands:', '  test: "npm test"', ''].join('\n')
+      );
+      expect(runUnset('workflow.spec_sync', root).status).toBe(0);
+
+      const { text, json } = listBothWays(root);
+
+      // The removal leaves `workflow:` standing, so there is a row to report.
+      // What it must not carry is the warning.
+      expect(rowLine(text, 'workflow')).not.toContain(UNKNOWN_MARK);
+      expect(projectRows(json, 'workflow')).toEqual([{ key: 'workflow', value: null, known: true }]);
+    });
+
+    it('leaves no mark on an empty map either', () => {
+      // `workflow: {}` states the same nothing in the other spelling, and a
+      // file that arrived from an editor or a generator may hold it.
+      const root = makeProject(
+        ['workflow: {}', '', 'commands:', '  test: "npm test"', ''].join('\n')
+      );
+
+      const { text, json } = listBothWays(root);
+
+      expect(rowLine(text, 'workflow')).not.toContain(UNKNOWN_MARK);
+      expect(projectRows(json, 'workflow')).toEqual([{ key: 'workflow', value: {}, known: true }]);
+    });
+
+    it('leaves no mark on an emptied block nested inside another', () => {
+      // `workflow.handoff` is a path several keys are stated under, and the
+      // same removal empties it. A rule written only for a top-level block
+      // still marks this one.
+      const root = makeProject(
+        [
+          'workflow:',
+          '  handoff:',
+          '    ack_turns: 5',
+          '',
+          'commands:',
+          '  test: "npm test"',
+          '',
+        ].join('\n')
+      );
+      expect(runUnset('workflow.handoff.ack_turns', root).status).toBe(0);
+
+      const { text, json } = listBothWays(root);
+
+      expect(rowLine(text, 'workflow.handoff')).not.toContain(UNKNOWN_MARK);
+      expect(projectRows(json, 'workflow.handoff')).toEqual([
+        { key: 'workflow.handoff', value: null, known: true },
+      ]);
+    });
+
+    it('still marks a key holding nothing that no schema knows a key under', () => {
+      // The mark has to keep meaning something. `plugins` is not a path any
+      // key is stated under, so nothing the tool does could have left it, and
+      // a user who typed it wants to be told.
+      const root = makeProject(['plugins:', '', 'commands:', '  test: "npm test"', ''].join('\n'));
+
+      const { text, json } = listBothWays(root);
+
+      expect(rowLine(text, 'plugins')).toContain(UNKNOWN_MARK);
+      expect(projectRows(json, 'plugins')).toEqual([{ key: 'plugins', value: null, known: false }]);
+    });
   });
 });
 

@@ -6,6 +6,10 @@ and its spacing. Before writing, it parses what it built and compares that data
 against what the YAML document interface would have produced. The two must
 agree, or the write falls back to the document interface.
 
+The writer verifies that fallback the same way. It parses the emitted text and
+compares it against the same data. A write neither path can verify refuses with
+exit 1 and leaves the file byte for byte as it was.
+
 The comparison covers the whole file, not the key that changed.
 
 ## Considered options
@@ -36,3 +40,9 @@ already been wrong four times.
 
 Do not narrow it to the changed key on the grounds that no test covers the
 difference. No test can.
+
+The document interface was the trusted baseline until a fifth shape broke it.
+A whitespace-only value over a block scalar with a sibling key after it emitted
+a content line no parser reads back. The value returned as the empty string,
+behind exit 0. The splice refused that write correctly and handed it to a
+fallback nobody checked. The writer checks both paths now.

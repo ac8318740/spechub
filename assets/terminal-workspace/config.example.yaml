@@ -122,6 +122,14 @@ yazi:
   browser_key: "b"
   # Previews markdown as source, with line numbers down the left.
   line_numbers_key: "#"
+  # Sends the hovered file to the machine you sit at, over Tailscale Taildrop.
+  # Set it to that machine's Tailscale node name, as `tailscale status` on this
+  # machine spells it. Empty writes no key at all.
+  # Both machines must sit on one tailnet under one Tailscale user account,
+  # because Taildrop refuses to cross either boundary.
+  download_target: ""
+  # The key that sends it. Only read when download_target is set.
+  download_key: "D"
   show_hidden: true
 
 markdown:

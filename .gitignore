@@ -1,2 +1,6 @@
 # The CLI test run writes a vitest cache here, and no package.json lives at the root.
 node_modules/
+
+# `spechub config set` writes its replacement beside the file and renames over
+# it. The cleanup runs on a thrown error, so only a killed process leaves one.
+spechub/*.tmp

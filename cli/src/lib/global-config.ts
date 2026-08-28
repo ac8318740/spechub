@@ -91,10 +91,38 @@ export function parseBooleanWord(key: string, raw: string): boolean {
   const normalized = raw.toLowerCase();
   if (TRUE_VALUES.includes(normalized)) return true;
   if (FALSE_VALUES.includes(normalized)) return false;
-  throw new ConfigValidationError(
-    `Invalid value "${raw}" for ${key}. Expected a boolean: ` +
-      `${TRUE_VALUES.join('/')} or ${FALSE_VALUES.join('/')}`
+  throw invalidValue(
+    key,
+    raw,
+    `Expected a boolean: ${TRUE_VALUES.join('/')} or ${FALSE_VALUES.join('/')}`
   );
+}
+
+/**
+ * Refuse `raw` for `key`, naming what the key expected instead.
+ *
+ * The opening half of every rejection either schema gives, so a user who
+ * learns to read one reads the rest the same way and a reader looking for the
+ * wording finds one place holding it.
+ */
+export function invalidValue(key: string, raw: string, expected: string): ConfigValidationError {
+  return new ConfigValidationError(`Invalid value "${raw}" for ${key}. ${expected}`);
+}
+
+/**
+ * Refuse `raw` for the enum key `key`, naming every value it does accept.
+ *
+ * Both schemas hold enum keys and both owe the user this sentence. It is
+ * composed here, below both of them, because two sites composing it is two
+ * wordings waiting to drift - and the user typing a value into either one is
+ * the same user.
+ */
+export function invalidEnumValue(
+  key: string,
+  raw: string,
+  values: readonly string[]
+): ConfigValidationError {
+  return invalidValue(key, raw, `Allowed values: ${values.join(', ')}`);
 }
 
 /** The axis `key` names, or undefined when it names no axis. */
@@ -161,11 +189,7 @@ export function parseValue(key: string, raw: string): unknown {
   const axis = hostAxis(key) as HostAxis;
 
   if (axis.kind === 'enum') {
-    if (!axis.values.includes(raw)) {
-      throw new ConfigValidationError(
-        `Invalid value "${raw}" for ${key}. Allowed values: ${axis.values.join(', ')}`
-      );
-    }
+    if (!axis.values.includes(raw)) throw invalidEnumValue(key, raw, axis.values);
     return raw;
   }
 
