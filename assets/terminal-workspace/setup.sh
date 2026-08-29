@@ -2,7 +2,7 @@
 # SpecHub terminal workspace setup.
 #   setup.sh status     what is installed and enabled
 #   setup.sh apply      install and configure everything enabled in the config
-#   setup.sh disable <herdr|delta|diffnav|gh_dash|tuicr>
+#   setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|tuicr>
 #   setup.sh uninstall  remove every managed block, keep the binaries
 #
 # Idempotent. Only ever edits between managed markers, so hand-written config
@@ -38,7 +38,7 @@ arch_supported() {
   case "$(uname -m)" in
     x86_64|amd64) return 0 ;;
     *) say "prebuilt binaries are x86_64 only, and this is $(uname -m)"
-       say "install herdr, delta, and diffnav yourself, then run apply again"
+       say "install herdr, delta, diffnav, and lazygit yourself, then run apply again"
        return 1 ;;
   esac
 }
@@ -1766,7 +1766,7 @@ apply_herdr() {
   have herdr || { say "herdr not installed, skipping keymap"; return 0; }
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
   local mod wt diffkey dashkey filekey filetabkey difftabkey dashtabkey
-  local pickkey picktabkey
+  local pickkey picktabkey gitkey gittabkey
   mod=$(cfg_get herdr.chord_modifier alt)
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
   # f, not d: Windows Terminal keeps alt+shift+d for "duplicate pane", so the
@@ -1779,16 +1779,19 @@ apply_herdr() {
   dashtabkey=$(cfg_get gh_dash.tab_key "alt+shift+i")
   pickkey=$(cfg_get diffnav.pick_key "alt+x")
   picktabkey=$(cfg_get diffnav.pick_tab_key "alt+shift+x")
+  gitkey=$(cfg_get lazygit.popup_key "alt+g")
+  gittabkey=$(cfg_get lazygit.tab_key "alt+shift+g")
   [ "$(cfg_get diffnav.enabled true)" = "true" ] \
     || { diffkey=""; difftabkey=""; pickkey=""; picktabkey=""; }
   [ "$(cfg_get gh_dash.enabled true)" = "true" ] || { dashkey=""; dashtabkey=""; }
   [ "$(cfg_get yazi.enabled true)"    = "true" ] || { filekey=""; filetabkey=""; }
+  [ "$(cfg_get lazygit.enabled true)" = "true" ] || { gitkey=""; gittabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
 (mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey,
- pickkey, picktabkey, begin, end) = os.environ["SPECHUB_ARGS"].split("|")
+ pickkey, picktabkey, gitkey, gittabkey, begin, end) = os.environ["SPECHUB_ARGS"].split("|")
 
 # key, command, description, herdr custom-command type, popup size.
 # type "shell" takes no size: herdr rejects width/height on a non-popup.
@@ -1802,6 +1805,9 @@ CUSTOM = [
     (dashtabkey, "spechub-herdr-tab dash spechub-dash", "PR dashboard (tab)", "shell", None),
     (filekey,    "yazi",                          "file tree",          "popup", "95%"),
     (filetabkey, "spechub-herdr-tab yazi yazi",         "file tree (tab)",    "shell", None),
+    (gitkey,     "lazygit",                       "git: stage, commit, push", "popup", "90%"),
+    (gittabkey,  "spechub-herdr-tab lazygit lazygit",
+                                                  "git: stage, commit, push (tab)", "shell", None),
 ]
 
 def custom_blocks():
@@ -1837,12 +1843,18 @@ if mod != "none":
         # switch_workspace below can have the plain digits.
         f'switch_tab = "prefix+{m}+1..9"',
         f'toggle_sidebar = ["prefix+b", "{m}+s"]',
-        f'goto = ["prefix+g", "{m}+g"]',
+        # g belongs to git only when lazygit is on. alt+g is lazygit and
+        # alt+shift+g is its tab, so goto moves off the letter on both layers:
+        # prefix+g one key away from alt+g reads as the same thing. With
+        # lazygit off, nothing wants the letter and goto keeps it.
+        ('goto = "prefix+t"' if gitkey else f'goto = ["prefix+g", "{m}+g"]'),
         f'zoom = ["prefix+z", "{m}+z"]',
         f'last_pane = "{m}+a"',
         f'new_tab = ["prefix+c", "{m}+c"]',
         f'new_workspace = ["prefix+shift+n", "{m}+w"]',
-        f'new_worktree = ["prefix+shift+g", "{m}+r"]',
+        # Also off g, for the same reason, and back on it when lazygit is off.
+        (f'new_worktree = "{m}+r"' if gitkey
+         else f'new_worktree = ["prefix+shift+g", "{m}+r"]'),
         f'split_vertical = ["prefix+v", "{m}+e"]',
         f'split_horizontal = ["prefix+minus", "{m}+minus"]',
     ]
@@ -2264,12 +2276,12 @@ PY
   # [mgr], which is one key that TOML forbids declaring twice. Only the second
   # collides with the entry below, and telling them apart takes the text - both
   # spellings parse to the same list.
-  SPECHUB_ARGS="$(cfg_get yazi.browser_key "b")|$(cfg_get yazi.line_numbers_key "#")|$(cfg_get yazi.download_key "D")|$(cfg_get yazi.download_target "")|$BEGIN|$END" \
+  SPECHUB_ARGS="$(cfg_get yazi.browser_key "b")|$(cfg_get yazi.line_numbers_key "#")|$(cfg_get yazi.download_key "D")|$(cfg_get yazi.download_target "")|$(cfg_get yazi.edit_key "e")|$BEGIN|$END" \
     py "$HOME/.config/yazi/keymap.toml" <<'PY'
 import os, re, sys
 
 path = sys.argv[1]
-key, numkey, dlkey, dltarget, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+key, numkey, dlkey, dltarget, editkey, begin, end = os.environ["SPECHUB_ARGS"].split("|")
 text = open(path).read() if os.path.isfile(path) else ""
 # Drop any previous managed region, both to stay idempotent and so what is
 # left to inspect below is exactly the keymap the user wrote.
@@ -2326,6 +2338,18 @@ if not claimed(text):
         "run = [ 'shell --block -- spechub-md --toggle-line-numbers', 'peek --force' ]\n"
         'desc = "Preview markdown as source with line numbers"'
     )
+    # `e` edits, everywhere. tuicr's diff and file tree both put the editor on
+    # `e`, so yazi matching it means one key means edit across the workspace.
+    # `o` is left alone: it opens by rule, which for markdown is the reader.
+    #
+    # ${EDITOR:-vi} rather than a fixed editor, the same expansion the opener
+    # in yazi.toml uses, so both paths land in whatever the user actually runs.
+    parts.append(
+        "[[mgr.prepend_keymap]]\n"
+        f'on = "{editkey}"\n'
+        """run = 'shell --block -- ${EDITOR:-vi} "%h"'\n"""
+        'desc = "Edit in $EDITOR"'
+    )
     # Taildrop is Tailscale's file send. It is the one route off a headless
     # machine that needs nothing installed on the machine the user sits at,
     # and no inbound port there either.
@@ -2355,7 +2379,8 @@ PY
     say "yazi: your keymap.toml already sets mgr.prepend_keymap as an inline"
     say "     array, which these bindings cannot sit beside. Add them there"
     say "     yourself:  shell --block -- spechub-md --browser \"%h\""
-    say "     and:       [ 'shell --block -- spechub-md --toggle-line-numbers', 'peek --force' ]" ;;
+    say "     and:       [ 'shell --block -- spechub-md --toggle-line-numbers', 'peek --force' ]"
+    say "     and:       shell --block -- \${EDITOR:-vi} \"%h\"" ;;
   esac
   # The download key is written from the config alone, so it can be wrong in
   # three ways the config cannot see. Name whichever one holds, rather than
@@ -2532,7 +2557,7 @@ PY
 case "$ACTION" in
   status)
     echo "config: $CFG $([ -f "$CFG" ] && echo '(found)' || echo '(missing, using defaults)')"
-    for t in herdr delta diffnav fzf tuicr yazi glow mermaid-ascii gh; do
+    for t in herdr delta diffnav fzf lazygit tuicr yazi glow mermaid-ascii gh; do
       case "$t" in
         gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; fzf) k=diffnav ;; *) k="$t" ;;
       esac
@@ -2599,6 +2624,7 @@ case "$ACTION" in
     [ "$(cfg_get diffnav.enabled true)" = "true" ] && install_binary diffnav dlvhdr/diffnav Linux_x86_64
     # fzf drives the comparison picker behind spechub-diff pick.
     [ "$(cfg_get diffnav.enabled true)" = "true" ] && install_binary fzf junegunn/fzf linux_amd64
+    [ "$(cfg_get lazygit.enabled true)" = "true" ] && install_binary lazygit jesseduffield/lazygit linux_x86_64
     write_helpers
     [ "$(cfg_get tuicr.enabled true)"   = "true" ] && apply_tuicr
     apply_yazi
@@ -2611,7 +2637,7 @@ case "$ACTION" in
     echo "done. open a herdr session and press prefix+? to see the keymap"
     ;;
   disable)
-    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|tuicr>"
+    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|tuicr>"
     comp="${2:?$DISABLE_USAGE}"
     case "$comp" in
       delta) for k in core.pager interactive.diffFilter delta.navigate delta.line-numbers; do
@@ -2629,7 +2655,7 @@ if os.path.isfile(p):
 PY
         say "managed block removed from herdr config"
         say "now set herdr.enabled: false in $CFG so apply does not restore it" ;;
-      diffnav|gh_dash|tuicr)
+      diffnav|gh_dash|lazygit|tuicr)
         # Only this component's popup goes away. Rebuild the managed block so
         # the rest of the keymap survives.
         require_yaml

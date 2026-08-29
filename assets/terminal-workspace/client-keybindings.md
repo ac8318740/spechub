@@ -37,11 +37,12 @@ and do not touch the remote configuration.
 | `alt+x` / `alt+shift+x` | diff comparison picker, popup and tab |
 | `alt+i` / `alt+shift+i` | pull request dashboard, popup and tab |
 | `alt+y` / `alt+shift+y` | file manager, popup and tab |
+| `alt+g` / `alt+shift+g` | git TUI, popup and tab |
 | `alt+h` `alt+j` `alt+k` `alt+l` | move between panes |
 | `alt+left` / `alt+right` | previous and next tab |
 | `alt+up` / `alt+down` | previous and next workspace |
 | `alt+1` ... `alt+9` | jump to an agent |
-| `alt+c` `alt+e` `alt+minus` `alt+z` `alt+s` `alt+g` `alt+a` `alt+n` `alt+u` `alt+w` `alt+r` | new tab, splits, zoom, sidebar, goto, last pane, agent and workspace navigation |
+| `alt+c` `alt+e` `alt+minus` `alt+z` `alt+s` `alt+a` `alt+n` `alt+u` `alt+w` `alt+r` | new tab, splits, zoom, sidebar, last pane, agent and workspace navigation |
 
 A workspace is one herdr container holding tabs and panes.
 

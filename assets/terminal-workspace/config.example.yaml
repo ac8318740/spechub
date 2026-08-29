@@ -109,6 +109,14 @@ tuicr:
   fork: "https://github.com/ac8318740/tuicr"
   fork_branch: "local/daily"
 
+lazygit:
+  enabled: true
+  # A git TUI: stage with space, commit with c, amend with A, push with P.
+  # g is reserved for it, so herdr's goto sits on prefix+t instead.
+  popup_key: "alt+g"
+  # Same tool, a new tab instead of a popup.
+  tab_key: "alt+shift+g"
+
 yazi:
   enabled: true
   # A file manager. Markdown renders live in the preview pane through
@@ -118,6 +126,9 @@ yazi:
   popup_key: "alt+y"
   # Opens a real tab instead.
   tab_key: "alt+shift+y"
+  # Opens the hovered file in $EDITOR. tuicr puts the editor on the same key
+  # in both its panels, so one key means edit across the workspace.
+  edit_key: "e"
   # Sends the hovered file to your own browser.
   browser_key: "b"
   # Previews markdown as source, with line numbers down the left.

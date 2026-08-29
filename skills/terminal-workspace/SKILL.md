@@ -1,6 +1,6 @@
 ---
 name: terminal-workspace
-description: "Install and configure the optional terminal workspace, which runs several coding agents side by side in one terminal. It installs three tools the user drives – herdr, gh-dash and diffnav – plus five that support them and two helpers of SpecHub's own. One YAML file holds every config. Use when the user asks to set up parallel agents in the terminal, or mentions herdr, gh-dash, diffnav or yazi. Use it too when the user wants agents that keep running after they close the terminal, or asks to turn any of these on or off. Every component toggles on its own, and every change is reversible."
+description: "Install and configure the optional terminal workspace, which runs several coding agents side by side in one terminal. It installs four tools the user drives – herdr, gh-dash, diffnav and lazygit – plus five that support them and two helpers of SpecHub's own. One YAML file holds every config. Use when the user asks to set up parallel agents in the terminal, or mentions herdr, gh-dash, diffnav or yazi. Use it too when the user wants agents that keep running after they close the terminal, or asks to turn any of these on or off. Every component toggles on its own, and every change is reversible."
 argument-hint: "[status | apply | disable <component> | uninstall]"
 disable-model-invocation: true
 ---
@@ -48,19 +48,19 @@ flowchart TD
 | Copy, open or download fails          | section 7 |
 | Turn one component off                | section 8 |
 
-## 1. Eight components, installed for a user account and not for a project
+## 1. Nine components, installed for a user account and not for a project
 
-*Eight config components install ten tools. herdr holds the terminals, and the rest read diffs, pull requests and files.*
+*Nine config components install eleven tools. herdr holds the terminals, and the rest read diffs, pull requests and files, and commit the result.*
 
 This is **machine-level, not per-project**. It installs binaries and writes
 keybindings for the user account, so it does not belong in
 `spechub/project.yaml`.
 
 Count components when you mean config keys, and tools when you mean binaries.
-The config holds eight component sections, plus an `enabled` master switch
-above them. Those eight sections install ten tools between them:
+The config holds nine component sections, plus an `enabled` master switch
+above them. Those nine sections install eleven tools between them:
 
-- Three tools the user drives day to day: herdr, gh-dash and diffnav. tuicr joins them once a review starts
+- Four tools the user drives day to day: herdr, gh-dash, diffnav and lazygit. tuicr joins them once a review starts
 - Five tools that support those three: delta, tuicr, yazi, mermaid-ascii and glow
 - Two helpers of SpecHub's own: spechub-md, and the spechub-clip and spechub-open pair
 
@@ -71,6 +71,7 @@ above them. Those eight sections install ten tools between them:
 | diffnav | A diff viewer with a file tree, on one key. | `diffnav.enabled` |
 | delta | The diff renderer git pages through. | `delta.enabled` |
 | tuicr | Reviews a pull request inside the terminal. | `tuicr.enabled` |
+| lazygit | Stages, commits, amends and pushes, on one key. | `lazygit.enabled` |
 | yazi | A file manager, with markdown drawn live by spechub-md. One key sends the hovered file to the machine the user sits at. | `yazi.enabled` |
 | markdown | Markdown with its mermaid diagrams drawn as text, or served to a browser. Installs spechub-md, mermaid-ascii and glow. | `markdown.enabled` |
 | remote | Copy and open, on a machine with no display of its own. Installs spechub-clip and spechub-open. | `remote.enabled` |
@@ -83,8 +84,19 @@ The two files this skill works with:
 - **Config**: `~/.config/spechub/terminal-workspace.yaml`, copied from `assets/terminal-workspace/config.example.yaml`
 - **Script**: `assets/terminal-workspace/setup.sh` in this plugin
 
-Background and full key tables:
+The keys, on one page: [docs/terminal-workspace-keys.md](../../docs/terminal-workspace-keys.md).
+
+Background and why each piece is there:
 [docs/terminal-workspace.md](../../docs/terminal-workspace.md).
+
+### 1.1. `g` belongs to git, and `e` means edit
+
+The setup reserves two letters across the whole workspace, so the same key does
+the same thing wherever the user is standing:
+
+- `alt+g` opens lazygit and `alt+shift+g` opens it in a tab, so herdr's `goto` sits on `prefix+t` and `new_worktree` keeps only its chord
+- `e` opens `$EDITOR` in yazi and in both of tuicr's panels, which is why tuicr's file tree filters are `x` and `X`
+- diffnav is the exception, because it spends `e` on its file tree and puts the editor on `o`
 
 ## 2. Run `status` first, always
 
@@ -436,7 +448,7 @@ empty.
 *`disable` undoes one component. `uninstall` undoes the managed config. Neither removes a binary.*
 
 ```bash
-bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash, tuicr
+bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash, lazygit, tuicr
 ```
 
 `disable` takes those five components and no others. For `diffnav`, `gh_dash`
