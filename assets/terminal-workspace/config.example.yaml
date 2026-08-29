@@ -124,6 +124,22 @@ lazygit:
   # Same tool, a new tab instead of a popup.
   tab_key: "alt+shift+g"
 
+neovim:
+  # The one component that is off by default, because it writes into a neovim
+  # config you built yourself. Every other one owns its files outright.
+  enabled: false
+  # LazyVim marks an unsaved buffer by recolouring the filename and nothing
+  # else, so a glance at the statusline cannot tell you a buffer is modified.
+  # Turning this on writes ~/.config/nvim/lua/plugins/spechub.lua, a whole
+  # file of spechub's own, which appends a dot to the statusline for a
+  # modified buffer. It never edits a file you wrote, and
+  # `setup.sh disable neovim` deletes it again.
+  # Skipped on a machine with no LazyVim config, because the dot is appended
+  # to LazyVim's own lualine section.
+  #
+  # The colour of the dot. The default is the catppuccin red.
+  unsaved_dot_color: "#f38ba8"
+
 yazi:
   enabled: true
   # A file manager. Markdown renders live in the preview pane through

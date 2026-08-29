@@ -132,14 +132,17 @@ What `uninstall` removes:
 - It unsets the delta git settings
 - It deletes the helper scripts
 - It removes the keybindings it wrote into gh-dash
+- It deletes `~/.config/nvim/lua/plugins/spechub.lua`, a file it wrote whole
 - Your own settings in those files survive, and so does every tool binary
 
 What the config holds:
 
 - The script reads `~/.config/spechub/terminal-workspace.yaml`, which the skill copies from `assets/terminal-workspace/config.example.yaml`
-- The config holds nine components, each with its own `enabled` key
+- The config holds ten components, each with its own `enabled` key
     - You turn a part off there and run `apply` again
-- Seven components name a tool: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, `lazygit`, and `yazi`
+- Seven components name a tool this setup installs: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, `lazygit`, and `yazi`
+- `neovim` names an editor you installed yourself, and writes one file into its config
+    - It is the only component that starts off, and section 3.4 says why
 - The other two name a feature
     - `markdown` covers `spechub-md` with mermaid-ascii and glow
     - `remote` covers the clipboard and browser helpers
@@ -261,6 +264,25 @@ On a machine where you did set it true:
 - Re-run `apply` once you do switch
 - Check the merged key names first
     - The review can rename them
+
+### 3.4. A dot for unsaved changes in LazyVim
+
+*LazyVim marks a modified buffer by recolouring the filename and nothing else. Set `neovim.enabled: true` to append a dot to the statusline instead.*
+
+- LazyVim's `pretty_path` component sets `modified_sign = ""`, so the only signal is colour
+    - It sets `modified_hl = "MatchParen"`, which recolours the filename you are already looking at
+    - You cannot tell a saved buffer from an unsaved one at a glance
+- `apply` writes `~/.config/nvim/lua/plugins/spechub.lua`, which appends a lualine component to `lualine_c`
+    - LazyVim loads every file under `lua/plugins`, so a file of our own is a complete plugin spec
+    - The dot is `●` in catppuccin red, and `neovim.unsaved_dot_color` changes the colour
+- This is the only component that starts off, because a neovim config is one you built
+    - Every other component owns its files outright, or edits a marked region in a config that invites one
+- It writes one whole file and never edits one of yours
+    - `setup.sh disable neovim` deletes that file, and so does `uninstall`
+    - Neither one touches a `spechub.lua` you wrote by hand
+- `apply` skips a machine with no LazyVim config, because the dot goes into LazyVim's own lualine section
+    - `apply` says so rather than writing a file that does nothing
+- Delete your own copy of this override first, or the statusline draws two dots
 
 ## 4. How you attach
 

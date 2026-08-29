@@ -2,7 +2,7 @@
 # SpecHub terminal workspace setup.
 #   setup.sh status     what is installed and enabled
 #   setup.sh apply      install and configure everything enabled in the config
-#   setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|tuicr>
+#   setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|neovim|tuicr>
 #   setup.sh uninstall  remove every managed block, keep the binaries
 #
 # Idempotent. Only ever edits between managed markers, so hand-written config
@@ -19,6 +19,10 @@ BIN="${SPECHUB_TW_BIN:-$HOME/.local/bin}"
 PATH="$BIN:$HOME/.local/bin:$PATH"
 HERDR_CFG="$HOME/.config/herdr/config.toml"
 GHDASH_CFG="$HOME/.config/gh-dash/config.yml"
+# LazyVim loads every file under lua/plugins, so a file of our own is a
+# complete plugin spec. Nothing of the user's is edited to install it.
+NVIM_PLUGIN="$HOME/.config/nvim/lua/plugins/spechub.lua"
+NVIM_MARK="Written by spechub terminal-workspace"
 BEGIN="# >>> spechub terminal-workspace >>>"
 END="# <<< spechub terminal-workspace <<<"
 ACTION="${1:-status}"
@@ -2446,6 +2450,57 @@ apply_markdown() {
   have chafa || say "optional: apt install chafa, to draw images as text"
 }
 
+# The plugin file's name is ours by convention alone, and the directory around
+# it is the user's. A file of that name this script did not write is theirs,
+# so apply must not overwrite it and disable must not delete it. It says so
+# where it refuses, so both paths report it the same way.
+nvim_ours() {
+  [ ! -e "$NVIM_PLUGIN" ] && return 0
+  grep -q "$NVIM_MARK" "$NVIM_PLUGIN" 2>/dev/null && return 0
+  say "neovim: $NVIM_PLUGIN was written by hand, left alone"
+  return 1
+}
+
+apply_neovim() {
+  # The one component that is off unless asked for. Every other one writes
+  # files this setup owns end to end, or a marked region inside a config that
+  # invites one. A neovim config is neither: the user built it, so this waits.
+  [ "$(cfg_get neovim.enabled false)" = "true" ] || return 0
+  # The override appends to LazyVim's own lualine section, so it means nothing
+  # on a neovim config that is not LazyVim. Two markers, because a LazyVim
+  # config that has never been opened has downloaded no plugins yet.
+  if ! grep -q LazyVim "$HOME/.config/nvim/lua/config/lazy.lua" 2>/dev/null \
+     && [ ! -d "$HOME/.local/share/nvim/lazy/LazyVim" ]; then
+    say "neovim: no LazyVim config on this machine, unsaved dot not written"
+    return 0
+  fi
+  nvim_ours || return 0
+  local dot; dot="$(cfg_get neovim.unsaved_dot_color '#f38ba8')"
+  mkdir -p "$(dirname "$NVIM_PLUGIN")"
+  cat > "$NVIM_PLUGIN" <<H
+-- $NVIM_MARK. Remove it with: setup.sh disable neovim
+--
+-- LazyVim marks an unsaved buffer by recolouring the filename and nothing
+-- else, because its pretty_path component sets modified_sign = "". A glance
+-- at the statusline then cannot tell a saved buffer from an unsaved one.
+-- This appends a dot to the same section, which can.
+return {
+  {
+    "nvim-lualine/lualine.nvim",
+    opts = function(_, opts)
+      table.insert(opts.sections.lualine_c, {
+        function()
+          return vim.bo.modified and "●" or ""
+        end,
+        color = { fg = "$dot" },
+      })
+    end,
+  },
+}
+H
+  say "neovim: unsaved-changes dot written to $NVIM_PLUGIN"
+}
+
 apply_delta() {
   have delta || { say "delta not installed, skipping git pager"; return 0; }
   [ "$(cfg_get delta.set_git_pager true)" = "true" ] || { say "delta: git pager left alone"; return 0; }
@@ -2581,12 +2636,18 @@ PY
 case "$ACTION" in
   status)
     echo "config: $CFG $([ -f "$CFG" ] && echo '(found)' || echo '(missing, using defaults)')"
-    for t in herdr delta diffnav fzf lazygit tuicr yazi glow mermaid-ascii gh; do
+    for t in herdr delta diffnav fzf lazygit tuicr yazi glow mermaid-ascii gh nvim; do
+      d=true
       case "$t" in
-        gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; fzf) k=diffnav ;; *) k="$t" ;;
+        gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; fzf) k=diffnav ;;
+        # neovim is the one component that defaults to off, so reading it with
+        # the default every other one takes would report it enabled when the
+        # config says nothing.
+        nvim) k=neovim; d=false ;;
+        *) k="$t" ;;
       esac
       printf '  %-13s %-14s enabled=%s\n' "$t" "$(have "$t" && echo installed || echo 'not installed')" \
-        "$(cfg_get "$k.enabled" true)"
+        "$(cfg_get "$k.enabled" "$d")"
     done
     grep -q "$BEGIN" "$HERDR_CFG" 2>/dev/null && say "herdr managed block: present" || say "herdr managed block: absent"
     echo
@@ -2653,6 +2714,7 @@ case "$ACTION" in
     [ "$(cfg_get tuicr.enabled true)"   = "true" ] && apply_tuicr
     apply_yazi
     apply_markdown
+    apply_neovim
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr_numbers
     [ "$(cfg_get delta.enabled true)"   = "true" ] && apply_delta
@@ -2661,7 +2723,7 @@ case "$ACTION" in
     echo "done. open a herdr session and press prefix+? to see the keymap"
     ;;
   disable)
-    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|tuicr>"
+    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|neovim|tuicr>"
     comp="${2:?$DISABLE_USAGE}"
     case "$comp" in
       delta) for k in core.pager interactive.diffFilter delta.navigate delta.line-numbers; do
@@ -2679,6 +2741,14 @@ if os.path.isfile(p):
 PY
         say "managed block removed from herdr config"
         say "now set herdr.enabled: false in $CFG so apply does not restore it" ;;
+      neovim)
+        # A whole file of ours, so turning it off is a deletion. Anything the
+        # user wrote by hand under that name is theirs and stays.
+        if nvim_ours; then
+          rm -f "$NVIM_PLUGIN"
+          say "neovim plugin file removed"
+        fi
+        say "now set neovim.enabled: false in $CFG so apply does not restore it" ;;
       diffnav|gh_dash|lazygit|tuicr)
         # Only this component's popup goes away. Rebuild the managed block so
         # the rest of the keymap survives.
@@ -2703,7 +2773,7 @@ PY
     esac
     ;;
   uninstall)
-    "$0" disable herdr; "$0" disable delta
+    "$0" disable herdr; "$0" disable delta; "$0" disable neovim
     # By prefix, which is why helpers are named spechub-*: anything this
     # script ever wrote goes, including helpers retired in an older version.
     herdr plugin unlink spechub.herdr-numbers >/dev/null 2>&1 || true
