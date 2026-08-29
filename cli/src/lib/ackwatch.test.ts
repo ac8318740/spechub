@@ -900,8 +900,14 @@ describe('analyze — CLI ack sidecar', () => {
   });
 
   it('honours the sidecar in fresh mode too', () => {
+    // The transcript timestamp matters here: fresh mode dates the round by the
+    // launch, so a sidecar has to be stamped after the transcript begins.
     writeSidecar({ decision: 'accept', reason: 'fresh and willing', sessionId: null, at: '2026-08-23T10:00:00.000Z' });
-    const result = analyze([endTurnRecord()], { fresh: true, turns: 5, file: handoffFile });
+    const result = analyze([endTurnRecord({ timestamp: '2026-08-23T09:59:00.000Z' })], {
+      fresh: true,
+      turns: 5,
+      file: handoffFile,
+    });
     expect(result.outcome).toBe('acknowledged');
     expect(result.ack?.via).toBe('cli');
   });
@@ -1862,5 +1868,367 @@ describe('watch — startedAt', () => {
     // millisecond. The point being made is that the ack predates the watch,
     // and the acknowledged outcome above is what actually carries it.
     expect(result.startedAt).toBeGreaterThanOrEqual(wroteAckAt);
+  });
+});
+
+// ===========================================================================
+// The launch, not the watch, starts a fresh round
+//
+// A launched agent is told to acknowledge before doing anything else, and the
+// sender cannot start watching until it has recovered the new session id.
+// Those two facts put the ack roughly half a minute before the watch. Dating
+// the round from the watch discarded that ack and reported a live, accepting
+// agent as unacknowledged. Fresh mode reads the launch off the target's own
+// transcript instead.
+// ===========================================================================
+
+/** An assistant end_turn record stamped at a given instant. */
+function stampedTurn(at: number): string {
+  return endTurnRecord({ timestamp: new Date(at).toISOString() });
+}
+
+describe('analyze — fresh mode dates the round by the launch', () => {
+  let dir: string;
+  let handoffFile: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'spechub-launchcutoff-'));
+    handoffFile = join(dir, 'handoff-fresh.md');
+    writeFileSync(handoffFile, '# Handoff\n');
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function writeSidecar(overrides: Record<string, unknown> = {}): void {
+    writeFileSync(handoffFile + '.ack', ackJson(overrides));
+  }
+
+  it('reports the cut-off it applied, so a discarded ack is never invisible', () => {
+    const launchedAt = Date.now() - 60 * 1000;
+    const result = analyze([stampedTurn(launchedAt)], { fresh: true, turns: 5, file: handoffFile });
+    expect(result.ackAfter).toBe(launchedAt);
+  });
+
+  it('takes the launch from the earliest timestamped record, past untimestamped metadata', () => {
+    const launchedAt = Date.now() - 60 * 1000;
+    const metadata = JSON.stringify({ type: 'mode', mode: 'default' });
+    const result = analyze([metadata, stampedTurn(launchedAt)], {
+      fresh: true,
+      turns: 5,
+      file: handoffFile,
+    });
+    expect(result.ackAfter).toBe(launchedAt);
+  });
+
+  it('honours an ack written after the launch but long before any watch could start', () => {
+    const launchedAt = Date.now() - 60 * 1000;
+    writeSidecar({ at: new Date(launchedAt + 3000).toISOString(), reason: 'took it straight away' });
+    const result = analyze([stampedTurn(launchedAt)], { fresh: true, turns: 5, file: handoffFile });
+    expect(result.outcome).toBe('acknowledged');
+    expect(result.ack?.via).toBe('cli');
+    expect(result.ack?.message).toBe('took it straight away');
+  });
+
+  it('still ignores a previous target’s decline, which predates this launch', () => {
+    const declinedAt = Date.now() - 120 * 1000;
+    const launchedAt = Date.now() - 60 * 1000;
+    writeSidecar({ decision: 'decline', at: new Date(declinedAt).toISOString(), reason: 'wrong scope' });
+    const result = analyze([stampedTurn(launchedAt), stampedTurn(launchedAt + 1000)], {
+      fresh: true,
+      turns: 2,
+      file: handoffFile,
+    });
+    expect(result.outcome).toBe('silence');
+    expect(result.ack).toBeUndefined();
+  });
+
+  it('counts nothing while the transcript has not begun — no sidecar can be its answer yet', () => {
+    writeSidecar({ at: new Date().toISOString() });
+    const result = analyze([], { fresh: true, turns: 5, file: handoffFile });
+    expect(result.ackAfter).toBe(Number.POSITIVE_INFINITY);
+    expect(result.outcome).toBe('pending');
+    expect(result.ack).toBeUndefined();
+  });
+
+  it('lets an explicit ackAfter override the launch it read', () => {
+    const launchedAt = Date.now() - 60 * 1000;
+    const explicit = Date.now();
+    writeSidecar({ at: new Date(launchedAt + 3000).toISOString() });
+    const result = analyze([stampedTurn(launchedAt)], {
+      fresh: true,
+      turns: 5,
+      file: handoffFile,
+      ackAfter: explicit,
+    });
+    expect(result.ackAfter).toBe(explicit);
+    expect(result.outcome).toBe('pending');
+    expect(result.ack).toBeUndefined();
+    expect(result.staleAck?.decision).toBe('accept');
+  });
+
+  it('leaves token mode with no cut-off of its own', () => {
+    const result = analyze([deliveryRecord()], { token: TOKEN, turns: 5, file: handoffFile });
+    expect(result.ackAfter).toBeUndefined();
+  });
+});
+
+describe('watch — fresh mode honours an ack written before the watch started', () => {
+  let dir: string;
+  let file: string;
+  let handoffFile: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'spechub-launchwatch-'));
+    file = join(dir, 'session.jsonl');
+    handoffFile = join(dir, 'handoff-fresh.md');
+    writeFileSync(handoffFile, '# Handoff\n');
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reports acknowledged, not timeout, when the target acked 40 seconds before the watch', async () => {
+    const launchedAt = Date.now() - 60 * 1000;
+    writeFileSync(file, stampedTurn(launchedAt) + '\n');
+    writeFileSync(
+      handoffFile + '.ack',
+      ackJson({ at: new Date(launchedAt + 3000).toISOString(), reason: 'taking the OneNote map' })
+    );
+    const result = await watch(file, {
+      fresh: true,
+      turns: 5,
+      file: handoffFile,
+      pollIntervalMs: 10,
+      timeoutMs: 300,
+    });
+    expect(result.outcome).toBe('acknowledged');
+    expect(result.ack?.decision).toBe('accept');
+    expect(result.ack?.message).toBe('taking the OneNote map');
+  });
+
+  it('keeps ignoring a decline that predates the launch', async () => {
+    const launchedAt = Date.now() - 60 * 1000;
+    writeFileSync(file, stampedTurn(launchedAt) + '\n' + stampedTurn(launchedAt + 1000) + '\n');
+    writeFileSync(
+      handoffFile + '.ack',
+      ackJson({
+        decision: 'decline',
+        at: new Date(launchedAt - 60 * 1000).toISOString(),
+        reason: 'last round said no',
+      })
+    );
+    const result = await watch(file, {
+      fresh: true,
+      turns: 2,
+      file: handoffFile,
+      pollIntervalMs: 10,
+      timeoutMs: 300,
+    });
+    expect(result.outcome).toBe('silence');
+    expect(result.ack).toBeUndefined();
+  });
+
+  it('sees an ack appended live, once the transcript names the launch', async () => {
+    const launchedAt = Date.now();
+    writeFileSync(file, stampedTurn(launchedAt) + '\n');
+    const promise = watch(file, {
+      fresh: true,
+      turns: 5,
+      file: handoffFile,
+      pollIntervalMs: 15,
+      timeoutMs: 3000,
+    });
+    setTimeout(() => {
+      writeFileSync(handoffFile + '.ack', ackJson({ reason: 'written during the watch' }));
+    }, 40);
+    const result = await promise;
+    expect(result.outcome).toBe('acknowledged');
+    expect(result.ack?.message).toBe('written during the watch');
+  });
+
+  it('token mode still dates its round by the watch', async () => {
+    writeFileSync(
+      handoffFile + '.ack',
+      ackJson({ at: new Date(Date.now() - AN_HOUR).toISOString() })
+    );
+    writeFileSync(file, deliveryRecord() + '\n' + endTurnRecord() + '\n' + endTurnRecord() + '\n');
+    const result = await watch(file, {
+      token: TOKEN,
+      turns: 2,
+      file: handoffFile,
+      pollIntervalMs: 10,
+      timeoutMs: 300,
+    });
+    expect(result.outcome).toBe('silence');
+    expect(result.ack).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// staleAck: a discarded sidecar is reported, never swallowed
+//
+// A watch that returns "no answer" while an answer sits on disk is the one
+// report that must be impossible. Whatever the cut-off rules out still comes
+// back, on the result, beside the outcome it did not change.
+// ===========================================================================
+
+describe('analyze — staleAck', () => {
+  let dir: string;
+  let handoffFile: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'spechub-staleack-'));
+    handoffFile = join(dir, 'handoff.md');
+    writeFileSync(handoffFile, '# Handoff\n');
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function writeSidecar(overrides: Record<string, unknown> = {}): void {
+    writeFileSync(handoffFile + '.ack', ackJson(overrides));
+  }
+
+  it('reports a sidecar the cut-off ruled out, with its decision and its instant', () => {
+    const at = new Date(Date.now() - AN_HOUR).toISOString();
+    writeSidecar({ at, decision: 'accept', reason: 'ruled out by the cut-off' });
+    const result = analyze(silentTranscript(), {
+      token: TOKEN,
+      turns: 5,
+      file: handoffFile,
+      ackAfter: Date.now(),
+    });
+    expect(result.outcome).toBe('silence');
+    expect(result.ack).toBeUndefined();
+    expect(result.staleAck?.decision).toBe('accept');
+    expect(result.staleAck?.reason).toBe('ruled out by the cut-off');
+    expect(result.staleAck?.at).toBe(at);
+    expect(result.staleAck?.via).toBe('cli');
+  });
+
+  it('reports an undateable sidecar as stale rather than dropping it', () => {
+    writeSidecar({ at: 'yesterday afternoon' });
+    const result = analyze(silentTranscript(), {
+      token: TOKEN,
+      turns: 5,
+      file: handoffFile,
+      ackAfter: Date.now(),
+    });
+    expect(result.outcome).toBe('silence');
+    expect(result.staleAck?.at).toBe('yesterday afternoon');
+  });
+
+  it('leaves staleAck unset when the sidecar counted', () => {
+    writeSidecar({ at: new Date().toISOString() });
+    const result = analyze(silentTranscript(), {
+      token: TOKEN,
+      turns: 5,
+      file: handoffFile,
+      ackAfter: Date.now() - AN_HOUR,
+    });
+    expect(result.outcome).toBe('acknowledged');
+    expect(result.staleAck).toBeUndefined();
+  });
+
+  it('leaves staleAck unset when no sidecar exists', () => {
+    const result = analyze(silentTranscript(), {
+      token: TOKEN,
+      turns: 5,
+      file: handoffFile,
+      ackAfter: Date.now(),
+    });
+    expect(result.outcome).toBe('silence');
+    expect(result.staleAck).toBeUndefined();
+  });
+
+  it('reports it beside a transcript ACK that won instead', () => {
+    writeSidecar({ at: new Date(Date.now() - AN_HOUR).toISOString(), decision: 'decline' });
+    const lines = [deliveryRecord(), ackRecord({ message: 'ACCEPT — this round I will' })];
+    const result = analyze(lines, {
+      token: TOKEN,
+      turns: 5,
+      file: handoffFile,
+      ackAfter: Date.now(),
+    });
+    expect(result.ack?.via).toBe('text');
+    expect(result.staleAck?.decision).toBe('decline');
+  });
+});
+
+describe('watch — staleAck rides on the negative outcomes', () => {
+  let dir: string;
+  let file: string;
+  let handoffFile: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'spechub-staleackwatch-'));
+    file = join(dir, 'session.jsonl');
+    handoffFile = join(dir, 'handoff.md');
+    writeFileSync(handoffFile, '# Handoff\n');
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('carries the discarded sidecar on a timeout', async () => {
+    writeFileSync(
+      handoffFile + '.ack',
+      ackJson({ at: new Date(Date.now() - AN_HOUR).toISOString(), reason: 'from last round' })
+    );
+    writeFileSync(file, deliveryRecord() + '\n');
+    const result = await watch(file, {
+      token: TOKEN,
+      turns: 5,
+      file: handoffFile,
+      pollIntervalMs: 10,
+      timeoutMs: 60,
+    });
+    expect(result.outcome).toBe('timeout');
+    expect(result.ack).toBeUndefined();
+    expect(result.staleAck?.reason).toBe('from last round');
+  });
+
+  it('carries it on a silence', async () => {
+    writeFileSync(
+      handoffFile + '.ack',
+      ackJson({ at: new Date(Date.now() - AN_HOUR).toISOString(), reason: 'from last round' })
+    );
+    writeFileSync(file, deliveryRecord() + '\n' + endTurnRecord() + '\n' + endTurnRecord() + '\n');
+    const result = await watch(file, {
+      token: TOKEN,
+      turns: 2,
+      file: handoffFile,
+      pollIntervalMs: 10,
+      timeoutMs: 500,
+    });
+    expect(result.outcome).toBe('silence');
+    expect(result.staleAck?.reason).toBe('from last round');
+  });
+
+  it('drops it once a sidecar that counts replaces it', async () => {
+    writeFileSync(
+      handoffFile + '.ack',
+      ackJson({ at: new Date(Date.now() - AN_HOUR).toISOString(), reason: 'last round' })
+    );
+    writeFileSync(file, deliveryRecord() + '\n');
+    const promise = watch(file, {
+      token: TOKEN,
+      turns: 5,
+      file: handoffFile,
+      pollIntervalMs: 15,
+      timeoutMs: 3000,
+    });
+    setTimeout(() => {
+      writeFileSync(handoffFile + '.ack', ackJson({ reason: 'this round' }));
+    }, 40);
+    const result = await promise;
+    expect(result.outcome).toBe('acknowledged');
+    expect(result.ack?.message).toBe('this round');
+    expect(result.staleAck).toBeUndefined();
   });
 });

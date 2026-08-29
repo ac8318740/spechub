@@ -460,8 +460,9 @@ Do not eyeball transcripts. The CLI watches for you:
 # re-read. --timeout <ms> (default 1800000) is the watcher's own deadline –
 # its expiry is the source of the `timeout` outcome.
 # --nudged marks a restart after the one nudge – see the section below.
-# --ack-after <epoch-ms> moves the sidecar cut-off back. Only the nudge restart
-# passes it; it defaults to the moment this watch starts.
+# --ack-after <epoch-ms> moves the sidecar cut-off back. Only a token-route
+# nudge restart passes it – see the section below. The default is right
+# everywhere else.
 ~/.claude/spechub/bin/spechub handoff watch --file <handoff-file> \
   --session-id <id> --cwd <dir> --token <token> --turns <n>
 ```
@@ -486,13 +487,29 @@ target whose delivery record has not landed yet still acknowledges. The
 transcript also shows whether the target is working, which separates `engaged`
 from `silence`.
 
-Every watch reports the moment it started, as `startedAt` in epoch
-milliseconds, and ignores any sidecar written before that cut-off. The default
-cut-off is the watch's own start. So a sidecar from an earlier round never
-closes this watch, and nothing has to delete `<handoff-file>.ack` between
-attempts. The default needs no flag. `--ack-after <epoch-ms>` moves the cut-off
-back, for a restart that has to reach behind its own start. Only the nudge
-restart does – *Nudge once, then watch again*, below.
+Every watch ignores any sidecar written before a cut-off. So a sidecar from an
+earlier round never closes this watch, and nothing has to delete
+`<handoff-file>.ack` between attempts. The watcher reports the cut-off it used
+as `ackAfter`, and each route picks its own:
+
+| Route     | Cut-off                                             |
+| --------- | --------------------------------------------------- |
+| `--token` | the moment this watch starts, reported as `startedAt` |
+| `--fresh` | the launch, read off the first timestamped line of the target's transcript |
+
+`--fresh` reaches back to the launch because the ack usually lands before the
+watch. The sender has to recover the new session id before it can watch, while
+the launch prompt tells the target to acknowledge before anything else.
+
+So a well-behaved target answers inside that gap, roughly half a minute wide.
+
+The launch cut-off still keeps an earlier round out. A relaunch after a decline
+reuses the handoff file, and the first target's decline sidecar with it. The
+relaunched agent's transcript begins after that decline.
+
+`--ack-after <epoch-ms>` overrides both, for a restart that has to reach behind
+its own start. Only the token-route nudge restart does – *Nudge once, then
+watch again*, below.
 
 An agent launched for this handoff leaves no delivery record. So pass `--fresh`
 instead of `--token`, and counting starts at the first line of its transcript.
@@ -529,7 +546,9 @@ honestly without it:
 | `ack.reason`            | the one-line reason the target gave, or `null` when it gave none               |
 | `nudged`                | whether this watch ran with `--nudged`, so the one nudge is already spent      |
 | `engaged`               | whether the target is working on the handoff, whatever the outcome            |
-| `startedAt`             | epoch milliseconds at which this watch began, and its default sidecar cut-off |
+| `staleAck`              | a sidecar that exists but predates the cut-off – read it before reporting no answer |
+| `ackAfter`              | the sidecar cut-off this watch applied, in epoch milliseconds; `null` means the target's transcript had not begun |
+| `startedAt`             | epoch milliseconds at which this watch began, and the token route's sidecar cut-off |
 | `anchored`              | whether the watcher ever saw the thing it counts from – our message arriving in the target's transcript, or a fresh agent's transcript beginning. `false` means delivery was never observed at all |
 
 ## Nudge once, then watch again
@@ -561,9 +580,11 @@ route has no such anchor – `--fresh` counts from record 0 again, over a
 transcript that already holds the spent turns. Double the budget covers the
 spent turns and a fresh budget on top.
 
-Pass `--ack-after <startedAt>` too, carrying the `startedAt` the first watch
-reported. Without it the restart would throw away an ack the target wrote in
-the gap between the first watch ending and this one starting.
+On the token route, pass `--ack-after <startedAt>` too, carrying the
+`startedAt` the first watch reported. Without it the restart would throw away
+an ack the target wrote in the gap between the first watch ending and this one
+starting. The fresh route needs no flag: its cut-off is the launch, which is
+already behind both watches.
 
 ```bash
 # token route – <new-token> is the one in the nudge message
@@ -573,8 +594,7 @@ the gap between the first watch ending and this one starting.
 
 # fresh route – <n> doubled, because --fresh re-counts the spent turns
 ~/.claude/spechub/bin/spechub handoff watch --file <handoff-file> --nudged \
-  --session-id <id> --cwd <dir> --fresh --turns <2n> \
-  --ack-after <startedAt of the first watch>
+  --session-id <id> --cwd <dir> --fresh --turns <2n>
 ```
 
 The `--nudged` flag tells the second watch that the target has had its nudge,
@@ -597,9 +617,10 @@ Treating the two identically throws away the useful half of the answer.
 
 A relaunch after a decline on fit reuses the same handoff file, and needs no
 cleanup. The new watch ignores the decline sidecar the first target wrote,
-because that sidecar predates it. Never pass `--ack-after` on such a relaunch.
-It aims at a new agent, so the default cut-off is the one that keeps the old
-decline out.
+because that sidecar predates the new agent's launch.
+
+Never pass `--ack-after` on such a relaunch. It aims at a new agent, so the
+launch cut-off is the one that keeps the old decline out.
 
 **Acknowledged, but `ack.decision` is null** – the target replied with something
 that is neither ACCEPT nor DECLINE, such as a clarifying question. This is not
@@ -684,5 +705,10 @@ Then say where the handoff stands, in the terms of the outcome above.
 For an unacknowledged handoff, say which kind – delivered (or launched) with no
 answer, versus never observed delivered at all. Then point the user at where to
 look.
+
+**Read `staleAck` before calling any handoff unacknowledged.** It means a
+sidecar sits on disk that the cut-off ruled out. Report its decision and its
+`at`, name the cut-off from `ackAfter`, and never spend the nudge on a target
+that already answered.
 
 Never describe the work as owned by the target until the target has accepted it.

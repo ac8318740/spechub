@@ -348,10 +348,71 @@ describe('handoff watch — --ack-after', () => {
     expect(printed.ack).toMatchObject({ via: 'cli', message: 'wrote it during the gap' });
   });
 
-  it('ignores that same sidecar without the flag, since the default starts now', async () => {
+  it('ignores that same sidecar without the flag, because this transcript never began', async () => {
+    // watchArgs watches a transcript that does not exist, so --fresh has no
+    // launch to date the round by and nothing on disk can answer it.
     writeSidecarAt(Date.now() - 60_000, 'wrote it during the gap');
     const output = await run(...watchArgs());
     expect(JSON.parse(output)).toMatchObject({ outcome: 'timeout' });
+  });
+
+  it('reports the discarded sidecar as staleAck rather than dropping it', async () => {
+    writeSidecarAt(Date.now() - 60_000, 'wrote it during the gap');
+    const output = await run(...watchArgs());
+    const printed = JSON.parse(output) as Record<string, unknown>;
+    expect(printed.outcome).toBe('timeout');
+    expect(printed.staleAck).toMatchObject({ via: 'cli', reason: 'wrote it during the gap' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --fresh dates the round by the launch
+//
+// The sender cannot start watching until it has recovered the new session id,
+// and the target is told to acknowledge before doing anything else. So the ack
+// lands before the watch on the documented path, and the cut-off has to reach
+// back to the launch to see it.
+// ---------------------------------------------------------------------------
+
+describe('handoff watch — --fresh anchors the cut-off at the launch', () => {
+  /** Write a transcript whose only record is stamped at the given instant. */
+  function writeTranscriptStartedAt(at: number): void {
+    writeFileSync(
+      join(dir, 'session.jsonl'),
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: new Date(at).toISOString(),
+        message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }] },
+      }) + '\n'
+    );
+  }
+
+  it('reports acknowledged for an ack written well before the watch started', async () => {
+    const launchedAt = Date.now() - 60_000;
+    writeTranscriptStartedAt(launchedAt);
+    writeSidecarAt(launchedAt + 3_000, 'acked before the sender could watch');
+    const output = await run(...watchArgs());
+    const printed = JSON.parse(output) as Record<string, unknown>;
+    expect(printed.outcome).toBe('acknowledged');
+    expect(printed.ack).toMatchObject({ via: 'cli', reason: 'acked before the sender could watch' });
+  });
+
+  it('prints the cut-off it applied as ackAfter', async () => {
+    const launchedAt = Date.now() - 60_000;
+    writeTranscriptStartedAt(launchedAt);
+    const output = await run(...watchArgs());
+    expect(JSON.parse(output)).toMatchObject({ ackAfter: launchedAt });
+  });
+
+  it('still ignores a sidecar written before the launch', async () => {
+    const launchedAt = Date.now() - 60_000;
+    writeTranscriptStartedAt(launchedAt);
+    writeSidecarAt(launchedAt - 60_000, 'the previous target declined');
+    const output = await run(...watchArgs());
+    const printed = JSON.parse(output) as Record<string, unknown>;
+    expect(printed.outcome).not.toBe('acknowledged');
+    expect(printed.ack).toBeUndefined();
+    expect(printed.staleAck).toMatchObject({ reason: 'the previous target declined' });
   });
 
   it('treats 0 as "any ack, however old"', async () => {

@@ -94,7 +94,8 @@ export function register(program: Command): void {
       '--ack-after <ms>',
       'epoch milliseconds before which a sidecar ack does not count; pass the ' +
         'previous watch\'s startedAt to cover a nudge gap, or 0 to accept any ack. ' +
-        'Defaults to the moment this watch begins',
+        'Defaults to the moment this watch begins with --token, and to the target ' +
+        'launch read off its own transcript with --fresh',
       parseIntAtLeast('ack-after', 0)
     )
     .option(

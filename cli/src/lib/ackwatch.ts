@@ -62,6 +62,16 @@ export interface Ack extends ParsedAck {
   message: string;
 }
 
+/**
+ * A sidecar that exists but failed the cut-off, so it did not answer this
+ * round. Carries its own instant, because when it was written is the whole
+ * reason it was set aside.
+ */
+export interface StaleAck extends Ack {
+  /** ISO 8601 instant the sidecar records, exactly as written. */
+  at: string;
+}
+
 export interface AnalyzeOptions {
   /**
    * Correlation token embedded in the delivered message. Anchors the analysis
@@ -87,8 +97,11 @@ export interface AnalyzeOptions {
   /**
    * Epoch milliseconds before which a sidecar does not count. A handoff file
    * outlives the round that produced it, so last round's ack is still lying
-   * beside it – answering this round's question with a stale yes. `watch`
-   * defaults this to the moment it started.
+   * beside it – answering this round's question with a stale yes.
+   *
+   * Left unset, each mode picks its own: `fresh` reads the launch off the
+   * target's transcript, and `token` has no cut-off until `watch` supplies
+   * its own start. See `resolveAckAfter`.
    */
   ackAfter?: number;
 }
@@ -114,7 +127,23 @@ export interface AnalyzeResult {
   engaged: boolean;
   /** The `nudged` option, handed back so the caller can chain watches. */
   nudged: boolean;
+  /**
+   * The sidecar cut-off this analysis applied, in epoch milliseconds. Reported
+   * because a cut-off nobody can see is a cut-off nobody can question, and
+   * discarding a real ack is what it does when it is wrong.
+   *
+   * Absent means no cut-off: every sidecar counted. `Infinity` – which JSON
+   * prints as `null` – means the opposite: the target's transcript has not
+   * begun, so nothing beside the handoff file can be its answer yet.
+   */
+  ackAfter?: number;
   ack?: Ack;
+  /**
+   * A sidecar that exists but predates the cut-off. Reported alongside every
+   * outcome other than `acknowledged`, so a caller can never report "no
+   * answer" while an answer sits on disk.
+   */
+  staleAck?: StaleAck;
 }
 
 /**
@@ -181,6 +210,12 @@ interface TranscriptRecord {
   operation?: string;
   content?: unknown;
   isSidechain?: boolean;
+  /**
+   * ISO 8601 instant Claude Code stamped on this record. Present on the
+   * records a session actually produces, absent on the metadata lines it
+   * writes first – so the earliest one that has it is when the session began.
+   */
+  timestamp?: string;
   message?: {
     stop_reason?: string | null;
     content?: unknown;
@@ -291,9 +326,18 @@ function sidecarIsAuthoritative(options: AnalyzeOptions): boolean {
   return options.file !== undefined;
 }
 
+/** A sidecar read off disk, and whether it is current enough to count. */
+interface SidecarRead {
+  ack: Ack;
+  /** The instant the sidecar records, exactly as written. */
+  at: string;
+  /** Did it pass the cut-off? */
+  counts: boolean;
+}
+
 /**
- * The acknowledgement written beside the handoff file, if the target wrote one
- * this round.
+ * The acknowledgement written beside the handoff file, if there is one, and
+ * whether it answers this round.
  *
  * `ackAfter` is what makes "this round" mean anything: the handoff file, and
  * any sidecar beside it, outlive the watch that produced them, so a second
@@ -301,20 +345,71 @@ function sidecarIsAuthoritative(options: AnalyzeOptions): boolean {
  * nobody has answered yet. An undateable sidecar cannot prove it is current,
  * so it fails the same test.
  *
+ * A sidecar that fails still comes back. Dropping it here is what let a watch
+ * report a timeout while an acceptance sat on disk beside it – see `staleAck`.
+ *
  * The reason is passed through as written – `writeAck` normalises whitespace
  * on the way in, so there is nothing left to tidy here.
  */
-function findSidecarAck(file: string, ackAfter: number | undefined): Ack | undefined {
+function readSidecar(file: string, ackAfter: number | undefined): SidecarRead | undefined {
   const record = readAck(file);
   if (record === null) return undefined;
-  if (ackAfter !== undefined && !(Date.parse(record.at) >= ackAfter)) return undefined;
   return {
-    to: null,
-    message: record.reason,
-    via: 'cli',
-    decision: record.decision,
-    reason: record.reason.length > 0 ? record.reason : null,
+    at: record.at,
+    counts: ackAfter === undefined || Date.parse(record.at) >= ackAfter,
+    ack: {
+      to: null,
+      message: record.reason,
+      via: 'cli',
+      decision: record.decision,
+      reason: record.reason.length > 0 ? record.reason : null,
+    },
   };
+}
+
+/**
+ * When the target's session began, read off its own transcript.
+ *
+ * The first few lines carry no timestamp – Claude Code writes session metadata
+ * before the first real record – so this takes the earliest line that has one,
+ * not the first line.
+ */
+function transcriptStart(records: TranscriptRecord[]): number | undefined {
+  for (const record of records) {
+    if (typeof record.timestamp !== 'string') continue;
+    const at = Date.parse(record.timestamp);
+    if (!Number.isNaN(at)) return at;
+  }
+  return undefined;
+}
+
+/**
+ * The instant a sidecar has to beat to count as this round's answer.
+ *
+ * An explicit `ackAfter` always wins: only the caller knows what its round is.
+ *
+ * Fresh mode reads it off the target's own transcript, because the round
+ * begins when the agent is launched and not when the sender gets around to
+ * watching. Those are half a minute apart on the documented path – the sender
+ * has to recover the new session id before it can watch – and the target is
+ * told to acknowledge before doing anything else. So a well-behaved target
+ * acks inside that gap every time. Anchoring on the watch threw that ack away
+ * and reported a live agent as unacknowledged.
+ *
+ * The transcript still keeps a previous round out. A relaunch after a decline
+ * reuses the handoff file, and the first target's decline sidecar with it, but
+ * the relaunched agent has a transcript that began after that decline.
+ *
+ * A fresh transcript with no timestamp yet has not begun, so no sidecar on
+ * disk can be its answer: nothing counts until it does.
+ */
+function resolveAckAfter(
+  records: TranscriptRecord[],
+  options: AnalyzeOptions
+): number | undefined {
+  if (options.ackAfter !== undefined) return options.ackAfter;
+  if (options.fresh !== true) return undefined;
+  return transcriptStart(records) ?? Number.POSITIVE_INFINITY;
 }
 
 /**
@@ -397,18 +492,29 @@ function scanFromAnchor(records: TranscriptRecord[], anchor: number, options: An
 }
 
 /**
- * Let the sidecar overrule what the transcript said.
+ * Let the sidecar overrule what the transcript said, and report one it had to
+ * set aside.
  *
  * It outranks the transcript because it is the deliberate answer – the target
  * ran a command to write it – and it needs no anchor: a target whose delivery
  * record has not landed yet, or that was never given a token, can still have
  * written one.
+ *
+ * A sidecar too old to count becomes `staleAck` rather than nothing. The
+ * outcome stands, and the caller sees what the cut-off ruled out instead of
+ * being told there was no answer at all.
  */
-function withSidecar(result: AnalyzeResult, options: AnalyzeOptions): AnalyzeResult {
-  const sidecarAck =
-    options.file === undefined ? undefined : findSidecarAck(options.file, options.ackAfter);
-  if (sidecarAck === undefined) return result;
-  return { ...result, outcome: 'acknowledged', ack: sidecarAck };
+function withSidecar(
+  result: AnalyzeResult,
+  options: AnalyzeOptions,
+  ackAfter: number | undefined
+): AnalyzeResult {
+  const sidecar = options.file === undefined ? undefined : readSidecar(options.file, ackAfter);
+  if (sidecar === undefined) return { ...result, staleAck: undefined };
+  if (sidecar.counts) {
+    return { ...result, staleAck: undefined, outcome: 'acknowledged', ack: sidecar.ack };
+  }
+  return { ...result, staleAck: { ...sidecar.ack, at: sidecar.at } };
 }
 
 function resolveAnchor(records: TranscriptRecord[], options: AnalyzeOptions): number {
@@ -446,6 +552,7 @@ export function analyze(lines: string[], options: AnalyzeOptions): AnalyzeResult
   requireOneMode(options);
   const turns = options.turns ?? DEFAULT_TURNS;
   const records = parseLines(lines);
+  const ackAfter = resolveAckAfter(records, options);
   const anchor = resolveAnchor(records, options);
   const scan = scanFromAnchor(records, anchor, options);
   const turnsElapsed = Math.min(scan.boundaries, turns);
@@ -454,6 +561,7 @@ export function analyze(lines: string[], options: AnalyzeOptions): AnalyzeResult
     turnsElapsed,
     engaged: scan.engaged,
     nudged: options.nudged === true,
+    ackAfter,
   };
 
   // No anchor: the message is still queued, so silence is not a conclusion we
@@ -467,7 +575,7 @@ export function analyze(lines: string[], options: AnalyzeOptions): AnalyzeResult
         ? { ...base, outcome: 'acknowledged', ack: scan.ack }
         : { ...base, outcome: turnsElapsed >= turns ? quiet : 'pending' };
 
-  return withSidecar(verdict, options);
+  return withSidecar(verdict, options, ackAfter);
 }
 
 function readLines(path: string): string[] {
@@ -519,10 +627,16 @@ export async function watch(path: string, options: WatchOptions = {}): Promise<W
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const started = Date.now();
   const deadline = started + timeoutMs;
-  // Only an ack written from now on answers this watch. A sidecar already on
-  // disk belongs to a previous round – unless the caller says otherwise, which
-  // is how a re-launched watch keeps counting an ack it already has.
-  const watched: WatchOptions = { ...options, ackAfter: options.ackAfter ?? started };
+  // The token route watches a session that was already running, so only an ack
+  // written from now on answers this watch: a sidecar already on disk belongs
+  // to a previous round. The caller can say otherwise, which is how a
+  // re-launched watch keeps counting an ack it already has.
+  //
+  // The fresh route sets no default here. Its round began when the agent was
+  // launched, seconds before this watch, and `resolveAckAfter` reads that
+  // instant off the target's transcript on every tick.
+  const watched: WatchOptions =
+    options.fresh === true ? options : { ...options, ackAfter: options.ackAfter ?? started };
 
   // The last verdict read off the transcript, and the fingerprint it was read
   // from. Anything cached here is pending – a settled verdict returns below –
@@ -541,7 +655,11 @@ export async function watch(path: string, options: WatchOptions = {}): Promise<W
       // Nothing was appended since the last parse, so re-reading the transcript
       // would reach the same verdict. The sidecar is another matter: it is
       // written out of band, and it is what most often ends the watch.
-      result = withSidecar(cached, watched);
+      //
+      // `cached.ackAfter` and not `watched.ackAfter`: the fresh route derives
+      // its cut-off from the transcript, and an unchanged transcript derives
+      // the same one.
+      result = withSidecar(cached, watched, cached.ackAfter);
     }
 
     if (result.outcome !== 'pending') {
