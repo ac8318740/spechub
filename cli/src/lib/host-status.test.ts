@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { requiredHostAxisKeys, fallbackBrowserMode, projectHostContext } from './host-status.js';
+import {
+  requiredHostAxisKeys,
+  fallbackBrowserMode,
+  projectHostContext,
+  ORCHESTRATOR_PROBES,
+  ORCHESTRATORS,
+} from './host-status.js';
 
 /**
  * Pure decision logic behind `spechub config show`/`spechub config check`.
@@ -125,5 +131,31 @@ describe('projectHostContext fallback', () => {
   it('leaves fallback undefined when there is no project at all', () => {
     const ctx = projectHostContext(undefined, false);
     expect(ctx.fallback).toBeUndefined();
+  });
+});
+
+/**
+ * An orchestrator probe answers one question: is this orchestrator actually
+ * running on this machine? Its exit status is the whole answer, so a probe
+ * that cannot exit 0 on a healthy host fails every host it is pointed at.
+ *
+ * A command group is exactly that kind of probe. `herdr api` groups
+ * `snapshot` and `schema` and takes no action of its own: it prints its
+ * subcommands and exits 2, running server or not. The probe has to name the
+ * subcommand that reads live state.
+ */
+describe('ORCHESTRATOR_PROBES', () => {
+  it('gives every orchestrator a command to run', () => {
+    for (const name of ORCHESTRATORS) {
+      expect(ORCHESTRATOR_PROBES[name].args.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('probes herdr with the api subcommand that reads live state, not the bare api group', () => {
+    expect(ORCHESTRATOR_PROBES.herdr.args).toEqual(['api', 'snapshot']);
+  });
+
+  it('probes orca with the status subcommand', () => {
+    expect(ORCHESTRATOR_PROBES.orca.args).toEqual(['status', '--json']);
   });
 });

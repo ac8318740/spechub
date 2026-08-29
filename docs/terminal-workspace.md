@@ -132,14 +132,17 @@ What `uninstall` removes:
 - It unsets the delta git settings
 - It deletes the helper scripts
 - It removes the keybindings it wrote into gh-dash
+- It deletes `~/.config/nvim/lua/plugins/spechub.lua`, a file it wrote whole
 - Your own settings in those files survive, and so does every tool binary
 
 What the config holds:
 
 - The script reads `~/.config/spechub/terminal-workspace.yaml`, which the skill copies from `assets/terminal-workspace/config.example.yaml`
-- The config holds nine components, each with its own `enabled` key
+- The config holds ten components, each with its own `enabled` key
     - You turn a part off there and run `apply` again
-- Seven components name a tool: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, `lazygit`, and `yazi`
+- Seven components name a tool this setup installs: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, `lazygit`, and `yazi`
+- `neovim` names an editor you installed yourself, and writes one file into its config
+    - It is the only component that starts off, and section 3.4 says why
 - The other two name a feature
     - `markdown` covers `spechub-md` with mermaid-ascii and glow
     - `remote` covers the clipboard and browser helpers
@@ -261,6 +264,25 @@ On a machine where you did set it true:
 - Re-run `apply` once you do switch
 - Check the merged key names first
     - The review can rename them
+
+### 3.4. A dot for unsaved changes in LazyVim
+
+*LazyVim marks a modified buffer by recolouring the filename and nothing else. Set `neovim.enabled: true` to append a dot to the statusline instead.*
+
+- LazyVim's `pretty_path` component sets `modified_sign = ""`, so the only signal is colour
+    - It sets `modified_hl = "MatchParen"`, which recolours the filename you are already looking at
+    - You cannot tell a saved buffer from an unsaved one at a glance
+- `apply` writes `~/.config/nvim/lua/plugins/spechub.lua`, which appends a lualine component to `lualine_c`
+    - LazyVim loads every file under `lua/plugins`, so a file of our own is a complete plugin spec
+    - The dot is `●` in catppuccin red, and `neovim.unsaved_dot_color` changes the colour
+- This is the only component that starts off, because a neovim config is one you built
+    - Every other component owns its files outright, or edits a marked region in a config that invites one
+- It writes one whole file and never edits one of yours
+    - `setup.sh disable neovim` deletes that file, and so does `uninstall`
+    - Neither one touches a `spechub.lua` you wrote by hand
+- `apply` skips a machine with no LazyVim config, because the dot goes into LazyVim's own lualine section
+    - `apply` says so rather than writing a file that does nothing
+- Delete your own copy of this override first, or the statusline draws two dots
 
 ## 4. How you attach
 
@@ -458,7 +480,7 @@ The `ctrl` and `shift` modifiers are not options for a fourth list, and which on
 
 ### 5.2. One config file, validated without a restart
 
-*Everything above lives in `~/.config/herdr/config.toml`. Two choices in that file are worth explaining.*
+*Everything above lives in `~/.config/herdr/config.toml`. Three choices in that file are worth explaining.*
 
 - Validate with `herdr config check`
 - Apply without restarting with `herdr server reload-config`
@@ -577,12 +599,16 @@ description = "file tree (tab)"
 
 [worktrees]
 directory = "~/.herdr/worktrees"
+
+[ui]
+# A pane's scrollbar costs the pane a column that herdr does not subtract.
+pane_scrollbars = false
 ```
 
 - A `shell` command carries no `width` or `height`
     - herdr rejects both on anything that is not a popup
 
-Two choices worth explaining.
+Three choices worth explaining.
 
 **Plain `alt` chords, not `ctrl+alt`.**
 
@@ -596,6 +622,18 @@ Two choices worth explaining.
 - A relative value resolves against the herdr session's base directory, not the repository you point at
 - Worktrees for a second repository then land inside the first
 - Use an absolute path unless you only ever work in one repository
+
+**`pane_scrollbars = false`, so a full-screen app gets the whole pane.**
+
+- herdr draws a border and a scrollbar inside the pane rect, then reports the full rect width to the program in the pane
+- A program that fills the pane then writes one column more than it has
+    - Every wrapped row starts one column left of the row above it
+- Measured on one machine: `herdr pane layout` reported a 132-column rect at `x=26`, the PTY and neovim's `&columns` both reported 131, and 130 were usable
+    - The arithmetic is herdr's, so it should hit anyone running `pane_scrollbars = true`, and that is unproven on a second machine
+- `alt+s` twice repairs the display, because toggling the sidebar recomputes the geometry from scratch
+- The cost is that no pane draws a scrollbar
+    - Scrolling still works, because the mouse wheel and copy mode never used it
+- Set `herdr.pane_scrollbars: true` in the workspace config to take the scrollbar back
 
 ### 5.3. When the sidebar numbers stop matching
 

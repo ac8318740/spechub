@@ -16528,9 +16528,12 @@ var init_host_status = __esm({
       orca: "host.orchestrators.orca"
     };
     ORCHESTRATOR_PROBES = {
-      // `herdr api` fails outright when no server is behind it, so its exit status
-      // is the whole answer and there is nothing to read in what it printed.
-      herdr: { binaries: ["herdr"], args: ["api"], answered: () => true },
+      // `herdr api snapshot` reads live state off the server's socket, so it fails
+      // outright when no server is behind it and its exit status is the whole
+      // answer. The subcommand is the probe: bare `herdr api` is a command group
+      // that prints its subcommands and exits 2 whether or not a server is running,
+      // so it fails a host that is working fine.
+      herdr: { binaries: ["herdr"], args: ["api", "snapshot"], answered: () => true },
       orca: {
         binaries: ["orca-ide", "orca"],
         args: ["status", "--json"],
@@ -24369,7 +24372,7 @@ var init_prose = __esm({
     ];
     SENTENCE_LIMIT_PROSE = 25;
     SENTENCE_LIMIT_INSTRUCTION = 20;
-    PARAGRAPH_LIMIT = 6;
+    PARAGRAPH_LIMIT = 3;
     VOCABULARY_COLUMNS = 3;
     DELETE_SENTINEL = "-";
     BLOCKQUOTE_PREFIX = /^(?:\s*>\s?)+/;
