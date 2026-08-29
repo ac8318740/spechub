@@ -123,7 +123,7 @@ fi
 # that actually rotted were hdiff and hdash, which predate that convention, so
 # check the config example the way a reader uses it: every command it binds
 # must be something this machine will actually have.
-externals="yazi diffnav delta glow tuicr gh"
+externals="yazi diffnav delta glow tuicr gh lazygit"
 dangling=""
 while read -r cmd; do
   [ -n "$cmd" ] || continue
@@ -144,7 +144,7 @@ awk "/^  SPECHUB_ARGS=.*py \"\\\$HERDR_CFG\" <<'PY'\$/{f=1; next} f && /^PY\$/{e
   "$SETUP" > "$KEYMAP"
 BEGIN_MARK="# >>> spechub terminal-workspace >>>"
 END_MARK="# <<< spechub terminal-workspace <<<"
-args() { echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|$BEGIN_MARK|$END_MARK"; }
+args() { echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|alt+g|alt+shift+g|$BEGIN_MARK|$END_MARK"; }
 
 cat > "$WORK/hand.toml" <<'T'
 [keys]
@@ -177,12 +177,12 @@ run_keymap alt "$WORK/merged.toml"
 if parses "$WORK/merged.toml"; then ok "merging onto a hand-written keymap stays valid TOML"
 else no "merging onto a hand-written keymap stays valid TOML"; fi
 
-# Eight managed blocks, plus the one hand-written binding on a key this
+# Ten managed blocks, plus the one hand-written binding on a key this
 # script does not claim. The hand-written alt+f is dropped, because TOML
 # forbids two commands on one key and the managed one has to win.
 count=$(grep -c '^\[\[keys.command\]\]' "$WORK/merged.toml")
-if [ "$count" = "9" ]; then ok "managed custom commands replace, not duplicate ($count)"
-else no "expected 9 [[keys.command]] blocks, found $count"; fi
+if [ "$count" = "11" ]; then ok "managed custom commands replace, not duplicate ($count)"
+else no "expected 11 [[keys.command]] blocks, found $count"; fi
 
 if grep -q 'my-own-tool' "$WORK/merged.toml" && ! grep -q 'my-old-diff' "$WORK/merged.toml"
 then ok "a hand-written binding survives unless it collides with a managed key"
@@ -2074,7 +2074,7 @@ KEYMAP="$WORK/keymap.py"
 awk "/^    py \"\\\$HOME\/\.config\/yazi\/keymap\.toml\" <<'PY'\$/{f=1; next} f && /^PY\$/{exit} f" \
   "$SETUP" > "$KEYMAP"
 run_keymap() {  # run_keymap <browser-key> <line-numbers-key> <path> [download-target]
-  SPECHUB_ARGS="$1|$2|D|${4-}|$BEGIN_MARK|$END_MARK" python3 "$KEYMAP" "$3" 2>/dev/null
+  SPECHUB_ARGS="$1|$2|D|${4-}|e|$BEGIN_MARK|$END_MARK" python3 "$KEYMAP" "$3" 2>/dev/null
 }
 
 if [ -s "$KEYMAP" ]; then
@@ -2862,7 +2862,7 @@ fi
 
 
 echo "disable answers for every component"
-# The config names eight components. `disable` has a branch for five of them,
+# The config names nine components. `disable` has a branch for six of them,
 # and the other three - yazi, markdown, remote - fall through a case with no
 # default arm, so the script exits 0 having done nothing and said nothing. A
 # silent success on a request that was never carried out is the one outcome a
@@ -2902,26 +2902,26 @@ done
 # A name that is not a component at all takes the same silent path today.
 out=$(tw disable bogus); rc=$?
 missing=""
-for c in herdr delta diffnav gh_dash tuicr; do
+for c in herdr delta diffnav gh_dash lazygit tuicr; do
   printf '%s' "$out" | grep -qF "$c" || missing="$missing $c"
 done
 if [ "$rc" != "0" ] && [ -z "$missing" ]; then
-  ok "disable rejects an unknown component and lists the five it supports"
+  ok "disable rejects an unknown component and lists the six it supports"
 else
-  no "disable rejects an unknown component and lists the five it supports (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
+  no "disable rejects an unknown component and lists the six it supports (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
 fi
 
 # tuicr gained a disable branch without reaching the usage line, so the one
 # place a user goes to find out what they may type still omits it.
 out=$(tw disable); rc=$?
 missing=""
-for c in herdr delta diffnav gh_dash tuicr; do
+for c in herdr delta diffnav gh_dash lazygit tuicr; do
   printf '%s' "$out" | grep -qF "$c" || missing="$missing $c"
 done
 if [ "$rc" != "0" ] && [ -z "$missing" ]; then
-  ok "the usage line for disable lists all five supported components"
+  ok "the usage line for disable lists all six supported components"
 else
-  no "the usage line for disable lists all five supported components (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
+  no "the usage line for disable lists all six supported components (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
 fi
 
 

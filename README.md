@@ -306,12 +306,13 @@ How to turn it on:
     - MIT licensed, and recorded in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)
 - Additional inspiration comes from [Superpowers](https://github.com/obra/superpowers), [GSD](https://github.com/gsd-build/get-shit-done) and [Spec Kit](https://github.com/github/spec-kit)
 
-The optional terminal workspace installs, but does not bundle, the three tools you drive and the five behind them. Each one keeps its own licence.
+The optional terminal workspace installs, but does not bundle, the four tools you drive and the five behind them. Each one keeps its own licence.
 
 - [herdr](https://herdr.dev)
 - [tuicr](https://github.com/agavra/tuicr) by agavra, which reviews a pull request inside the terminal
 - [gh-dash](https://github.com/dlvhdr/gh-dash) and [diffnav](https://github.com/dlvhdr/diffnav) by dlvhdr
 - [delta](https://github.com/dandavison/delta) by dandavison
+- [lazygit](https://github.com/jesseduffield/lazygit) by jesseduffield, which stages, commits and pushes on one key
 - [yazi](https://github.com/sxyazi/yazi) by sxyazi, the file manager that previews whatever the cursor sits on
 - [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by AlexanderGrooff
 - [glow](https://github.com/charmbracelet/glow) by charmbracelet
