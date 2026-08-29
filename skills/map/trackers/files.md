@@ -14,10 +14,27 @@ To enumerate a project's maps: `ls spechub/maps/`.
 
 | Operation | Command |
 | --------- | ------- |
-| create    | `spechub node create --map <name> --title <t> [--status] [--mode] [--kind] [--answers <id>] [--blocked-by <ids>] [--pinned] [--body <md>]` |
+| create    | `spechub node create --map <name> --title <t> --kind <k> --label <l> [--status] [--mode] [--answers <id>] [--blocked-by <ids>] [--pinned] [--body <md>] [--body-file <path>]` |
 | read      | `spechub node read <id> --map <name> [--json]` |
-| update    | `spechub node update <id> --map <name> [--title] [--status] [--mode] [--kind] [--answers] [--blocked-by] [--pinned true\|false] [--body] [--body-file] [--append-body]` |
+| update    | `spechub node update <id> --map <name> [--title] [--status] [--mode] [--kind] [--label] [--answers] [--blocked-by] [--pinned true\|false] [--body] [--body-file] [--append-body]` |
 | list      | `spechub node list --map <name> [--status <s>] [--json]` |
+
+`create` rejects a node that omits `--kind` or `--label`. `--kind` takes one of
+`destination`, `notes`, `decision`, `research`, or `work`. `--label` takes the
+node's short name for a diagram, at most four words and thirty characters.
+
+## No body header
+
+The GitHub backend opens every node body with a header line, because an issue
+has nowhere else to put the fields. This backend writes none.
+
+Frontmatter holds the same facts. `answers` and `blocked-by` sit there
+directly, the map is the directory name, and the root is the node that
+`answers` chains up to. A header here would copy data the CLI already owns
+and would be free to drift from it.
+
+`node read` prints the frontmatter, so a reader sees the same facts either
+way.
 
 ## Composed queries
 

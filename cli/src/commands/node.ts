@@ -9,9 +9,12 @@ import { fail, requireProject } from '../lib/utils.js';
 import {
   NODE_STATUSES,
   NODE_MODES,
+  NODE_KINDS,
+  LABEL_CAP_SENTENCE,
   type MapNode,
   type NodeStatus,
   type NodeMode,
+  type NodeKind,
   createNode,
   deriveDepths,
   frontier,
@@ -59,7 +62,8 @@ function toJson(node: MapNode): Record<string, unknown> {
     title: node.title,
     status: node.status,
     mode: node.mode,
-    kind: node.kind ?? null,
+    kind: node.kind,
+    label: node.label,
     answers: node.answers ?? null,
     'blocked-by': node.blockedBy,
     pinned: node.pinned,
@@ -67,8 +71,16 @@ function toJson(node: MapNode): Record<string, unknown> {
   };
 }
 
+// Both the one-line print and the walk summary name a label the same way. The
+// quoting is what keeps a label holding a comma readable inside a list.
+function labelFragment(node: MapNode): string {
+  return `label ${JSON.stringify(node.label)}`;
+}
+
 function printNode(node: MapNode): void {
-  const flags = [node.kind, node.pinned ? 'pinned' : undefined].filter(Boolean).join(', ');
+  const flags = [node.kind, labelFragment(node), node.pinned ? 'pinned' : undefined]
+    .filter(Boolean)
+    .join(', ');
   const links = [
     node.answers ? `answers ${node.answers}` : 'root',
     node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(', ')}` : undefined,
@@ -77,7 +89,7 @@ function printNode(node: MapNode): void {
     .join(', ');
   console.log(
     `${chalk.bold(node.id)}  ${node.status.padEnd(12)} ${node.mode.padEnd(4)} ${node.title}` +
-      chalk.dim(`  (${links}${flags ? `; ${flags}` : ''})`)
+      chalk.dim(`  (${links}; ${flags})`)
   );
 }
 
@@ -97,7 +109,8 @@ export function register(program: Command): void {
     .requiredOption('--title <title>', 'node title')
     .option('--status <status>', `one of: ${NODE_STATUSES.join(', ')}`, parseStatus)
     .option('--mode <mode>', 'hitl (a human settles it) or afk (an agent settles it alone)', parseMode)
-    .option('--kind <kind>', 'free-text label for what kind of node this is (grilling, research, task, ...) – advisory only')
+    .requiredOption('--kind <kind>', `one of: ${NODE_KINDS.join(', ')}`)
+    .requiredOption('--label <label>', `short name for diagrams: ${LABEL_CAP_SENTENCE}`)
     .option('--answers <id>', 'the node whose resolution raised this one (its provenance parent) – required except on the root')
     .option('--blocked-by <ids>', 'comma-separated ids of nodes that must settle before this one can be worked', parseIdList)
     .option('--pinned', 'load in full every session')
@@ -110,7 +123,8 @@ export function register(program: Command): void {
         title: string;
         status?: NodeStatus;
         mode?: NodeMode;
-        kind?: string;
+        kind: NodeKind;
+        label: string;
         answers?: string;
         blockedBy?: string[];
         pinned?: boolean;
@@ -126,6 +140,7 @@ export function register(program: Command): void {
             status: opts.status,
             mode: opts.mode,
             kind: opts.kind,
+            label: opts.label,
             answers: opts.answers,
             blockedBy: opts.blockedBy,
             pinned: opts.pinned,
@@ -171,7 +186,8 @@ export function register(program: Command): void {
     .option('--title <title>', 'new title (the filename keeps its original slug)')
     .option('--status <status>', `one of: ${NODE_STATUSES.join(', ')}`, parseStatus)
     .option('--mode <mode>', `one of: ${NODE_MODES.join(', ')}`, parseMode)
-    .option('--kind <kind>', 'advisory kind hint; empty string clears it')
+    .option('--kind <kind>', `one of: ${NODE_KINDS.join(', ')}`)
+    .option('--label <label>', `new short name for diagrams: ${LABEL_CAP_SENTENCE}`)
     .option('--answers <id>', 'new provenance parent')
     .option('--blocked-by <ids>', 'comma-separated blocking ids; empty string clears', parseIdList)
     .option('--pinned <bool>', 'true or false')
@@ -187,7 +203,8 @@ export function register(program: Command): void {
           title?: string;
           status?: NodeStatus;
           mode?: NodeMode;
-          kind?: string;
+          kind?: NodeKind;
+          label?: string;
           answers?: string;
           blockedBy?: string[];
           pinned?: string;
@@ -207,7 +224,8 @@ export function register(program: Command): void {
             title: opts.title,
             status: opts.status,
             mode: opts.mode,
-            kind: opts.kind === '' ? null : opts.kind,
+            kind: opts.kind,
+            label: opts.label,
             answers: opts.answers,
             blockedBy: opts.blockedBy,
             pinned: opts.pinned === undefined ? undefined : opts.pinned === 'true',
@@ -303,6 +321,7 @@ export function register(program: Command): void {
             node.status,
             node.mode,
             node.kind,
+            labelFragment(node),
             node.pinned ? 'pinned' : undefined,
             node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(', ')}` : undefined,
           ]

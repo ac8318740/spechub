@@ -15702,8 +15702,34 @@ var init_zod = __esm({
   }
 });
 
+// src/lib/atomic-file.ts
+import { randomBytes } from "node:crypto";
+import { renameSync, rmSync as rmSync2, writeFileSync } from "node:fs";
+function tempPathFor(path) {
+  return `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+}
+function replaceFileAtomically(path, text, beforeRename) {
+  const temp = tempPathFor(path);
+  try {
+    writeFileSync(temp, text, "utf-8");
+    beforeRename?.(temp);
+    renameSync(temp, path);
+  } catch (err) {
+    try {
+      rmSync2(temp, { force: true });
+    } catch {
+    }
+    throw err;
+  }
+}
+var init_atomic_file = __esm({
+  "src/lib/atomic-file.ts"() {
+    "use strict";
+  }
+});
+
 // src/lib/nodes.ts
-import { existsSync as existsSync6, readFileSync as readFileSync4, readdirSync as readdirSync4, writeFileSync } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync4, readdirSync as readdirSync4 } from "node:fs";
 import { join as join8 } from "node:path";
 function normalizeId(id) {
   const trimmed = id.trim();
@@ -15726,8 +15752,49 @@ function validateTitle(title) {
   }
   return trimmed;
 }
+function validateKind(kind) {
+  if (typeof kind !== "string" || !NODE_KINDS.includes(kind)) {
+    const shown = kind === void 0 ? "is missing" : `${JSON.stringify(kind)} is not allowed`;
+    throw new Error(`kind ${shown} \u2013 one of: ${NODE_KINDS.join(", ")}`);
+  }
+  return kind;
+}
+function countCharacters(text) {
+  if (!graphemes) return [...text].length;
+  return [...graphemes.segment(text)].length;
+}
+function labelCapProblem(trimmed) {
+  if (!trimmed) return "must not be empty";
+  if (/[\r\n]/.test(trimmed)) return "must be a single line";
+  const words = trimmed.split(/\s+/);
+  if (words.length > LABEL_MAX_WORDS) {
+    return `is ${words.length} words \u2013 the cap is ${LABEL_MAX_WORDS}`;
+  }
+  const characters = countCharacters(trimmed);
+  if (characters > LABEL_MAX_CHARS) {
+    return `is ${characters} characters \u2013 the cap is ${LABEL_MAX_CHARS}`;
+  }
+  return void 0;
+}
+function validateLabel(label) {
+  if (typeof label !== "string") {
+    const shown = label === void 0 ? "is required" : `${JSON.stringify(label)} is not allowed`;
+    throw new Error(`label ${shown} \u2013 ${LABEL_CAP_SENTENCE}`);
+  }
+  const trimmed = label.trim();
+  const problem = labelCapProblem(trimmed);
+  if (problem) throw new Error(`label "${trimmed}" ${problem}`);
+  return trimmed;
+}
 function compareIds(a, b) {
   return parseInt(a, 10) - parseInt(b, 10);
+}
+function frontmatterProblem(issue) {
+  const field = String(issue.path[0] ?? "");
+  if (issue.code === external_exports.ZodIssueCode.invalid_type && issue.received === "undefined" && FIELDS_ADDED_AFTER_THE_FIRST_MAPS.includes(field)) {
+    return `${field} is missing \u2013 this file predates the ${field} field. Map nodes are transient working state, so discard this map and chart a new one rather than repairing it.`;
+  }
+  return `${issue.path.join(".")} ${issue.message}`;
 }
 function parseNodeFile(dir, file) {
   const raw = readFileSync4(join8(dir, file), "utf-8").replace(/\r\n/g, "\n");
@@ -15735,10 +15802,15 @@ function parseNodeFile(dir, file) {
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
   }
-  const parsed = frontmatterSchema.safeParse((0, import_yaml2.parse)(match[1]));
+  let frontmatter;
+  try {
+    frontmatter = (0, import_yaml2.parse)(match[1]);
+  } catch (err) {
+    throw new Error(`${file}: ${err.message}`);
+  }
+  const parsed = frontmatterSchema.safeParse(frontmatter);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new Error(`${file}: ${issue.path.join(".")} ${issue.message}`);
+    throw new Error(`${file}: ${frontmatterProblem(parsed.error.issues[0])}`);
   }
   const rest = match[2].replace(/^\n+/, "");
   const newline = rest.indexOf("\n");
@@ -15758,6 +15830,7 @@ function parseNodeFile(dir, file) {
     status: parsed.data.status,
     mode: parsed.data.mode,
     kind: parsed.data.kind,
+    label: parsed.data.label,
     answers: parsed.data.answers,
     blockedBy: parsed.data["blocked-by"],
     pinned: parsed.data.pinned,
@@ -15788,8 +15861,16 @@ function getNode(root, map, id) {
   return node;
 }
 function serializeNode(node) {
-  const lines = ["---", `status: ${node.status}`, `mode: ${node.mode}`];
-  if (node.kind) lines.push(`kind: ${JSON.stringify(node.kind)}`);
+  const lines = [
+    "---",
+    `status: ${node.status}`,
+    `mode: ${node.mode}`,
+    // The five kinds are plain YAML identifiers and need no quoting. A label
+    // is free text, and JSON quoting keeps a colon or a quote inside one from
+    // corrupting the YAML.
+    `kind: ${node.kind}`,
+    `label: ${JSON.stringify(node.label)}`
+  ];
   if (node.answers) lines.push(`answers: "${node.answers}"`);
   lines.push(
     node.blockedBy.length > 0 ? `blocked-by: [${node.blockedBy.map((b) => `"${b}"`).join(", ")}]` : "blocked-by: []"
@@ -15803,7 +15884,7 @@ function serializeNode(node) {
 function writeNode(root, map, node) {
   const dir = mapDir(root, map);
   ensureDir(dir);
-  writeFileSync(join8(dir, node.file), serializeNode(node), "utf-8");
+  replaceFileAtomically(join8(dir, node.file), serializeNode(node));
 }
 function requireExisting(nodes, id, role) {
   if (!nodes.some((n) => n.id === id)) {
@@ -15812,6 +15893,8 @@ function requireExisting(nodes, id, role) {
 }
 function createNode(root, map, input) {
   const title = validateTitle(input.title);
+  const kind = validateKind(input.kind);
+  const label = validateLabel(input.label);
   const nodes = loadNodes(root, map);
   const answers = input.answers ? normalizeId(input.answers) : void 0;
   const blockedBy = (input.blockedBy ?? []).map(normalizeId);
@@ -15830,7 +15913,8 @@ function createNode(root, map, input) {
     title,
     status: input.status ?? "open",
     mode: input.mode ?? "hitl",
-    kind: input.kind,
+    kind,
+    label,
     answers,
     blockedBy,
     pinned: input.pinned ?? false,
@@ -15887,7 +15971,8 @@ function updateNode(root, map, id, input) {
   if (input.title !== void 0) node.title = validateTitle(input.title);
   if (input.status !== void 0) node.status = input.status;
   if (input.mode !== void 0) node.mode = input.mode;
-  if (input.kind !== void 0) node.kind = input.kind ?? void 0;
+  if (input.kind !== void 0) node.kind = validateKind(input.kind);
+  if (input.label !== void 0) node.label = validateLabel(input.label);
   if (input.pinned !== void 0) node.pinned = input.pinned;
   if (input.body !== void 0) node.body = input.body;
   if (input.appendBody !== void 0) {
@@ -15961,25 +16046,40 @@ function walkTree(nodes) {
   visit(roots[0], 0);
   return out;
 }
-var import_yaml2, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
+var import_yaml2, NODE_STATUSES, NODE_MODES, NODE_KINDS, LABEL_MAX_WORDS, LABEL_MAX_CHARS, LABEL_CAP_SENTENCE, idValue, frontmatterSchema, graphemes, FIELDS_ADDED_AFTER_THE_FIRST_MAPS;
 var init_nodes = __esm({
   "src/lib/nodes.ts"() {
     "use strict";
     import_yaml2 = __toESM(require_dist(), 1);
     init_zod();
+    init_atomic_file();
     init_constants();
     init_utils();
     NODE_STATUSES = ["fog", "open", "claimed", "resolved", "out-of-scope"];
     NODE_MODES = ["hitl", "afk"];
+    NODE_KINDS = ["destination", "notes", "decision", "research", "work"];
+    LABEL_MAX_WORDS = 4;
+    LABEL_MAX_CHARS = 30;
+    LABEL_CAP_SENTENCE = `at most ${LABEL_MAX_WORDS} words and ${LABEL_MAX_CHARS} characters`;
     idValue = external_exports.union([external_exports.string(), external_exports.number()]).transform((v) => normalizeId(String(v))).pipe(external_exports.string().regex(/^\d{3,}$/, "node id must be a number"));
     frontmatterSchema = external_exports.object({
       status: external_exports.enum(NODE_STATUSES),
       mode: external_exports.enum(NODE_MODES),
-      kind: external_exports.string().optional(),
+      kind: external_exports.enum(NODE_KINDS),
+      // A stored label is held to the same caps as one arriving through create or
+      // update – the file is the only place a hand-edit can slip a long one in. It
+      // trims before it checks and yields the trimmed value, so what passed the
+      // caps is also what the node carries.
+      label: external_exports.string().transform((value) => value.trim()).superRefine((trimmed, ctx) => {
+        const problem = labelCapProblem(trimmed);
+        if (problem) ctx.addIssue({ code: external_exports.ZodIssueCode.custom, message: problem });
+      }),
       answers: idValue.optional(),
       "blocked-by": external_exports.array(idValue).default([]),
       pinned: external_exports.boolean().default(false)
     });
+    graphemes = typeof Intl !== "undefined" && typeof Intl.Segmenter === "function" ? new Intl.Segmenter(void 0, { granularity: "grapheme" }) : void 0;
+    FIELDS_ADDED_AFTER_THE_FIRST_MAPS = ["kind", "label"];
   }
 });
 
@@ -16020,28 +16120,32 @@ function toJson(node) {
     title: node.title,
     status: node.status,
     mode: node.mode,
-    kind: node.kind ?? null,
+    kind: node.kind,
+    label: node.label,
     answers: node.answers ?? null,
     "blocked-by": node.blockedBy,
     pinned: node.pinned,
     file: node.file
   };
 }
+function labelFragment(node) {
+  return `label ${JSON.stringify(node.label)}`;
+}
 function printNode(node) {
-  const flags = [node.kind, node.pinned ? "pinned" : void 0].filter(Boolean).join(", ");
+  const flags = [node.kind, labelFragment(node), node.pinned ? "pinned" : void 0].filter(Boolean).join(", ");
   const links = [
     node.answers ? `answers ${node.answers}` : "root",
     node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(", ")}` : void 0
   ].filter(Boolean).join(", ");
   console.log(
-    `${source_default.bold(node.id)}  ${node.status.padEnd(12)} ${node.mode.padEnd(4)} ${node.title}` + source_default.dim(`  (${links}${flags ? `; ${flags}` : ""})`)
+    `${source_default.bold(node.id)}  ${node.status.padEnd(12)} ${node.mode.padEnd(4)} ${node.title}` + source_default.dim(`  (${links}; ${flags})`)
   );
 }
 function register4(program3) {
   const nodeCmd = program3.command("node").description(
     "Map nodes: small markdown records, one file each, under spechub/maps/<name>/.\nStatus: fog (not yet stated precisely), open (ready), claimed (being worked),\nresolved (settled), out-of-scope (dropped)."
   );
-  nodeCmd.command("create").description("Create a node; the first node in a map is the root").requiredOption("--map <name>", "map name").requiredOption("--title <title>", "node title").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", "hitl (a human settles it) or afk (an agent settles it alone)", parseMode).option("--kind <kind>", "free-text label for what kind of node this is (grilling, research, task, ...) \u2013 advisory only").option("--answers <id>", "the node whose resolution raised this one (its provenance parent) \u2013 required except on the root").option("--blocked-by <ids>", "comma-separated ids of nodes that must settle before this one can be worked", parseIdList).option("--pinned", "load in full every session").option("--body <text>", "markdown body").option("--body-file <path>", "read body from file, or - for stdin").option("--json", "output as JSON").action(
+  nodeCmd.command("create").description("Create a node; the first node in a map is the root").requiredOption("--map <name>", "map name").requiredOption("--title <title>", "node title").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", "hitl (a human settles it) or afk (an agent settles it alone)", parseMode).requiredOption("--kind <kind>", `one of: ${NODE_KINDS.join(", ")}`).requiredOption("--label <label>", `short name for diagrams: ${LABEL_CAP_SENTENCE}`).option("--answers <id>", "the node whose resolution raised this one (its provenance parent) \u2013 required except on the root").option("--blocked-by <ids>", "comma-separated ids of nodes that must settle before this one can be worked", parseIdList).option("--pinned", "load in full every session").option("--body <text>", "markdown body").option("--body-file <path>", "read body from file, or - for stdin").option("--json", "output as JSON").action(
     (opts) => {
       const root = findProjectRoot();
       requireProject(root);
@@ -16051,6 +16155,7 @@ function register4(program3) {
           status: opts.status,
           mode: opts.mode,
           kind: opts.kind,
+          label: opts.label,
           answers: opts.answers,
           blockedBy: opts.blockedBy,
           pinned: opts.pinned,
@@ -16080,7 +16185,7 @@ function register4(program3) {
       fail(err.message);
     }
   });
-  nodeCmd.command("update").description("Update node fields or body").argument("<id>", "node id").requiredOption("--map <name>", "map name").option("--title <title>", "new title (the filename keeps its original slug)").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", `one of: ${NODE_MODES.join(", ")}`, parseMode).option("--kind <kind>", "advisory kind hint; empty string clears it").option("--answers <id>", "new provenance parent").option("--blocked-by <ids>", "comma-separated blocking ids; empty string clears", parseIdList).option("--pinned <bool>", "true or false").option("--body <text>", "replace the body").option("--body-file <path>", "replace the body from file, or - for stdin").option("--append-body <text>", "append to the body").option("--json", "output as JSON").action(
+  nodeCmd.command("update").description("Update node fields or body").argument("<id>", "node id").requiredOption("--map <name>", "map name").option("--title <title>", "new title (the filename keeps its original slug)").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", `one of: ${NODE_MODES.join(", ")}`, parseMode).option("--kind <kind>", `one of: ${NODE_KINDS.join(", ")}`).option("--label <label>", `new short name for diagrams: ${LABEL_CAP_SENTENCE}`).option("--answers <id>", "new provenance parent").option("--blocked-by <ids>", "comma-separated blocking ids; empty string clears", parseIdList).option("--pinned <bool>", "true or false").option("--body <text>", "replace the body").option("--body-file <path>", "replace the body from file, or - for stdin").option("--append-body <text>", "append to the body").option("--json", "output as JSON").action(
     (id, opts) => {
       const root = findProjectRoot();
       requireProject(root);
@@ -16092,7 +16197,8 @@ function register4(program3) {
           title: opts.title,
           status: opts.status,
           mode: opts.mode,
-          kind: opts.kind === "" ? null : opts.kind,
+          kind: opts.kind,
+          label: opts.label,
           answers: opts.answers,
           blockedBy: opts.blockedBy,
           pinned: opts.pinned === void 0 ? void 0 : opts.pinned === "true",
@@ -16172,6 +16278,7 @@ function register4(program3) {
           node.status,
           node.mode,
           node.kind,
+          labelFragment(node),
           node.pinned ? "pinned" : void 0,
           node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(", ")}` : void 0
         ].filter(Boolean).join(", ");
@@ -16551,32 +16658,6 @@ var init_host_status = __esm({
       FALLBACK_FORBIDDEN,
       ...BROWSER_MODE_PRIORITY
     ];
-  }
-});
-
-// src/lib/atomic-file.ts
-import { randomBytes } from "node:crypto";
-import { renameSync, rmSync as rmSync2, writeFileSync as writeFileSync3 } from "node:fs";
-function tempPathFor(path) {
-  return `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-}
-function replaceFileAtomically(path, text, beforeRename) {
-  const temp = tempPathFor(path);
-  try {
-    writeFileSync3(temp, text, "utf-8");
-    beforeRename?.(temp);
-    renameSync(temp, path);
-  } catch (err) {
-    try {
-      rmSync2(temp, { force: true });
-    } catch {
-    }
-    throw err;
-  }
-}
-var init_atomic_file = __esm({
-  "src/lib/atomic-file.ts"() {
-    "use strict";
   }
 });
 
