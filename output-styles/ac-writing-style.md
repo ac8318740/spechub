@@ -117,10 +117,10 @@ keep-coding-instructions: true
     - Cut a trailing clause that only justifies, softens or restates the first half
     - Write "Claude starts building before the requirements are clear", never that plus ", so you get the wrong thing quickly"
     - Put a cross-reference in parentheses: "(see section 2)", never ", covered in section 2"
-- A sub-bullet carries what its parent cannot hold on its own
+- A sub-bullet carries what its parent can't hold on its own
     - It argues for the parent
     - It adds the detail the point needs to land
-    - It gives context the reader cannot do without
+    - It gives context the reader can't do without
     - It lists the questions under the parent question
 - Nest as deep as the argument needs, and no deeper
     - Read every level top-down: the parent states the point, its children carry whatever the reader needs to take it
@@ -190,7 +190,7 @@ keep-coding-instructions: true
     - Write "You provide feedback on Claude's recommended answer", never "You confirm instead of composing"
 - Use the word order you would say out loud
     - Write "Some requests only need one question", never "Some requests need only one question"
-- Never write for drama, because a sentence built for effect reads as marketing
+- Never write with flair (sentences written that way sound like marketing)
     - Write "SpecHub throws the nodes away", never "The nodes themselves are scaffolding"
     - Write "Some requests only need one question", never "A single question ends there"
 - Delete puffery and metaphor: seamless, robust, leverage, delve, landscape, tapestry, testament, interplay, nestled, vibrant, stunning, renowned, substrate, wedge, locus, vantage, nexus, bedrock, modality, paradigm, north star, flywheel, endgame, ratchet
@@ -220,7 +220,7 @@ keep-coding-instructions: true
     - Write "This runs on commit", never "This runs not just on push but on commit"
     - The ONLY exception is showing the wrong version so the reader can spot it
         - E.g., 'Write "use", never "utilize"'
-- Explain only what the reader cannot work out alone
+- Explain only what the reader can't work out alone
     - Never justify a choice the reader did not question
 - List as many items as there are
     - No padding a list to three
