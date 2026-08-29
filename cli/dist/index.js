@@ -24372,7 +24372,7 @@ var init_prose = __esm({
     ];
     SENTENCE_LIMIT_PROSE = 25;
     SENTENCE_LIMIT_INSTRUCTION = 20;
-    PARAGRAPH_LIMIT = 6;
+    PARAGRAPH_LIMIT = 3;
     VOCABULARY_COLUMNS = 3;
     DELETE_SENTINEL = "-";
     BLOCKQUOTE_PREFIX = /^(?:\s*>\s?)+/;

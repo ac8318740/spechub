@@ -78,14 +78,14 @@ export interface ParsedVocabulary {
 
 // The caps come from skills/writing/SKILL.md rule 1 (cap a descriptive
 // sentence at 25 words, and an instruction at 20) and rule 4 (break a
-// paragraph at six sentences). Change them there first, then here.
+// paragraph at three sentences). Change them there first, then here.
 
 /** skills/writing/SKILL.md rule 1: the cap on a descriptive sentence. */
 const SENTENCE_LIMIT_PROSE = 25;
 /** skills/writing/SKILL.md rule 1: the cap on an instruction, an ordered list item. */
 const SENTENCE_LIMIT_INSTRUCTION = 20;
 /** skills/writing/SKILL.md rule 4: the cap on a paragraph. */
-const PARAGRAPH_LIMIT = 6;
+const PARAGRAPH_LIMIT = 3;
 
 /** The number of columns every vocabulary table row must have. */
 const VOCABULARY_COLUMNS = 3;
