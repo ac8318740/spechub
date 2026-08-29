@@ -21,17 +21,17 @@ $ARGUMENTS
 Parse `$ARGUMENTS` and invocation context to determine mode:
 
 - **Auto-fix mode**: Use when ANY of these are true:
-  - Arguments contain `--auto-fix`, `fix everything`, `auto fix`, or `fix automatically`
-  - The LLM works autonomously. The user asked it to implement, commit, and push, or work
+    - Arguments contain `--auto-fix`, `fix everything`, `auto fix`, or `fix automatically`
+    - The LLM works autonomously. The user asked it to implement, commit, and push, or work
     through a task list, or said "handle everything". The LLM itself decided to commit.
 
       The user is likely not present, so don't block on questions.
 
 - **Interactive mode** (default): Use when ANY of these are true:
-  - No `--auto-fix` argument, and the user invoked the skill manually via `/pre-commit-review`
-  - The user typed `/commit`, which auto-invokes the skill. The user is clearly present,
+    - No `--auto-fix` argument, and the user invoked the skill manually via `/pre-commit-review`
+    - The user typed `/commit`, which auto-invokes the skill. The user is clearly present,
     so consult them via AskUserQuestion waves.
-  - When in doubt, use interactive – it's always safe to ask.
+    - When in doubt, use interactive – it's always safe to ask.
 
 **Rule of thumb**: Who initiated the commit? User typed `/commit` -> interactive.
 LLM decided to commit during autonomous work -> auto-fix.

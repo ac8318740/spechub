@@ -17,11 +17,13 @@ Three terms, before they get used:
   worktrees. It also covers which browser-verification modes work on this
   machine, plus the optional extras, such as publishing the dev server to a
   private network.
+
 - An **orchestrator**, in this skill, means a tool that owns terminal panes and
   git worktrees. There are two of them, `herdr` and `orca`, and they are
   declared separately – one yes-or-no answer each – because a machine can have
   both installed, one, or neither. A machine with neither uses plain git
   worktrees under `.claude/worktrees` in the repository.
+
 - An **axis** is one setting of the dev setup, recorded as one `host.*` key.
 
 ## Why this is per machine, not per project
@@ -180,8 +182,10 @@ them:
 - `orchestrator.hosting_this_session` names this orchestrator – recommend yes:
   "detected: this session is running in a herdr pane", or the same sentence
   about Orca.
+
 - Its binary is present – recommend yes: "detected: installed at `<path>`".
   When the session is also running in its pane, say both facts.
+
 - Neither is true for it – recommend no: "not installed on this machine".
 
 Leave a placeholder out entirely when there is nothing to say about that option.
@@ -194,8 +198,10 @@ can support any combination:
 - **remote** drives a real browser on the developer's own machine, over the
   Playwriter bridge. That bridge forwards the browser's debugging port to this
   machine on port 19988.
+
 - **headless** launches headless Chromium on this machine, meaning a browser
   with no visible window.
+
 - **local** launches a visible browser on this machine, which needs a graphical
   display.
 
@@ -250,6 +256,7 @@ So read it as a floor, not as the whole answer:
 
 - `project.has_frontend` is true – ask with no escape. The modes have to be
   declared.
+
 - It is false, or there is no SpecHub project in the current directory at all –
     still ask. The next project opened on this machine may well have a frontend,
     and this skill runs once per machine.
@@ -308,6 +315,7 @@ the difference matters:
   The difference that actually matters belongs to `spechub config check`, the
   health check. It lists an unset optional axis as informational, and fails only
   on an unset required one.
+
 - **`none` and `false`** are real declarations – the user has said this machine
   does not have the thing.
 
@@ -336,14 +344,17 @@ The rules for this step:
   than bare – so a string axis comes back quoted, `Set host.element_picker =
   "stagewise"`, and a boolean comes back unquoted, `Set host.browser.local =
   true`. A non-zero exit has two causes, and the message tells them apart.
+
 - **A rejected value.** The message names the allowed values for a key the tool
   knows. Re-ask rather than guessing at a different spelling – enum values are
   matched case-sensitively, so it is `stagewise`, never `Stagewise`.
+
 - **An unknown key.** The message reads `Unknown config key "<key>"` and lists
   the host keys the tool does know. That is version skew: the command line tool
   in this plugin cache is older than these skills. `host.orchestrators.herdr`,
   `host.orchestrators.orca` and `host.orca.topology` are the newest axes, so
   they are the ones an old cached tool rejects.
+
 - **Recovering from version skew.** Do not re-ask – the answer is not the
     problem, and re-asking a boolean axis only loops. Tell the user to restart
     Claude Code, so the SessionStart hook re-points
@@ -489,9 +500,11 @@ What the install puts on the machine:
 
 - the AppImage – a single-file Linux application bundle – under
   `~/.local/opt/orca/`
+
 - `orca-ide` and `orca` symlinks in `~/.local/bin`, so either name works
 - a systemd user unit at `~/.config/systemd/user/orca.service`, meaning a
   background service owned by the user rather than by the system
+
 - `ORCA_TELEMETRY_DISABLED=1`, set in that unit
 
 The unit wraps the server in `/usr/bin/script -qec "..." /dev/null`. That is how

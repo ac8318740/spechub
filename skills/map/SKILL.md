@@ -55,9 +55,11 @@ effort. Nothing declares which.
 1. **Fix the destination first.** Grill for what done looks like (invoke the
    `grilling` skill). The destination is the root of everything that follows –
    settle it before any other question.
+
 2. **Open with a breadth-first grill.** Work the conversation frontier in
    rounds per the grilling skill. Explore the codebase for facts as you go –
    facts are your job, never the user's.
+
 3. **Apply the fog test to what surfaced.** A question you can state precisely
    now is `open`. One you cannot state is `fog` – record it without forcing it
    sharp. The test is whether you can *state* the question precisely, not
@@ -69,8 +71,10 @@ The machinery appears only when it has to persist. After the opening grill:
 
 - **No fog surfaced** – the way was already clear. No map. Say so and proceed
   to the work.
+
 - **At most one session's worth** – settle it in conversation. Invoke
   `record-context` on each decision. No map – there is nothing to resume.
+
 - **More than one session's worth** – materialise the map and work the
   frontier across sessions.
 
@@ -90,9 +94,11 @@ operation. First the root:
 - The root is the destination, already resolved. It counts as pinned without
   the flag. `node walk` returns pinned nodes in full at the start of every
   session, so every session orients to the root.
+
 - Standing preferences for the effort (style rules, constraints discovered in
   the grill) become a resolved node with `--answers <root id> --kind notes
   --pinned`.
+
 - Every other surfaced question becomes a node. Give it `open` or `fog` per
   the fog test.
 
@@ -111,6 +117,7 @@ operation. First the root:
 - Write every title and body per the `writing` skill.
 - Nodes describe behaviour, not file paths. A node can sit on the frontier for
   weeks while the codebase moves – you resolve the paths at claim time.
+
 - On the files backend, suggest adding `spechub/maps/` to `.gitignore`. Nodes
   are transient working state – scratch you throw away once the map clears,
   like `spechub/HANDOFF.md`. The durable output is specs, architecture decision
@@ -135,11 +142,12 @@ same queries per `trackers/github.md`.
    with no unresolved blockers, shallowest provenance depth first, number
    only as a tiebreak. Provenance depth is how many `answers` links separate
    a node from the root, so the broadest questions come first.
+
 3. **Route by `mode` – the only field the machine routes on** (`kind` is
    advisory):
-   - `hitl` nodes: run grilling rounds over them. A round is the whole hitl
+    - `hitl` nodes: run grilling rounds over them. A round is the whole hitl
      frontier.
-   - `afk` nodes: claim and run without the user. Unlimited, and in parallel
+    - `afk` nodes: claim and run without the user. Unlimited, and in parallel
      when independent. Research goes to `Explore` subagents, with the findings
      written into the resolution.
 
@@ -162,10 +170,12 @@ same queries per `trackers/github.md`.
    The pipeline's state lives inside the claim, not on the node – there is no
    phase field to maintain. If the work stalls or fails, release the claim
    (`--status open`) and the node is plainly open again.
+
 5. **After every resolution**: invoke `record-context`, create nodes for
    anything the resolution surfaced, then recompute the frontier. A shallow
    node arriving late jumps the queue – that is correct, something big just
    opened up.
+
 6. **Graduate fog as it sharpens.** When you can state a fog node precisely,
    run `update <id> --status open` – one field, one write. Rewrite the title
    and body to the sharp statement if they drifted.

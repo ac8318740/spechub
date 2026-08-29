@@ -56,17 +56,21 @@ names a way the command has already been got wrong:
   `1` in every Bash subprocess, lead or child. It marks "spawned by Claude
   Code", nothing more. An in-process child session shares the lead's
   `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID` and `CLAUDE_CODE_ENTRYPOINT`.
+
 - **The command hunts for its own record, so it waits.** The host writes that
   record while the command runs, roughly four seconds in. One grep with no loop
   runs too early, finds nothing and answers `lead` for everyone. Never flatten
   the loop.
+
 - **The nonce must be yours alone.** Reuse one, or take one from a prompt, and
   another agent's transcript answers for you. The angle brackets make an
   unsubstituted copy a bash syntax error. That beats a silent match on whatever
   agent read this file before you, so never soften `<nonce>` to a bare word.
+
 - **`<session>.jsonl` can only ever say `lead`.** Your own mark lands there
   whether you are the lead or not. So the loop reads the agent transcripts
   first, and treats that file as an early exit rather than evidence of a child.
+
 - **No evidence means lead.** The old gate read a variable that is always set.
     It answered `child` in every session, and neither skill could run (#146).
 
@@ -135,9 +139,11 @@ A tab label reads `<topic>-<thread>.<step>`.
   as `auth-bug` or `csv-export`. For a new worktree it is the workspace slug
   already passed to `--label`, or a shortening of it. For a new tab it is the
   subject of the handoff.
+
 - **thread** numbers a line of work inside the workspace. The numbering restarts
   in each workspace. So a handoff into a new worktree labels the receiving tab
   `<topic>-1.0`, and a handoff inside this workspace labels it `<topic>-1.1`.
+
 - **step** counts the handoffs along that line.
 
     The session that started the line is step 0. The agent it hands to is
@@ -226,6 +232,7 @@ in context. If you are about to search source files, stop – the conversation h
 4. **Agent-team file ownership** – each scope, its teammate, its non-overlapping
    file set. Also name any shared file to touch only after the team finishes.
    Nothing else records this
+
 5. **Suggested skills** – which skills the receiving agent should invoke, by name
 
 Omit any that do not apply. Do not pad.

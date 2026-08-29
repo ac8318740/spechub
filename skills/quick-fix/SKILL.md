@@ -22,10 +22,10 @@ Before touching any code:
 
 1. Restate the problem in one sentence. What is the expected behavior vs actual behavior?
 2. Classify the problem type:
-   - **Crash/error**: Stack trace or error message available
-   - **Wrong behavior**: Code runs but produces incorrect results
-   - **Regression**: Something that used to work stopped working
-   - **Performance**: Too slow, too many resources
+    - **Crash/error**: Stack trace or error message available
+    - **Wrong behavior**: Code runs but produces incorrect results
+    - **Regression**: Something that used to work stopped working
+    - **Performance**: Too slow, too many resources
 
 If the user provided an error message or stack trace, note the key details (file, line, error type).
 
@@ -36,10 +36,10 @@ If the user provided an error message or stack trace, note the key details (file
 1. **Locate the code**: Find the file(s) involved. Use Grep and Glob to search for relevant functions, classes, and modules. Launch an Explore subagent if the scope is unclear.
 
 2. **Read the integration points**: Don't just read the broken function – read its callers and callees. Understand:
-   - What calls this code? (upstream)
-   - What does this code call? (downstream)
-   - What data flows through it? (inputs/outputs)
-   - Are there tests covering this behavior?
+    - What calls this code? (upstream)
+    - What does this code call? (downstream)
+    - What data flows through it? (inputs/outputs)
+    - Are there tests covering this behavior?
 
 3. **Check recent changes**: If this is a regression, run:
    ```bash
