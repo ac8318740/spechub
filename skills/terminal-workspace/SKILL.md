@@ -181,6 +181,7 @@ The master switch comes first. With `enabled: false` at the top of the config,
 *Marked regions only. Whatever the user wrote outside them survives every re-apply.*
 
 - Every edit sits between `# >>> spechub terminal-workspace >>>` and `# <<< spechub terminal-workspace <<<` markers. Hand-written config around them survives, and re-applying replaces only the managed region
+- The herdr config carries up to three managed regions: one inside `[keys]`, one inside `[ui]` for `pane_scrollbars`, and one at the end for `[[keys.command]]` and `[worktrees]`. A key inside a marked region is spechub's, whatever table it sits in
 - `apply` merges the gh-dash config rather than overwriting it. It keeps the sections, themes and keybindings the user added
 - Never edit the user's herdr or gh-dash config outside the managed markers
 
