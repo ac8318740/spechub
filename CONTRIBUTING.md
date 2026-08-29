@@ -39,7 +39,7 @@ flowchart TD
 ```
 .claude-plugin/plugin.json   – plugin manifest (version, name, description)
 agents/                      – subagent definitions
-hooks/                       – SessionStart hook (CLI symlink + orchestrator injection)
+hooks/                       – SessionStart, Stop and UserPromptSubmit hooks
 skills/                      – slash-command skills
 output-styles/               – output styles (ac-writing-style)
 cli/                         – Node.js CLI (TypeScript source + built dist/)
