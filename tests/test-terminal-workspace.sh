@@ -139,12 +139,14 @@ echo "keymap merge safety"
 # The generated block must survive landing on a keymap somebody wrote by hand.
 # TOML forbids a duplicate key, so a naive insert makes the whole file
 # unparseable and herdr rejects it.
-KEYMAP="$WORK/keymap.py"
+# Its own variable, not $KEYMAP: the yazi keymap section below claims that
+# name for its own writer, and the herdr fixtures are seeded after it runs.
+HERDR_KEYMAP="$WORK/herdr-keymap.py"
 awk "/^  SPECHUB_ARGS=.*py \"\\\$HERDR_CFG\" <<'PY'\$/{f=1; next} f && /^PY\$/{exit} f" \
-  "$SETUP" > "$KEYMAP"
+  "$SETUP" > "$HERDR_KEYMAP"
 BEGIN_MARK="# >>> spechub terminal-workspace >>>"
 END_MARK="# <<< spechub terminal-workspace <<<"
-args() { echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|alt+g|alt+shift+g|$BEGIN_MARK|$END_MARK"; }
+args() { echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|alt+g|alt+shift+g|false|$BEGIN_MARK|$END_MARK"; }
 
 cat > "$WORK/hand.toml" <<'T'
 [keys]
@@ -165,11 +167,16 @@ command = "my-own-tool"
 [theme]
 name = "catppuccin"
 
+[ui]
+# Mine, and it introduces the setting below it.
+pane_gaps = true
+pane_scrollbars = true
+
 [worktrees]
 directory = "~/.herdr/worktrees"
 T
 
-run_keymap() { SPECHUB_ARGS="$(args "$1")" python3 "$KEYMAP" "$2" 2>/dev/null; }
+run_keymap() { SPECHUB_ARGS="$(args "$1")" python3 "$HERDR_KEYMAP" "$2" 2>/dev/null; }
 parses() { python3 -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$1" 2>/dev/null; }
 
 cp "$WORK/hand.toml" "$WORK/merged.toml"
@@ -191,6 +198,22 @@ else no "a hand-written binding survives unless it collides with a managed key";
 if grep -q 'my_own_setting' "$WORK/merged.toml" && grep -q 'catppuccin' "$WORK/merged.toml"
 then ok "unmanaged settings survive the merge"
 else no "unmanaged settings survive the merge"; fi
+
+# A pane's scrollbar costs the pane a column that herdr does not subtract from
+# the width it reports, so a full-screen app wraps one column early and every
+# row drifts left. The fix is a [ui] key, the first this script has ever
+# written, and it has to beat a hand-written value rather than sit beside it:
+# TOML forbids the duplicate and herdr would throw the whole file out.
+ui_value=$(python3 -c "import tomllib,sys; print(tomllib.load(open(sys.argv[1],'rb'))['ui']['pane_scrollbars'])" \
+  "$WORK/merged.toml" 2>/dev/null)
+if [ "$ui_value" = "False" ]; then ok "apply writes pane_scrollbars = false into [ui]"
+else no "expected [ui] pane_scrollbars false, parsed: ${ui_value:-nothing}"; fi
+
+# One [ui] table, not two, and the user's own key in it comes through.
+ui_tables=$(grep -c '^\[ui\]' "$WORK/merged.toml")
+if [ "$ui_tables" = "1" ] && grep -q 'pane_gaps = true' "$WORK/merged.toml"
+then ok "the managed [ui] key merges into the user's table instead of declaring a second"
+else no "expected 1 [ui] table with pane_gaps intact, found $ui_tables"; fi
 
 cp "$WORK/merged.toml" "$WORK/twice.toml"
 run_keymap alt "$WORK/twice.toml"
@@ -2984,14 +3007,28 @@ keybindings:
       builtin: pageDown
 GHUSER
 
+# The herdr config is seeded through its own writer, so the regions under test
+# are exactly the ones apply leaves behind.
+mkdir -p "$UWORK/home/.config/herdr"
+: > "$UWORK/home/.config/herdr/config.toml"
+SPECHUB_ARGS="$(args alt)" python3 "$HERDR_KEYMAP" "$UWORK/home/.config/herdr/config.toml"
+
 if grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/yazi.toml" \
-   && grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/keymap.toml"; then
-  ok "the yazi fixtures carry a managed region before uninstall runs"
+   && grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/keymap.toml" \
+   && grep -q 'pane_scrollbars = false' "$UWORK/home/.config/herdr/config.toml"; then
+  ok "the yazi and herdr fixtures carry a managed region before uninstall runs"
 else
-  no "the yazi fixtures carry a managed region before uninstall runs"
+  no "the yazi and herdr fixtures carry a managed region before uninstall runs"
 fi
 
 uninstall_out=$(tw uninstall); uninstall_rc=$?
+
+if ! grep -qF "$BEGIN_MARK" "$UWORK/home/.config/herdr/config.toml" \
+   && ! grep -q 'pane_scrollbars' "$UWORK/home/.config/herdr/config.toml"; then
+  ok "uninstall removes pane_scrollbars with the rest of the herdr managed block"
+else
+  no "uninstall removes pane_scrollbars with the rest of the herdr managed block (rc=$uninstall_rc, said: $(flat "$uninstall_out"))"
+fi
 
 if ! grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/yazi.toml" \
    && ! grep -qF "$END_MARK" "$UWORK/home/.config/yazi/yazi.toml" \

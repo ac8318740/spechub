@@ -1766,7 +1766,7 @@ apply_herdr() {
   have herdr || { say "herdr not installed, skipping keymap"; return 0; }
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
   local mod wt diffkey dashkey filekey filetabkey difftabkey dashtabkey
-  local pickkey picktabkey gitkey gittabkey
+  local pickkey picktabkey gitkey gittabkey scrollbars
   mod=$(cfg_get herdr.chord_modifier alt)
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
   # f, not d: Windows Terminal keeps alt+shift+d for "duplicate pane", so the
@@ -1781,17 +1781,23 @@ apply_herdr() {
   picktabkey=$(cfg_get diffnav.pick_tab_key "alt+shift+x")
   gitkey=$(cfg_get lazygit.popup_key "alt+g")
   gittabkey=$(cfg_get lazygit.tab_key "alt+shift+g")
+  # herdr counts the scrollbar column inside the pane rect but reports the
+  # full rect width to the program running in the pane. A full-screen app then
+  # writes one column more than it has, so every wrapped row starts a column
+  # left of the row above it. Turning the scrollbar off gives the column back.
+  scrollbars=$(cfg_get herdr.pane_scrollbars false)
   [ "$(cfg_get diffnav.enabled true)" = "true" ] \
     || { diffkey=""; difftabkey=""; pickkey=""; picktabkey=""; }
   [ "$(cfg_get gh_dash.enabled true)" = "true" ] || { dashkey=""; dashtabkey=""; }
   [ "$(cfg_get yazi.enabled true)"    = "true" ] || { filekey=""; filetabkey=""; }
   [ "$(cfg_get lazygit.enabled true)" = "true" ] || { gitkey=""; gittabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$scrollbars|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
 (mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey,
- pickkey, picktabkey, gitkey, gittabkey, begin, end) = os.environ["SPECHUB_ARGS"].split("|")
+ pickkey, picktabkey, gitkey, gittabkey, scrollbars,
+ begin, end) = os.environ["SPECHUB_ARGS"].split("|")
 
 # key, command, description, herdr custom-command type, popup size.
 # type "shell" takes no size: herdr rejects width/height on a non-popup.
@@ -1865,13 +1871,39 @@ if mod != "none":
 # workspace numbers.
 keys.append('switch_workspace = "prefix+1..9"')
 
+# The first and only [ui] setting this script manages. See the comment on
+# `scrollbars` above for what the scrollbar column costs.
+ui = ["pane_scrollbars = " + ("true" if scrollbars == "true" else "false")]
+
 # TOML forbids a duplicate key, so a hand-written keymap that already sets
 # something this script manages would make the merged file unparseable and
 # herdr would reject the lot. Drop our own keys from the user's [keys] table,
 # and any [[keys.command]] bound to a key we are about to claim, before
 # inserting. Anything we do not manage is left exactly as it was.
 managed = {k.split("=", 1)[0].strip() for k in keys if "=" in k}
+managed_ui = {k.split("=", 1)[0].strip() for k in ui if "=" in k}
 claimed = {key for key, *_ in CUSTOM if key}
+
+
+def strip_managed(table, names):
+    # Drop the settings this script manages, and the comment block that
+    # introduced each one. Removing the setting alone strands its comment: the
+    # user is left with a run of bare headings describing settings that are no
+    # longer there, which reads as a broken config.
+    out, pending = [], []
+    for ln in table:
+        stripped = ln.strip()
+        if stripped.startswith("#") or not stripped:
+            pending.append(ln)
+            continue
+        if "=" in ln and ln.split("=", 1)[0].strip() in names:
+            pending = []
+            continue
+        out.extend(pending)
+        pending = []
+        out.append(ln)
+    out.extend(pending)
+    return out
 
 
 def tables(lines):
@@ -1897,47 +1929,39 @@ for table in tables(text.splitlines()):
         if bound and bound.group(1) in claimed:
             continue
     if header == "[keys]":
-        # Drop the bindings this script manages, and the comment block that
-        # introduced each one. Removing the binding alone strands its comment:
-        # the user is left with a run of bare headings describing keys that are
-        # no longer there, which reads as a broken config.
-        out, pending = [], []
-        for ln in table:
-            stripped = ln.strip()
-            if stripped.startswith("#") or not stripped:
-                pending.append(ln)
-                continue
-            if "=" in ln and ln.split("=", 1)[0].strip() in managed:
-                pending = []
-                continue
-            out.extend(pending)
-            pending = []
-            out.append(ln)
-        out.extend(pending)
-        table = out
+        table = strip_managed(table, managed)
+    if header == "[ui]":
+        table = strip_managed(table, managed_ui)
     kept.extend(table)
 text = "\n".join(kept)
 if text and not text.endswith("\n"):
     text += "\n"
 
-block = [begin]
-if keys:
-    # Merge into an existing [keys] table rather than declaring a second one.
-    if re.search(r"^\[keys\]", text, flags=re.M):
-        insert = "\n".join(keys)
-        text = re.sub(r"^\[keys\]\n", "[keys]\n" + begin + "\n" + insert + "\n" + end + "\n",
-                      text, count=1, flags=re.M)
-        block = None
-    else:
-        block.append("[keys]")
-        block.extend(keys)
+def merge(text, header, lines):
+    # Merge into a table the user already declared rather than declaring a
+    # second one, because TOML forbids declaring the same table twice. Returns
+    # the text and whether the merge happened.
+    head = r"^\[" + header + r"\][ \t]*\n"
+    if not re.search(head, text, flags=re.M):
+        return text, False
+    region = begin + "\n" + "\n".join(lines) + "\n" + end
+    return re.sub(head, f"[{header}]\n" + region + "\n",
+                  text, count=1, flags=re.M), True
 
-if block is not None:
-    block += custom_blocks() + ["", "[worktrees]", f'directory = "{wt}"', end]
-    text = text.rstrip("\n") + "\n\n" + "\n".join(block) + "\n"
-else:
-    tail = [begin] + custom_blocks() + ["", "[worktrees]", f'directory = "{wt}"', end]
-    text = text.rstrip("\n") + "\n\n" + "\n".join(tail) + "\n"
+
+block = []
+for header, lines in (("keys", keys), ("ui", ui)):
+    text, merged = merge(text, header, lines)
+    if merged:
+        continue
+    if block:
+        block.append("")
+    block += [f"[{header}]"] + lines
+
+# [[keys.command]] and [worktrees] are top-level, so they can never sit inside
+# a merged region and always land in a block of their own at the end.
+block += custom_blocks() + ["", "[worktrees]", f'directory = "{wt}"']
+text = text.rstrip("\n") + "\n\n" + "\n".join([begin] + block + [end]) + "\n"
 
 open(path, "w").write(text)
 PY

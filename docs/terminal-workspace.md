@@ -458,7 +458,7 @@ The `ctrl` and `shift` modifiers are not options for a fourth list, and which on
 
 ### 5.2. One config file, validated without a restart
 
-*Everything above lives in `~/.config/herdr/config.toml`. Two choices in that file are worth explaining.*
+*Everything above lives in `~/.config/herdr/config.toml`. Three choices in that file are worth explaining.*
 
 - Validate with `herdr config check`
 - Apply without restarting with `herdr server reload-config`
@@ -577,12 +577,16 @@ description = "file tree (tab)"
 
 [worktrees]
 directory = "~/.herdr/worktrees"
+
+[ui]
+# A pane's scrollbar costs the pane a column that herdr does not subtract.
+pane_scrollbars = false
 ```
 
 - A `shell` command carries no `width` or `height`
     - herdr rejects both on anything that is not a popup
 
-Two choices worth explaining.
+Three choices worth explaining.
 
 **Plain `alt` chords, not `ctrl+alt`.**
 
@@ -596,6 +600,18 @@ Two choices worth explaining.
 - A relative value resolves against the herdr session's base directory, not the repository you point at
 - Worktrees for a second repository then land inside the first
 - Use an absolute path unless you only ever work in one repository
+
+**`pane_scrollbars = false`, so a full-screen app gets the whole pane.**
+
+- herdr draws a border and a scrollbar inside the pane rect, then reports the full rect width to the program in the pane
+- A program that fills the pane then writes one column more than it has
+    - Every wrapped row starts one column left of the row above it
+- Measured on one machine: `herdr pane layout` reported a 132-column rect at `x=26`, the PTY and neovim's `&columns` both reported 131, and 130 were usable
+    - The arithmetic is herdr's, so it should hit anyone running `pane_scrollbars = true`, and that is unproven on a second machine
+- `alt+s` twice repairs the display, because toggling the sidebar recomputes the geometry from scratch
+- The cost is that no pane draws a scrollbar
+    - Scrolling still works, because the mouse wheel and copy mode never used it
+- Set `herdr.pane_scrollbars: true` in the workspace config to take the scrollbar back
 
 ### 5.3. When the sidebar numbers stop matching
 

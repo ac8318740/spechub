@@ -30,6 +30,13 @@ herdr:
   # those chords go silently dead.
   # Set "none" to keep herdr's default prefix-only keymap.
   chord_modifier: alt
+  # A pane's scrollbar costs it a column. herdr counts that column inside the
+  # pane rect but tells the program in the pane it has the full width, so a
+  # full-screen app wraps one column early and every row drifts one column
+  # left of the row above it. Set true to take the scrollbar back; scrolling
+  # itself is unaffected either way, because the mouse wheel and copy mode do
+  # not use it.
+  pane_scrollbars: false
   worktrees_directory: "~/.herdr/worktrees"
   # Agent state hook, so herdr reads state from the agent instead of the
   # screen. One of: claude, codex, opencode, copilot, none.

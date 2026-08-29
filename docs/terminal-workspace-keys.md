@@ -107,3 +107,12 @@ Add `shift` to any of these to open it in a full tab instead of a popup.
     - An escape sequence such as `^[Z` means the key arrived, so the problem is the remote config
     - Nothing printed means the key never left your machine
 - Fix it with `assets/terminal-workspace/client-keybindings.md`, which you hand to an agent running on your own machine
+
+## When a full-screen app draws its rows one column further left each time
+
+- herdr's pane scrollbar costs the pane a column, and setup turns the scrollbar off for that reason
+- The symptom is a wrapped row starting one column left of the row above it
+    - neovim shows it, and so does any other program that draws the whole pane
+- Toggling the sidebar with `alt+s` repairs the display until the next launch, because it recomputes the geometry
+- Check the setting survived with `grep pane_scrollbars ~/.config/herdr/config.toml`
+- Re-apply it with `bash assets/terminal-workspace/setup.sh apply`
