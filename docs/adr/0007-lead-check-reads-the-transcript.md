@@ -3,15 +3,18 @@
 The `handoff` and `compact-and-continue` skills run only in a **lead session**,
 because both write state the lead alone owns. An agent decides which it is by
 planting a random mark in its own transcript and then asking which transcript
-holds it. A hit under `~/.claude/projects/<project>/<session>/subagents/` means
-the agent is a subagent or a teammate. No environment variable takes part in
-that decision.
+holds it.
+
+A hit under `~/.claude/projects/<project>/<session>/subagents/` means the agent
+is a subagent or a teammate. No environment variable takes part in that
+decision.
 
 The first version read `CLAUDE_CODE_CHILD_SESSION` instead. Claude Code sets
 that variable to `1` in the environment of every Bash tool subprocess, in every
 session. So the check was true unconditionally, and both skills refused to run
-everywhere (#146). The variable marks "spawned by Claude Code", and nothing
-finer.
+everywhere (#146).
+
+The variable marks "spawned by Claude Code", and nothing finer.
 
 ## Considered options
 
@@ -35,9 +38,12 @@ finer.
 
 - The command polls for up to ten seconds rather than grepping once. The host
   writes the record carrying a command while that command still runs, roughly
-  four seconds in. A single grep therefore runs too early, finds nothing and
-  answers `lead` for everyone. A lead usually exits in about four seconds, as
-  soon as its own record lands.
+  four seconds in.
+
+    A single grep therefore runs too early, finds nothing and answers
+    `lead` for everyone. A lead usually exits in about four seconds, as
+    soon as its own record lands.
+
 - The check reads a Claude Code internal layout that no public contract
   describes. A host that renames the `subagents/` directory, or files agent
   transcripts elsewhere, turns every child into a `lead` verdict.
@@ -56,14 +62,19 @@ finer.
 - The agent still chooses the nonce, and a language model samples randomness
   badly. Two agents in one session that pick the same eight characters read
   each other's transcripts. Generating the nonce at runtime cannot fix that.
-  The mark has to sit in the command text for the command to find it. A value
-  computed at runtime reaches the transcript only after the command ends.
+
+    The mark has to sit in the command text for the command to find it. A
+    value computed at runtime reaches the transcript only after the command
+    ends.
+
 - Both skills carry their own copy of the block, rather than calling a shared
   script. `skills/new-worktree/detect-orchestrator.sh` shows the repo has that
-  pattern. No home exists for a script two skills share, though. The repo also
-  already repeats the context-pressure path expression in three places.
-  `tests/test-skill-gates.sh` asserts the two copies match byte for byte. That
-  assertion is what makes the duplication safe to keep.
+  pattern. No home exists for a script two skills share, though.
+
+    The repo also already repeats the context-pressure path expression in
+    three places. `tests/test-skill-gates.sh` asserts the two copies match
+    byte for byte. That assertion is what makes the duplication safe to keep.
+
 - `tests/test-skill-gates.sh` extracts the command from each `SKILL.md` and
   runs it against fixture transcript layouts. The fixtures encode the layout
   above, so they need revisiting whenever the host changes it.

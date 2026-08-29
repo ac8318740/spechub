@@ -9,10 +9,13 @@ Grilling settles open decisions by asking the user a whole round of questions
 at once. One technique at two scales.
 
 The frontier is the set of questions ready to ask – every open question with
-settled prerequisites. In conversation you work it out as you go. On a
-map – a stored graph of question and work nodes – you ask the tracker for it.
-You limit it to `hitl` nodes, meaning the ones a human must answer rather
-than an agent. On the files backend:
+settled prerequisites.
+
+In conversation you work it out as you go. On a map – a stored graph of
+question and work nodes – you ask the tracker for it. You limit it to `hitl`
+nodes, meaning the ones a human must answer rather than an agent.
+
+On the files backend:
 
 `~/.claude/spechub/bin/spechub node frontier --map <name> --mode hitl`
 
@@ -63,10 +66,14 @@ option covers, that text is the answer.
 ## Stop condition
 
 Stop when the frontier is empty, or the user signals stop ("stop", "done",
-"proceed"). There is no question cap. Settled prerequisites already bound
-the frontier, and provenance keeps it narrow. Every question hangs off the
-answer that surfaced it, so nothing unrelated can join the round. A cap
-would be a blunt proxy for a guarantee the frontier definition provides.
+"proceed").
+
+There is no question cap. Settled prerequisites already bound the
+frontier, and provenance keeps it narrow. Every question hangs off the
+answer that surfaced it, so nothing unrelated can join the round.
+
+A cap would be a blunt proxy for a guarantee the frontier definition
+provides.
 
 ## On a map
 
@@ -75,7 +82,9 @@ the tracker's `update` and `create` operations:
 
 1. Append the answer to the node body under `## Answer`. Mark the node
    resolved. On the files backend, one `spechub node update` call does both.
-   Write the answer per the `writing` skill.
+
+    Write the answer per the `writing` skill.
+
 2. Create a node for each new question the answer surfaced, with `answers`
    naming the node that surfaced it. Questions that can be stated precisely
    are `open`; the rest are `fog`.

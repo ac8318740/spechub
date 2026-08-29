@@ -24,12 +24,14 @@ an obvious choice buries the ones that matter.
 
 ### Writing one
 
-- Path: `docs/adr/NNNN-slug.md`. The number is the highest existing number
-  plus one, zero-padded to four digits. Create the directory lazily. If the file
-  for that number appeared since you scanned (a parallel teammate wrote one),
-  renumber to the new highest plus one. In agent teams, ADR writing is a
-  shared-file concern – route it through the orchestrator or the sequential
-  after-team step, never two teammates at once.
+- Path: `docs/adr/NNNN-slug.md`. The number is the highest existing number plus
+  one, zero-padded to four digits. Create the directory lazily.
+
+    If the file for that number appeared since you scanned (a parallel teammate
+    wrote one), renumber to the new highest plus one. In agent teams, ADR
+    writing is a shared-file concern – route it through the orchestrator or the
+    sequential after-team step, never two teammates at once.
+
 - Body: a `# title` heading, then one to three sentences stating the decision
   and the why. Optional short `## Considered options` and `## Consequences`
   sections when they carry weight the summary cannot.
@@ -84,9 +86,11 @@ sharpened a fuzzy term, coined one – record it:
 
 Format: a `# Glossary` heading, then one `**term** – definition` line per
 term, alphabetical, one or two sentences each. Each definition follows the
-`writing` skill. Glossary and nothing else – no implementation notes, no
-specs, no scratch content. The moment it accepts anything else it becomes
-another document competing with the living specs.
+`writing` skill.
+
+Glossary and nothing else – no implementation notes, no specs, no scratch
+content. The moment it accepts anything else it becomes another document
+competing with the living specs.
 
 **The human wins.** A glossary records the vocabulary humans agreed on.
 Nobody rewrites it to match code. If code and glossary disagree, surface the

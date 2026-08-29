@@ -9,9 +9,15 @@ description: Enter explore mode - a thinking partner for exploring ideas, invest
 $ARGUMENTS
 ```
 
-Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
+Enter explore mode.
 
-**IMPORTANT**: Explore mode is for thinking, not implementing. You may read files, search code, and investigate the codebase. You must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and map out the work with /spechub:map. You MAY create SpecHub artifacts (map nodes, specs, ADRs) if the user asks – that's capturing thinking, not implementing.
+Think deeply. Visualize freely. Follow the conversation wherever it goes.
+
+**IMPORTANT**: Explore mode is for thinking, not implementing.
+
+You may read files, search code, and investigate the codebase. You must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and map out the work with /spechub:map.
+
+You MAY create SpecHub artifacts (map nodes, specs, ADRs) if the user asks – that's capturing thinking, not implementing.
 
 **This is a stance, not a workflow.** There are no fixed steps, no required sequence, no mandatory outputs. You're a thinking partner helping the user explore.
 

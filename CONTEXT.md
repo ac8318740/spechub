@@ -6,7 +6,9 @@
 
 **axis** – One dimension of a dev setup, such as the orchestrator or whether a browser-verification mode is available. Each axis is either required, meaning a host must declare a value, or an optional toggle.
 
-**bridge** – A Chrome extension and a **relay** on the user's laptop. A development virtual machine reaches them over a **reverse tunnel**. The bridge lets an agent drive a real browser over the Chrome DevTools Protocol (CDP). It does not show a page to a person – see **opener** for that.
+**bridge** – A Chrome extension and a **relay** on the user's laptop. A development virtual machine reaches them over a **reverse tunnel**.
+
+The bridge lets an agent drive a real browser over the Chrome DevTools Protocol (CDP). It does not show a page to a person – see **opener** for that.
 
 **checkout** – One git worktree directory.
 
@@ -14,7 +16,9 @@
 
 **child session** – A subagent or a teammate, launched by another agent rather than by a person. It runs inside the **lead session**'s own process and shares that session's id, so no environment variable separates the two. A child reports its state to the lead, and never writes what the lead owns.
 
-**dev setup** – The machine-level tools a SpecHub session runs inside. It names the orchestrator that hosts terminal panes and git worktrees. It also names the browser-verification modes that work on the machine, plus optional extras such as publishing the dev server to a private network. A host declares its dev setup, and a project does not.
+**dev setup** – The machine-level tools a SpecHub session runs inside. It names the orchestrator that hosts terminal panes and git worktrees. It also names the browser-verification modes that work on the machine, plus optional extras such as publishing the dev server to a private network.
+
+A host declares its dev setup, and a project does not.
 
 **durable artifact** – Any text an agent writes that someone reads later without the conversation that produced it. It covers architecture decision records, glossary entries, living specs and their functional requirements, map nodes, handoff files, READMEs and docs, and pull request bodies. Chat replies and commit subject lines are not durable artifacts.
 

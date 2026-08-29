@@ -20,8 +20,9 @@ green success message and exit code 0.
 
 A folded or literal block scalar's byte range runs past its trailing newline,
 so the splice ate the line break and destroyed the following key. An existing
-empty value has a zero-width range, so the write produced `test:npm test`. A
-new value spanning lines landed at column zero. A scalar inside a flow
+empty value has a zero-width range, so the write produced `test:npm test`.
+
+A new value spanning lines landed at column zero. A scalar inside a flow
 collection passed every guard, and a value holding a comma truncated the key
 and invented a second one beside it.
 
@@ -41,8 +42,10 @@ already been wrong four times.
 Do not narrow it to the changed key on the grounds that no test covers the
 difference. No test can.
 
-The document interface was the trusted baseline until a fifth shape broke it.
-A whitespace-only value over a block scalar with a sibling key after it emitted
-a content line no parser reads back. The value returned as the empty string,
-behind exit 0. The splice refused that write correctly and handed it to a
-fallback nobody checked. The writer checks both paths now.
+The document interface was the trusted baseline until a fifth shape broke it. A
+whitespace-only value over a block scalar with a sibling key after it emitted a
+content line no parser reads back. The value returned as the empty string,
+behind exit 0.
+
+The splice refused that write correctly and handed it to a fallback nobody
+checked. The writer checks both paths now.
