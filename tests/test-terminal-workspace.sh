@@ -28,6 +28,8 @@ skipped=0
 ok() { printf '  \033[32mPASS\033[0m %s\n' "$1"; pass=$((pass + 1)); }
 no() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 skip() { printf '  \033[33mSKIP\033[0m %s\n' "$1"; skipped=$((skipped + 1)); }
+# One line of a captured run, for a failure message that has to stay on one.
+flat() { printf '%s' "$1" | tr '\n' '|'; }
 
 # spechub-md builds its HTML with the python markdown package and exits 1 when
 # it cannot import one, which is deliberate: there is nothing to render. Every
@@ -2884,8 +2886,157 @@ wait "$NODE_PID" 2>/dev/null
 fi
 
 
+echo "the neovim unsaved-changes dot"
+# The one component that writes into a config directory the user built, so
+# every guard around that matters more here than anywhere else: it starts off,
+# it writes a whole file of its own rather than editing one of theirs, it
+# refuses a file of that name it did not write, and turning it off deletes it.
+#
+# apply runs for real, with every other component switched off so nothing
+# reaches the network. HOME, $BIN, the config and git's global config all
+# point inside $WORK, because apply writes files and uninstall deletes them.
+NWORK="$WORK/nvim-run"
+mkdir -p "$NWORK/home/.local/bin" "$NWORK/home/.config/spechub" \
+         "$NWORK/home/.config/nvim/lua/config" "$NWORK/home/.config/nvim/lua/plugins"
+NPLUG="$NWORK/home/.config/nvim/lua/plugins/spechub.lua"
+nw() {
+  env HOME="$NWORK/home" \
+      SPECHUB_TW_BIN="$NWORK/home/.local/bin" \
+      SPECHUB_TW_CONFIG="$NWORK/home/.config/spechub/terminal-workspace.yaml" \
+      GIT_CONFIG_GLOBAL="$NWORK/gitconfig" \
+      bash "$SETUP" "$@" 2>&1
+}
+cat > "$NWORK/home/.config/spechub/terminal-workspace.yaml" <<'NCFG'
+enabled: true
+herdr: {enabled: false}
+gh_dash: {enabled: false}
+diffnav: {enabled: false}
+delta: {enabled: false}
+tuicr: {enabled: false}
+lazygit: {enabled: false}
+yazi: {enabled: false}
+markdown: {enabled: false}
+remote: {enabled: false}
+neovim: {enabled: true}
+NCFG
+
+# apply refuses to run at all off x86_64, so there is nothing to assert there.
+case "$(uname -m)" in
+  x86_64|amd64) NVIM_APPLY=1 ;;
+  *) NVIM_APPLY=0
+     printf '  note: apply installs x86_64 binaries only, so the neovim checks\n'
+     printf '        that run it are skipped on %s\n' "$(uname -m)" ;;
+esac
+okn() { if [ "$NVIM_APPLY" = "1" ]; then ok "$1"; else skip "$1"; fi; }
+non() { if [ "$NVIM_APPLY" = "1" ]; then no "$1"; else skip "${2:-${1%% (*}}"; fi; }
+
+# No LazyVim yet. The dot is appended to LazyVim's own lualine section, so a
+# file written here would sit in the config doing nothing, and the user would
+# have no idea why the statusline never changed.
+out=$(nw apply)
+if [ ! -e "$NPLUG" ] && printf '%s' "$out" | grep -q "LazyVim"; then
+  okn "apply writes no plugin file on a machine with no LazyVim, and says so"
+else
+  non "apply writes no plugin file on a machine with no LazyVim, and says so (said: $(flat "$out"))" \
+      "apply writes no plugin file on a machine with no LazyVim, and says so"
+fi
+
+echo 'require("lazy").setup({ spec = { { "LazyVim/LazyVim", import = "lazyvim.plugins" } } })' \
+  > "$NWORK/home/.config/nvim/lua/config/lazy.lua"
+
+out=$(nw apply)
+if [ -f "$NPLUG" ] \
+   && grep -q 'lualine_c' "$NPLUG" \
+   && grep -q 'vim.bo.modified' "$NPLUG" \
+   && grep -q '#f38ba8' "$NPLUG"; then
+  okn "apply writes the lualine dot once LazyVim is present"
+else
+  non "apply writes the lualine dot once LazyVim is present (said: $(flat "$out"))" \
+      "apply writes the lualine dot once LazyVim is present"
+fi
+
+# Every other writer in this script is idempotent, and a plugin spec appended
+# twice would draw two dots.
+cp "$NPLUG" "$NWORK/first.lua" 2>/dev/null
+nw apply >/dev/null
+if [ "$NVIM_APPLY" != "1" ] || diff -q "$NWORK/first.lua" "$NPLUG" >/dev/null; then
+  okn "re-applying the neovim component leaves the same file"
+else
+  non "re-applying the neovim component leaves the same file"
+fi
+
+# The colour is a config key rather than a constant, because the dot has to
+# match whatever theme the user runs.
+python3 - "$NWORK/home/.config/spechub/terminal-workspace.yaml" <<'PYCOL'
+import sys, yaml
+p = sys.argv[1]
+c = yaml.safe_load(open(p))
+c["neovim"]["unsaved_dot_color"] = "#00ff00"
+yaml.safe_dump(c, open(p, "w"), sort_keys=False)
+PYCOL
+nw apply >/dev/null
+if [ "$NVIM_APPLY" != "1" ] || grep -q '#00ff00' "$NPLUG"; then
+  okn "unsaved_dot_color reaches the written file"
+else
+  non "unsaved_dot_color reaches the written file"
+fi
+
+# nvim runs the file as lua, so a broken heredoc is a config error on the
+# user's machine and nothing this script can catch for them.
+if [ "$NVIM_APPLY" = "1" ] && command -v nvim >/dev/null 2>&1; then
+  if nvim --headless \
+       -c "lua local f, e = loadfile('$NPLUG'); if e then vim.cmd('cq') end" \
+       -c q >/dev/null 2>&1; then
+    ok "the written plugin file is valid lua"
+  else
+    no "the written plugin file is valid lua"
+  fi
+else
+  skip "the written plugin file is valid lua"
+fi
+
+# The name is ours by convention alone. A file of that name this script did
+# not write belongs to the user, and neither apply nor disable may touch it.
+printf -- '-- mine\n' > "$NPLUG"
+nw apply >/dev/null
+if [ "$(cat "$NPLUG")" = "-- mine" ]; then
+  okn "apply leaves a spechub.lua the user wrote by hand alone"
+else
+  non "apply leaves a spechub.lua the user wrote by hand alone"
+fi
+
+out=$(nw disable neovim)
+if [ "$(cat "$NPLUG" 2>/dev/null)" = "-- mine" ] \
+   && printf '%s' "$out" | grep -q "by hand"; then
+  ok "disable leaves a spechub.lua the user wrote by hand alone"
+else
+  no "disable leaves a spechub.lua the user wrote by hand alone (said: $(flat "$out"))"
+fi
+
+# Back to a file this script owns, so the deletion paths have something of
+# ours to delete.
+rm -f "$NPLUG"
+nw apply >/dev/null
+out=$(nw disable neovim)
+if [ ! -e "$NPLUG" ] && printf '%s' "$out" | grep -qF "neovim.enabled: false"; then
+  okn "disable deletes the plugin file and names the config edit that keeps it off"
+else
+  non "disable deletes the plugin file and names the config edit that keeps it off (said: $(flat "$out"))" \
+      "disable deletes the plugin file and names the config edit that keeps it off"
+fi
+
+nw apply >/dev/null
+out=$(nw uninstall)
+if [ ! -e "$NPLUG" ]; then
+  okn "uninstall deletes the plugin file too"
+else
+  non "uninstall deletes the plugin file too (said: $(flat "$out"))" \
+      "uninstall deletes the plugin file too"
+fi
+
+
 echo "disable answers for every component"
-# The config names nine components. `disable` has a branch for six of them,
+# The config names ten components. `disable` has a branch for seven of them,
 # and the other three - yazi, markdown, remote - fall through a case with no
 # default arm, so the script exits 0 having done nothing and said nothing. A
 # silent success on a request that was never carried out is the one outcome a
@@ -2904,7 +3055,6 @@ tw() {
       GIT_CONFIG_GLOBAL="$UWORK/gitconfig" \
       bash "$SETUP" "$@" 2>&1
 }
-flat() { printf '%s' "$1" | tr '\n' '|'; }
 
 cp "$ROOT/assets/terminal-workspace/config.example.yaml" \
    "$UWORK/home/.config/spechub/terminal-workspace.yaml"
@@ -2925,26 +3075,26 @@ done
 # A name that is not a component at all takes the same silent path today.
 out=$(tw disable bogus); rc=$?
 missing=""
-for c in herdr delta diffnav gh_dash lazygit tuicr; do
+for c in herdr delta diffnav gh_dash lazygit neovim tuicr; do
   printf '%s' "$out" | grep -qF "$c" || missing="$missing $c"
 done
 if [ "$rc" != "0" ] && [ -z "$missing" ]; then
-  ok "disable rejects an unknown component and lists the six it supports"
+  ok "disable rejects an unknown component and lists the seven it supports"
 else
-  no "disable rejects an unknown component and lists the six it supports (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
+  no "disable rejects an unknown component and lists the seven it supports (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
 fi
 
 # tuicr gained a disable branch without reaching the usage line, so the one
 # place a user goes to find out what they may type still omits it.
 out=$(tw disable); rc=$?
 missing=""
-for c in herdr delta diffnav gh_dash lazygit tuicr; do
+for c in herdr delta diffnav gh_dash lazygit neovim tuicr; do
   printf '%s' "$out" | grep -qF "$c" || missing="$missing $c"
 done
 if [ "$rc" != "0" ] && [ -z "$missing" ]; then
-  ok "the usage line for disable lists all six supported components"
+  ok "the usage line for disable lists all seven supported components"
 else
-  no "the usage line for disable lists all six supported components (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
+  no "the usage line for disable lists all seven supported components (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
 fi
 
 

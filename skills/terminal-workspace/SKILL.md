@@ -25,7 +25,7 @@ SpecHub does not need any of this. Offer it, do not assume it.
 
 ```mermaid
 flowchart TD
-    IN["Eight components, one YAML file<br/>(machine-level, not per-project)"] --> ST["See what this machine has<br/>(setup.sh status)"]
+    IN["Ten components, one YAML file<br/>(machine-level, not per-project)"] --> ST["See what this machine has<br/>(setup.sh status)"]
     ST --> CF["Copy the config, walk the choices<br/>(~/.config/spechub/terminal-workspace.yaml)"]
     CF --> AP["Install binaries, write the keys<br/>(setup.sh apply)"]
     AP --> Q{"How does the user reach<br/>this machine?"}
@@ -38,7 +38,7 @@ flowchart TD
 
 | Step in the diagram                   | Detail    |
 | ------------------------------------- | --------- |
-| Eight components, one YAML file       | section 1 |
+| Ten components, one YAML file         | section 1 |
 | See what this machine has             | section 2 |
 | Copy the config, walk the choices     | section 3 |
 | Install binaries, write the keys      | section 4 |
@@ -48,21 +48,24 @@ flowchart TD
 | Copy, open or download fails          | section 7 |
 | Turn one component off                | section 8 |
 
-## 1. Nine components, installed for a user account and not for a project
+## 1. Ten components, installed for a user account and not for a project
 
-*Nine config components install eleven tools. herdr holds the terminals, and the rest read diffs, pull requests and files, and commit the result.*
+*Ten config components install eleven tools. herdr holds the terminals, and the rest read diffs, pull requests and files, and commit the result.*
 
 This is **machine-level, not per-project**. It installs binaries and writes
 keybindings for the user account, so it does not belong in
 `spechub/project.yaml`.
 
 Count components when you mean config keys, and tools when you mean binaries.
-The config holds nine component sections, plus an `enabled` master switch
-above them. Those nine sections install eleven tools between them:
+The config holds ten component sections, plus an `enabled` master switch
+above them. Nine of those sections install eleven tools between them:
 
 - Four tools the user drives day to day: herdr, gh-dash, diffnav and lazygit. tuicr joins them once a review starts
 - Five tools that support those three: delta, tuicr, yazi, mermaid-ascii and glow
 - Two helpers of SpecHub's own: spechub-md, and the spechub-clip and spechub-open pair
+
+The tenth, `neovim`, installs nothing. It writes one file into a neovim config
+the user already has, and it is the only component that starts off.
 
 | Component | What it gives the user | Config key |
 |---|---|---|
@@ -72,12 +75,14 @@ above them. Those nine sections install eleven tools between them:
 | delta | The diff renderer git pages through. | `delta.enabled` |
 | tuicr | Reviews a pull request inside the terminal. | `tuicr.enabled` |
 | lazygit | Stages, commits, amends and pushes, on one key. | `lazygit.enabled` |
+| neovim | A dot in the LazyVim statusline for a buffer with unsaved changes. Installs nothing, writes one file, and starts off. | `neovim.enabled` |
 | yazi | A file manager, with markdown drawn live by spechub-md. One key sends the hovered file to the machine the user sits at. | `yazi.enabled` |
 | markdown | Markdown with its mermaid diagrams drawn as text, or served to a browser. Installs spechub-md, mermaid-ascii and glow. | `markdown.enabled` |
 | remote | Copy and open, on a machine with no display of its own. Installs spechub-clip and spechub-open. | `remote.enabled` |
 
 A config key never carries a hyphen, so gh-dash is `gh_dash`. The last two rows
 name a feature rather than a binary, so each of those cells names its tools.
+The `neovim` row names an editor this setup never installs, and only configures.
 
 The two files this skill works with:
 
@@ -124,7 +129,7 @@ Its last lines say where a copy and an open will land on this machine. Section
 
 ## 3. Copy the config, then walk the user through the choices
 
-*The config exposes far more keys than this. Eight of them are worth raising with the user, and the two that need no new vocabulary come first.*
+*The config exposes far more keys than this. Nine of them are worth raising with the user, and the two that need no new vocabulary come first.*
 
 Copy the example config before the first `apply`:
 
@@ -153,6 +158,10 @@ Then ask about these settings, in this order:
   - Ask for the name `tailscale status` prints on **this** machine, not the name the user calls their laptop
   - Taildrop sends only between devices one Tailscale account owns on one tailnet, so confirm both ends match before setting it
   - Tell them to run `sudo tailscale set --operator=$USER` once on this machine, because `tailscale file cp` refuses a non-root caller without it
+- **`neovim.enabled`**: off by default, and the only component that is. Turn it on for a user who edits in LazyVim and wants a visible mark on a buffer with unsaved changes
+  - LazyVim recolours the filename and shows no sign of its own, so a modified buffer is easy to miss
+  - `apply` writes `~/.config/nvim/lua/plugins/spechub.lua` and edits nothing the user wrote
+  - Tell a user who already added this override themselves to delete their copy, or the statusline draws two dots
 - **`remote.clipboard_shim`**: leave it `true` on any machine reached over SSH. It puts an `xclip` on `$PATH`, backed by `spechub-clip`. That stand-in is the only reason gh-dash's `y` and `Y` work there. `apply` skips it when the machine has a real `xclip` or a display
 
 One setting sits outside the config. `spechub-md --serve` takes its port from
@@ -449,14 +458,19 @@ empty.
 *`disable` undoes one component. `uninstall` undoes the managed config. Neither removes a binary.*
 
 ```bash
-bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash, lazygit, tuicr
+bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash, lazygit, neovim, tuicr
 ```
 
-`disable` takes those five components and no others. For `diffnav`, `gh_dash`
+`disable` takes those seven components and no others. For `diffnav`, `gh_dash`
 and `tuicr` it writes `<component>.enabled: false` into the config itself, then
-rebuilds the herdr keymap so the rest of it survives. For `herdr` and `delta`
-it does not. Set `<component>.enabled: false` yourself after those two, or the
-next `apply` restores them.
+rebuilds the herdr keymap so the rest of it survives. For `herdr`, `delta` and
+`neovim` it does not. Set `<component>.enabled: false` yourself after those
+three, or the next `apply` restores them.
+
+`neovim` is the one whose undo is a deletion. The component writes a whole file
+of SpecHub's own, so `disable` removes `~/.config/nvim/lua/plugins/spechub.lua`
+and leaves the rest of the user's neovim config alone. Neither `disable` nor
+`uninstall` touches a `spechub.lua` the user wrote by hand.
 
 `yazi`, `markdown` and `remote` have no `disable` path. `disable` refuses for
 those three and names the edit that turns one off. Set the component's
@@ -468,5 +482,5 @@ bash "$SETUP" uninstall
 
 `uninstall` removes everything `apply` wrote. It strips the managed blocks from
 the herdr, tuicr and yazi configs. It unsets delta as the git pager. It deletes
-the helper scripts, the `xclip` stand-in, and the keybindings it wrote into
-gh-dash. The user's own settings around them survive, and every binary stays.
+the helper scripts, the `xclip` stand-in, the neovim plugin file, and the
+keybindings it wrote into gh-dash. The user's own settings around them survive, and every binary stays.
