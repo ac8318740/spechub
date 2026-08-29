@@ -32,6 +32,7 @@ Requirements alone are a weaker guarantee than the strict order gives, where no 
 ## Project configuration
 
 Read `spechub/project.yaml` for project-specific settings:
+
 - `directories.tests` – where to create test files
 - `directories.source` – source code root (for mirroring structure)
 - `commands.test` – how to run tests

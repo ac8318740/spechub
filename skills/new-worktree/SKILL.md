@@ -18,8 +18,8 @@ Trigger on "create a worktree", "new worktree", "spin up a worktree", "make me a
 
 - Confirm the task actually needs a worktree. If the cwd is already in a worktree, or uncommitted changes belong to this task, ask before branching. Do not silently start a second one.
 - Resolve the MAIN repo root, never a nested worktree path. From anywhere in the repo:
-  - `dirname "$(git rev-parse --git-common-dir)"` gives the main repo root.
-  - Never create a worktree inside another worktree. Nested worktree paths have caused real breakage.
+    - `dirname "$(git rev-parse --git-common-dir)"` gives the main repo root.
+    - Never create a worktree inside another worktree. Nested worktree paths have caused real breakage.
 
 ## Pick the inputs
 

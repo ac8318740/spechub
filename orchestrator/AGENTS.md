@@ -51,6 +51,7 @@ If `~/.claude/spechub/bin/spechub` is missing, the SessionStart hook did not run
 All project-specific commands and paths come from `spechub/project.yaml`. Read this file before you run any build, test or lint command. If it doesn't exist, prompt the user to run `/spechub:setup`.
 
 Key fields:
+
 - `commands.test` – run tests
 - `commands.test_collect` – count tests (for baseline)
 - `commands.build` – verify build
@@ -90,8 +91,10 @@ demands, and nothing declares how big the work is:
 
 - **The way is clear** – implement it. `/spechub:implement` runs the TDD
   pipeline on the request directly; a small unit of work is simply small.
+
 - **Something broke** – `/spechub:quick-fix`. Broken and foggy are different
   axes. A bug has a root cause to find, not a decision to settle.
+
 - **Decisions need settling** – `/spechub:map`. It charts a map if none exists.
   Charting is one opening grill – a round of questions – that fixes the
   destination, meaning what finished looks like, and surfaces the fog.
@@ -248,9 +251,9 @@ When `workflow.spec_sync` is `true` in `spechub/project.yaml`:
 1. Run `git diff --staged` to see what is changing
 2. Map changed files to spec domains via `spechub/domain-map.yaml`
 3. For each affected domain with a `spechub/specs/[domain]/spec.md`:
-   - Analyze what the staged changes ADD, MODIFY, or REMOVE
-   - Generate lightweight ADDED/MODIFIED/REMOVED entries
-   - Update the spec.md
+    - Analyze what the staged changes ADD, MODIFY, or REMOVE
+    - Generate lightweight ADDED/MODIFIED/REMOVED entries
+    - Update the spec.md
 4. Stage updated spec files in the same commit
 5. Flag unmapped source files. Prompt the user to map them.
 

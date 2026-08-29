@@ -23,14 +23,17 @@ The variable marks "spawned by Claude Code", and nothing finer.
   `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID` and `CLAUDE_CODE_ENTRYPOINT`. A child
   runs inside the lead's own process, so no variable separates them. Ruled out
   by measurement, not by preference.
+
 - **Drop the check and let a child run the skills.** Simplest, and wrong. A
   child shares the lead's `CLAUDE_CODE_SESSION_ID`, so a child's quiet marker
   silences a context-pressure nudge the lead still needs, and a child's
   `spechub/HANDOFF.md` overwrites the lead's anchor.
+
 - **Read `taskKind` from the agent's `.meta.json`.** The host does write one
   beside each agent transcript, naming `in_process_teammate` for a teammate and
   omitting `taskKind` for a plain subagent. An agent cannot tell which of those
   files is its own, so the file answers a question nobody can ask.
+
 - **Plant a mark, then find it.** Chosen. The mark is unique per agent, so the
   answer is the agent's own and never a sibling's.
 
@@ -47,18 +50,22 @@ The variable marks "spawned by Claude Code", and nothing finer.
 - The check reads a Claude Code internal layout that no public contract
   describes. A host that renames the `subagents/` directory, or files agent
   transcripts elsewhere, turns every child into a `lead` verdict.
+
 - Absence of evidence reads as `lead`. A host that persists no transcript
   leaves the command empty-handed, and the skill proceeds. Failing closed is
   what produced #146, so the failure now falls on the side that keeps the
   skills runnable.
+
 - The agent transcripts alone decide. An agent's own mark reaches
   `<session>.jsonl` whether it leads or not. So the loop reads that file only
   as an early exit for a lead, never as evidence of a child.
+
 - The nonce placeholder stays angle-bracketed. `n=spechub-whoami-<nonce>` is a
   bash syntax error, so an agent that pastes the block without substituting
   fails loudly. A bare token would run instead. It would match every transcript
   in the session that had already read the skill file, so the command would
   answer `child` to a real lead.
+
 - The agent still chooses the nonce, and a language model samples randomness
   badly. Two agents in one session that pick the same eight characters read
   each other's transcripts. Generating the nonce at runtime cannot fix that.

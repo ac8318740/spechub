@@ -50,9 +50,9 @@ Read `spechub/project.yaml` – if `workflow.spec_sync` is `true` (or not explic
 1. Read `spechub/domain-map.yaml` (if exists)
 2. Map staged files to spec domains
 3. For each affected domain where `spechub/specs/[domain]/spec.md` exists:
-   - Analyze what the staged changes add, modify, or remove
-   - Generate lightweight ADDED/MODIFIED/REMOVED entries
-   - Update the domain's spec.md
+    - Analyze what the staged changes add, modify, or remove
+    - Generate lightweight ADDED/MODIFIED/REMOVED entries
+    - Update the domain's spec.md
 4. Stage any updated spec files
 5. Include spec updates in the commit
 6. Flag unmapped source files and prompt user to map them

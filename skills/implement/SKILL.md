@@ -99,8 +99,10 @@ completion:
 1. **test-writer subagent** – tests from the node's behaviour description.
    Under strict they must all fail before step 2 runs. Skip step 1 for pure
    config or setup work with no testable behaviour.
+
 2. **task-executor subagent** – make the tests pass. Executor CANNOT modify
    test files.
+
 3. **Format** – run `commands.format` over the files the work touched. A
    `null` value means this project has no format step.
 
@@ -160,6 +162,7 @@ decision landed. With a map, then:
 - Invoke `record-context` – implementation decisions can earn ADRs too.
 - Create nodes for anything the work surfaced (a question found mid-build is
   `hitl`, `--answers <this node>`).
+
 - Recompute the frontier – resolutions unblock nodes.
 
 ### 7. Build verification
@@ -183,13 +186,17 @@ diff.
 - **TDD pipeline is mandatory** – test-writer -> task-executor ->
   task-checker. Only pure config work skips the test-writer.
   `workflow.tdd.strict: false` reorders the first two and skips neither.
+
 - **Executors CANNOT modify test files** – if tests are wrong, report it.
 - **The tracker is the progress record** – claim on start, resolve on pass,
   release on stall. No checkbox files, no phase fields.
+
 - **Explore before writing** – parallel explorer subagents over the relevant
   code, sized to the node, before any edit.
+
 - **Resume is a query** – picking up where you left off means asking the
   tracker what is workable now, not reconstructing history. A fresh session
   runs the frontier query and continues. Never re-read an effort end to end
   to find where it stopped.
+
 - **Do NOT commit or push** – the user manages git via `/spechub:commit`.
