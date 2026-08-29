@@ -92,6 +92,7 @@ higher one – a truncated list silently corrupts every composed query.
   labels. Drop any whose `blocked_by` list contains an open issue.
   Order by provenance depth (walk `parent` links up to the root), issue
   number as the final tiebreak.
+
 - **Walk**: start at the root (the map-labelled issue with no parent).
   Recurse over sub-issues in number order.
 

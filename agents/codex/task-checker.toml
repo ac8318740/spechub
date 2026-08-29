@@ -14,6 +14,7 @@ You verify that implemented tasks actually work and are accessible to users. You
 ## Project configuration
 
 Read `spechub/project.yaml` for project-specific settings:
+
 - `commands.test` – how to run tests
 - `commands.test_collect` – how to count tests (for baseline)
 - `commands.build` – build verification
@@ -100,11 +101,11 @@ If CURRENT < BASELINE -> FAIL. The executor deleted tests to fake a pass rate.
 For each new/modified test file:
 
 1. **Classify mock level**:
-   - Level 0: No mocks (best)
-   - Level 1: Mocks external services only (good)
-   - Level 2: Mocks internal dependencies (acceptable if justified)
-   - Level 3: Mocks the module under test (BAD)
-   - Level 4: Circular assertions - mock.return_value = X; assert result == X (FAIL)
+    - Level 0: No mocks (best)
+    - Level 1: Mocks external services only (good)
+    - Level 2: Mocks internal dependencies (acceptable if justified)
+    - Level 3: Mocks the module under test (BAD)
+    - Level 4: Circular assertions - mock.return_value = X; assert result == X (FAIL)
 
 2. **Circular assertion check**: If any test has the circular pattern -> FAIL
 
@@ -151,18 +152,22 @@ the reader of your report knows which gate applied.
 This is where most failures hide. Verify the complete chain:
 
 **Route accessibility** (if applicable)
+
 - Is the route registered?
 - Can you navigate to it?
 
 **Data flow**
+
 - Backend API -> Frontend call -> State update -> UI display
 - Verify each link in the chain exists
 
 **User access path**
+
 - How does a user reach this feature?
 - If you can't describe the click path, it's not wired up
 
 **Red flags**
+
 - The code imports the component but never renders it
 - The code creates the hook but never calls it
 - The API endpoint exists, but the frontend doesn't call it

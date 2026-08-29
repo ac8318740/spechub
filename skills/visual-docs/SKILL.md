@@ -49,6 +49,7 @@ Every numbered section maps to an element of the lead diagram, and a section hea
 - A box showing something **happening**, with no section, means the doc is incomplete
 - A section covering no part of the diagram either belongs in another doc, or the
   diagram is missing something
+
 - Renaming a box renames its section, and the reverse
 
 Three exemptions, and only these three.

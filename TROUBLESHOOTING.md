@@ -66,6 +66,7 @@ ls -d ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/ 2>&1
         mkdir -p ~/.claude/spechub/bin
         ln -sfn ~/.claude/plugins/cache/ac-agentic-coding/spechub/$SPECHUB_VERSION/cli/bin/spechub.js ~/.claude/spechub/bin/spechub
         ```
+
 - **Plugin cache missing entirely**: the second `ls` returned nothing
     - Fix: the user has not installed the plugin
     - Run `/plugin install` for `ac8318740/spechub` in Claude Code
@@ -124,10 +125,12 @@ ls ~/.claude/plugins/cache/ac-agentic-coding/spechub/$SPECHUB_VERSION/cli/dist/i
         ```bash
         rm -rf ~/.claude/plugins/cache/ac-agentic-coding/spechub/<old-version>
         ```
+
 - Confirm the user is on plugin version 0.9.2 or later:
     ```bash
     cat ~/.claude/plugins/cache/ac-agentic-coding/spechub/*/.claude-plugin/plugin.json | grep version
     ```
+
 - Build the CLI in place as a one-shot, if the user is offline or cannot repull:
     ```bash
     cd ~/.claude/plugins/cache/ac-agentic-coding/spechub/<version>/cli

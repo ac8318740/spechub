@@ -73,8 +73,10 @@ Check each resolution left what it should have:
 1. **Living specs** – behaviour the effort built should already be in
    `spechub/specs/` via commit-time sync. Spot-check the affected domains.
    Fix gaps on sight per the Spec Correction Protocol.
+
 2. **ADRs and glossary** – invoke `record-context` for any resolved decision
    that meets the bar and that nobody recorded. This is the last chance.
+
 3. **Out-of-scope nodes** – report them. A scope boundary is worth the user
    hearing once more before the map disappears.
 
@@ -115,8 +117,10 @@ tasks.md. They still archive the old way, so an upgrade never strands work:
 
 1. Read the change's artifacts. Derive the affected domains from the file
    paths in `tasks.md` via `spechub/domain-map.yaml`.
+
 2. For each domain, merge what the feature ADDED, MODIFIED or REMOVED into
    `spechub/specs/[domain]/spec.md`.
+
 3. Write a `delta.md` into the change directory.
 
     Then run the CLI's `spechub archive <name>`. It moves the artifacts,

@@ -267,12 +267,14 @@ View ALL screenshots (before, after, any intermediate ones). Confirm:
 ## Step 6: Iterate if needed
 
 If verification fails due to a **stale ref or wrong element** (your mistake):
+
 1. Re-snapshot the page.
 2. Find the correct element.
 3. Retry the interaction.
 4. Up to 3 iterations
 
 If verification fails due to a **real UI bug**:
+
 1. Report FAIL with details and screenshot evidence.
 
 ## Step 7: Self-improve

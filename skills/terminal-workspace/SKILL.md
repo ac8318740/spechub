@@ -146,29 +146,29 @@ Then ask about these settings, in this order:
 - **`herdr.integration`**: which agent reports its state to herdr. Set it to the agent the user actually runs, or `none`. Without it, herdr infers state by reading the screen
 - **`gh_dash.repo_paths`**: map each repository to its local clone. Without it, checkout fails. So does any keybinding using `{{.RepoPath}}`, the placeholder gh-dash fills in with that clone's path
 - **`herdr.chord_modifier`**: `alt` (default), `ctrl+alt`, or `none`. A chord is one key combination, such as `alt+f`
-  - Recommend `alt`. It is the only family measured to work whichever way the user connects
-  - The herdr documentation recommends `ctrl+alt`. That does reach herdr over a plain SSH shell
-  - A Windows client attaching with `herdr --remote` never delivers `ctrl+alt`. Every such chord goes silently dead
-  - Suggest `ctrl+alt` only to a user who attaches exactly one way and has tested it
-  - `none` keeps herdr's prefix-only keymap. The user presses a prefix key first
+    - Recommend `alt`. It is the only family measured to work whichever way the user connects
+    - The herdr documentation recommends `ctrl+alt`. That does reach herdr over a plain SSH shell
+    - A Windows client attaching with `herdr --remote` never delivers `ctrl+alt`. Every such chord goes silently dead
+    - Suggest `ctrl+alt` only to a user who attaches exactly one way and has tested it
+    - `none` keeps herdr's prefix-only keymap. The user presses a prefix key first
 - **`herdr.worktrees_directory`**: keep it absolute. A worktree is a second checkout of the same repository on its own branch.
 
     A relative value resolves against the herdr session's base directory, not the repository you point at. Worktrees for a second repository then land inside the first
 
 - **`tuicr.build_from_fork`**: leave it `false`
-  - Set it `true` for the two unmerged upstream pull requests, #607 stats and #633 resize
-  - Set it `true` also for the fork's own fix for blank `+N -N` counts in pull request review mode
-  - `true` needs cargo, the Rust build tool, and takes a few minutes to build
-  - Tell the user it is temporary. `status` tracks the two upstream pull requests, not the local fix
+    - Set it `true` for the two unmerged upstream pull requests, #607 stats and #633 resize
+    - Set it `true` also for the fork's own fix for blank `+N -N` counts in pull request review mode
+    - `true` needs cargo, the Rust build tool, and takes a few minutes to build
+    - Tell the user it is temporary. `status` tracks the two upstream pull requests, not the local fix
 - **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave it empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
 - **`yazi.download_target`**: the Tailscale node name of the machine the user sits at. Setting it puts a download key in yazi. Leave it empty for a user who does not run Tailscale, and `apply` writes no key
-  - Ask for the name `tailscale status` prints on **this** machine, not the name the user calls their laptop
-  - Taildrop sends only between devices one Tailscale account owns on one tailnet, so confirm both ends match before setting it
-  - Tell them to run `sudo tailscale set --operator=$USER` once on this machine, because `tailscale file cp` refuses a non-root caller without it
+    - Ask for the name `tailscale status` prints on **this** machine, not the name the user calls their laptop
+    - Taildrop sends only between devices one Tailscale account owns on one tailnet, so confirm both ends match before setting it
+    - Tell them to run `sudo tailscale set --operator=$USER` once on this machine, because `tailscale file cp` refuses a non-root caller without it
 - **`neovim.enabled`**: off by default, and the only component that is. Turn it on for a user who edits in LazyVim and wants a visible mark on a buffer with unsaved changes
-  - LazyVim recolours the filename and shows no sign of its own, so a modified buffer is easy to miss
-  - `apply` writes `~/.config/nvim/lua/plugins/spechub.lua` and edits nothing the user wrote
-  - Tell a user who already added this override themselves to delete their copy, or the statusline draws two dots
+    - LazyVim recolours the filename and shows no sign of its own, so a modified buffer is easy to miss
+    - `apply` writes `~/.config/nvim/lua/plugins/spechub.lua` and edits nothing the user wrote
+    - Tell a user who already added this override themselves to delete their copy, or the statusline draws two dots
 - **`remote.clipboard_shim`**: leave it `true` on any machine reached over SSH. It puts an `xclip` on `$PATH`, backed by `spechub-clip`. That stand-in is the only reason gh-dash's `y` and `Y` work there. `apply` skips it when the machine has a real `xclip` or a display
 
 One setting sits outside the config. `spechub-md --serve` takes its port from
@@ -237,9 +237,9 @@ Say what it buys and what it costs. Three points cover it:
 
 - The client runs beside their clipboard and browser. Pasting a clipboard image into an agent pane works only on this path, and an SSH shell cannot do it at all
 - `--remote-keybindings server` is not optional
-  - Without it herdr resolves chords from the client's config. It then ignores everything `apply` just wrote, and every chord looks broken
-  - This is the first thing they will report as a bug
-  - The gh-dash keybindings still work, because gh-dash reads its own config where it runs
+    - Without it herdr resolves chords from the client's config. It then ignores everything `apply` just wrote, and every chord looks broken
+    - This is the first thing they will report as a bug
+    - The gh-dash keybindings still work, because gh-dash reads its own config where it runs
 - It needs herdr on their own machine too, and key authentication through an agent. That is because herdr reuses one connection only on Unix, and a Windows client authenticates more than once per attach
 
 Then offer the shortcut, because the command is long and they will run it many

@@ -36,8 +36,8 @@ Your job is to:
 1. Read `spechub/domain-map.yaml` to get the list of domains and their file path mappings.
 2. If `$ARGUMENTS` specifies domain names, filter to only those domains.
 3. Check if any `spechub/specs/*/spec.md` files already exist:
-   - If specs exist, warn the user. Ask for confirmation before overwriting.
-   - If no specs exist, proceed automatically.
+    - If specs exist, warn the user. Ask for confirmation before overwriting.
+    - If no specs exist, proceed automatically.
 
 ## Phase 1: independent exploration (passes 1-3)
 

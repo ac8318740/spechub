@@ -76,6 +76,7 @@ later. Tell the user clearly which block goes where.
 - Do not invent a fix outside this skill's scripts. The bridge has a
   single canonical stop (`stop.ps1`) and a single canonical diagnose
   (`doctor.ps1`). Reach for those before improvising.
+
 - Do not edit the scripts in place to "try something". Change them in
   `plugins/spechub/assets/playwriter-bridge/`.
 
@@ -102,12 +103,14 @@ Under `plugins/spechub/assets/playwriter-bridge/`:
 
 - `launcher-src.cs`, `build-launcher.ps1` – launcher shim (hides console,
   owns the child process tree)
+
 - `relay.ps1`, `tunnel.ps1` – long-running bridge scripts
 - `register-tasks.ps1` – scheduled-task registration
 - `stop.ps1` – canonical stop
 - `doctor.ps1` – Windows automated diagnosis
 - `sync.ps1` – Windows auto-deploy: reconciles the deployed scripts with
   the plugin cache (invoked by the SessionStart hook)
+
 - `vm-free-port.sh` – VM-side port cleanup with guardrails
 
 The user installs the scripts once into `%USERPROFILE%\playwriter-bridge\`

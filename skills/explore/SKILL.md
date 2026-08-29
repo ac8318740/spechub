@@ -39,18 +39,21 @@ You MAY create SpecHub artifacts (map nodes, specs, ADRs) if the user asks – t
 Depending on what the user brings, you might:
 
 **Explore the problem space**
+
 - Ask clarifying questions that emerge from what they said
 - Challenge assumptions
 - Reframe the problem
 - Find analogies
 
 **Investigate the codebase**
+
 - Map existing architecture relevant to the discussion
 - Find integration points
 - Identify patterns already in use
 - Surface hidden complexity
 
 **Compare options**
+
 - Brainstorm multiple approaches
 - Build comparison tables
 - Sketch tradeoffs
@@ -75,6 +78,7 @@ Depending on what the user brings, you might:
 ```
 
 **Surface risks and unknowns**
+
 - Identify what could go wrong
 - Find gaps in understanding
 - Suggest spikes or investigations
@@ -94,6 +98,7 @@ At the start, quickly check what exists – maps on the configured tracker
 ### When no map exists
 
 Think freely. When insights crystallize, you might offer:
+
 - "This feels solid enough to start. Want me to chart it with /spechub:map?"
 - Or keep exploring – no pressure to formalize
 

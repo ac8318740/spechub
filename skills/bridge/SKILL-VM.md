@@ -8,10 +8,13 @@
 
 - An SSH service that accepts a reverse forward from the laptop and
   binds `127.0.0.1:19988` on this host.
+
 - `agent-browser` (installed per the `browser-verify` skill) pointed at
   that endpoint via `agent-browser.json`.
+
 - `vm-free-port.sh` for clearing a stuck port 19988 after a dropped
   session.
+
 - An optional `sshd_config` tweak that reaps dead client sessions
   naturally.
 
@@ -202,14 +205,18 @@ with a clear reason. Common outcomes:
 
 - **"port 19988 is already free"** – nothing to do. The Windows tunnel
   should reconnect within the backoff window.
+
 - **"port is held by your own interactive session"** – you have an SSH
   session alive that is carrying the forward. Exit that session (from
   another terminal) and re-run.
+
 - **Holder is a non-`sshd` process** – the script refuses. Something
   else (local test server, stray `nc`) is on 19988. Stop it manually.
+
 - **Holder is an `sshd` forward channel, now orphaned** – the script
   kills it. `ClientAliveInterval` would have prevented this; consider
   adding the config from step 4.
+
 - **"port 19988 is carrying a live tunnel"** – the script refuses and exits
   non-zero without killing anything. Before it looks at the holder at all it
   asks the port for an HTTP response, bounded at 3 seconds.
@@ -242,6 +249,7 @@ Should be empty.
 
 - **Rearm the extension on a tab.** That is a click in the user's Chrome,
   inside a third-party extension. Nothing on either machine can press it.
+
 - **Restart the relay or a tunnel task.** Both are Windows-side scheduled
   tasks. The VM reaches them only when the opener is up, which the next
   section covers.
@@ -279,5 +287,6 @@ The opener still does not cover arming. Nothing changes that.
 - **No relay on the VM.** The Playwriter extension hard-rejects any
   `/extension` client that is not `127.0.0.1`, so the relay must run
   next to Chrome.
+
 - **No unprompted port scan.** `vm-free-port.sh` scopes itself strictly
   to 19988 and refuses anything ambiguous. Do not generalise it.

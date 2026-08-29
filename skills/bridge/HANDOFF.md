@@ -84,8 +84,10 @@ Report back:
 
 - **Exact commands.** No "figure out the right flag" – the other side
   may be a human at a shell, not a coding agent.
+
 - **One verifiable success criterion.** Not "looks ok".
 - **Small.** One problem per block. If two things break, emit two
   blocks.
+
 - **Scrub internal names.** No employer names, people names, internal IP
   ranges, ticket IDs. Use placeholders like `<host>`, `vm1.example.com`.

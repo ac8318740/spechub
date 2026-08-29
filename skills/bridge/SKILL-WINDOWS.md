@@ -7,10 +7,12 @@
 
 - The Node relay (`relay.ps1`) that speaks the Chrome DevTools Protocol (CDP)
   on `127.0.0.1:19988`.
+
 - The Playwriter Chrome extension that attaches to individual tabs.
 - One reverse SSH tunnel per VM (`tunnel.ps1 -TargetHost <host>`).
 - The document opener (`opener.ps1`) on `127.0.0.1:19989`, and its own
   tunnel per VM. See [The document opener](#the-document-opener).
+
 - The scheduled tasks that keep those running across logons.
 - `ssh-agent` holding the key that authenticates the tunnels.
 
@@ -284,6 +286,7 @@ Two tasks run it:
   on Node, restarts it when it exits, and logs to
   `%LOCALAPPDATA%\playwriter-bridge\opener-supervisor.log`. `opener.js`
   listens on `127.0.0.1:19989`.
+
 - `Playwriter-OpenerTunnel-VM<N>` runs
   `tunnel.ps1 -TargetHost <vm> -Port 19989`. Each VM gets its own.
 
@@ -374,6 +377,7 @@ at logon. Two in-process tricks do not solve this on modern Windows:
 
 - `-WindowStyle Hidden` – unreliable. The window still appears on the
   taskbar before it hides.
+
 - `Add-Type` with `ShowWindow(GetConsoleWindow(), SW_HIDE)` – this works on
   classic `conhost`. It fails on Windows 11 22H2+, where Windows Terminal is
   the default terminal host. There, `GetConsoleWindow()` returns a ConPTY
@@ -498,9 +502,11 @@ you need a handoff block by hand, copy the shape verbatim.
 - **Dedicated Chrome profile** with no sensitive logins. VM compromise means
   an attacker on the VM can drive the attached profile through the bridge.
   Limit the damage by keeping that profile disposable.
+
 - **Scheduled tasks run with `RunLevel Limited`.** They cannot elevate,
   so a compromised relay or tunnel process has only the normal user's
   rights.
+
 - **Optional token authentication.** Playwriter supports `--token <secret>`
   on `serve` and a matching header on CDP clients. Enable it if you want a
   second control on top of the localhost-only binding.
@@ -510,9 +516,11 @@ you need a handoff block by hand, copy the shape verbatim.
 - **No `--remote-debugging-port` on your real Chrome.** The bridge exists
   so that the extension API drives Chrome instead. Do not "simplify" the
   design by opening a debug port.
+
 - **No piggybacking on an editor's SSH session.** Win32-OpenSSH does not
   implement `ControlMaster`. The Git-for-Windows `ssh` implements it, but
   breaks when an editor pipes `cmd.exe` around it. Dedicated
   scheduled-task tunnels stay independent.
+
 - **No relay on the VM.** The Playwriter extension hard-codes
   `localhost`. The relay must run next to Chrome.
