@@ -323,6 +323,23 @@ block_text() { sed -n "/^# >>> spechub terminal-workspace >>>\$/,/^# <<< spechub
 block_is_exactly_default() { [ "$(block_text "$1")" = "$EXPECTED_BLOCK" ]; }
 count_in_file() { local n=0; [ -f "$1" ] && n="$(grep -cF -- "$2" "$1")"; printf '%s\n' "${n:-0}"; }
 
+# The block terminal-workspace setup.sh writes: the same two markers around
+# [keys], one [[keys.command]] per binding, and [worktrees] at the end. Both
+# scripts fence their block with these markers, so this is the block the herdr
+# installer must never replace.
+write_wide_block() { # $1=file, $2=worktrees directory
+  mkdir -p "$(dirname "$1")"
+  {
+    printf '[ui]\nagent_panel_sort = "recent"\n\n'
+    printf '%s\n' "$BLOCK_START"
+    printf '[keys]\ngoto = "prefix+t"\n\n'
+    printf '[[keys.command]]\nkey = "alt+g"\ncommand = "lazygit"\n\n'
+    printf '%s\n' "$BLOCK_TABLE"
+    printf 'directory = "%s"\n' "$2"
+    printf '%s\n' "$BLOCK_END"
+  } > "$1"
+}
+
 # The refusal message for a doubled block must name both blocks: either both
 # start-marker line numbers, or a word meaning "more than one".
 mentions_multiple_blocks() { # $1,$2 = the two start-marker line numbers
@@ -1331,6 +1348,39 @@ rm -f "$LINK_ORCA"
 run_orca --plan --appimage-path "$SRC"
 check "plan sees a half-broken pair as work to do"       'step_has 2 "[todo]"'
 check "plan on a half-broken pair repairs nothing"       '[ ! -e "$LINK_ORCA" ]'
+
+echo "Case 40: herdr leaves a terminal-workspace block that already sets the directory"
+new_case
+write_wide_block "$CFG" '~/.herdr/worktrees'
+BEFORE_SHA="$(sha "$CFG")"
+run_herdr --plan
+check "plan on a wide block that agrees exits 0"         '[ "$EC" -eq 0 ]'
+check "plan on a wide block that agrees reports [skip:"  'out_has "[skip:"'
+check "plan on a wide block that agrees has no [todo]"   'out_lacks "[todo]"'
+check "plan on a wide block that agrees changes nothing" '[ "$(sha "$CFG")" = "$BEFORE_SHA" ]'
+run_herdr --apply
+check "apply on a wide block that agrees exits 0"        '[ "$EC" -eq 0 ]'
+check "apply on a wide block that agrees skips"          'out_has "[skipped:"'
+check "apply leaves the wide block byte-identical"       '[ "$(sha "$CFG")" = "$BEFORE_SHA" ]'
+check "the keymap survives"                              'file_has "$CFG" "goto = \"prefix+t\""'
+check "the popup key binding survives"                   'file_has "$CFG" "command = \"lazygit\""'
+
+echo "Case 41: herdr refuses a terminal-workspace block naming another directory"
+new_case
+write_wide_block "$CFG" '/somewhere/else'
+BEFORE_SHA="$(sha "$CFG")"
+run_herdr --plan
+check "plan on a wide block that disagrees exits 4"      '[ "$EC" -eq 4 ]'
+check "plan names the tables it does not own"            'msg_has "[keys]"'
+check "plan points at terminal-workspace setup.sh"       'msg_has "setup.sh"'
+check "plan on a wide block that disagrees writes none"  '[ "$(sha "$CFG")" = "$BEFORE_SHA" ]'
+run_herdr --apply
+check "apply on a wide block that disagrees exits 4"     '[ "$EC" -eq 4 ]'
+check "apply on a wide block that disagrees writes none" '[ "$(sha "$CFG")" = "$BEFORE_SHA" ]'
+check "the keymap survives the refusal"                  'file_has "$CFG" "goto = \"prefix+t\""'
+check "the popup binding survives the refusal"           'file_has "$CFG" "command = \"lazygit\""'
+check "the other directory is left in place"             'file_has "$CFG" "directory = \"/somewhere/else\""'
+check "no second block is appended"                      '[ "$(count_in_file "$CFG" "$BLOCK_START")" -eq 1 ]'
 
 echo ""
 echo "----------------------------------------"
