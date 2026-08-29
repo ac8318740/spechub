@@ -1,4 +1,4 @@
-# Terminal workspace: herdr, gh-dash, diffnav
+# Terminal workspace: herdr, gh-dash, diffnav, lazygit
 
 This is an optional setup for running several coding agents on a remote machine, and reviewing their work without leaving the terminal.
 
@@ -60,7 +60,7 @@ flowchart TD
 
 ## 1. What you get, and its parts
 
-*Three tools you drive day to day. herdr owns the terminals, gh-dash triages pull requests, diffnav reads diffs. Five more tools and SpecHub's own helpers sit behind them. Use this when your code lives on a dev machine, you drive more than one agent at a time, and you want a keyboard-only workflow.*
+*Four tools you drive day to day. herdr owns the terminals, gh-dash triages pull requests, diffnav reads diffs, lazygit commits them. Five more tools and SpecHub's own helpers sit behind them. Use this when your code lives on a dev machine, you drive more than one agent at a time, and you want a keyboard-only workflow.*
 
 - Skip it if you work locally in a graphical editor
     - A desktop tool serves you better
@@ -69,15 +69,16 @@ flowchart TD
     - You stop hunting for the stuck one
 - **Review without a browser.** Pull request triage, diffs with a file tree, and comments, all from the terminal
 
-The three you drive day to day:
+The four you drive day to day:
 
 | Tool | Role | Why this one |
 |---|---|---|
 | [herdr](https://herdr.dev) | Terminal multiplexer | Background server, per-pane agent state, one container of tabs and panes per git worktree |
 | [gh-dash](https://github.com/dlvhdr/gh-dash) | Pull request dashboard | Saved searches per section, custom actions, `gh` underneath |
 | [diffnav](https://github.com/dlvhdr/diffnav) | Diff reader | File tree beside the diff, the blast-radius view a plain pager lacks |
+| [lazygit](https://github.com/jesseduffield/lazygit) | Git TUI | Stage, commit, amend and push without leaving the keyboard, and LazyVim already binds it |
 
-Five more tools do the work those three ask for.
+Five more tools do the work those four ask for.
 
 - You drive one of them yourself, tuicr, from the moment a review starts on gh-dash's `D` key
 
@@ -136,9 +137,9 @@ What `uninstall` removes:
 What the config holds:
 
 - The script reads `~/.config/spechub/terminal-workspace.yaml`, which the skill copies from `assets/terminal-workspace/config.example.yaml`
-- The config holds eight components, each with its own `enabled` key
+- The config holds nine components, each with its own `enabled` key
     - You turn a part off there and run `apply` again
-- Six components name a tool: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, and `yazi`
+- Seven components name a tool: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, `lazygit`, and `yazi`
 - The other two name a feature
     - `markdown` covers `spechub-md` with mermaid-ascii and glow
     - `remote` covers the clipboard and browser helpers
@@ -409,6 +410,8 @@ Each tool lists its own keys.
 - Press `prefix+?` in herdr, then `/` to filter
 - Press `?` in gh-dash
 - Read diffnav's footer
+- Press `?` in lazygit and in tuicr
+- Every key worth memorising is on one page: [terminal-workspace-keys.md](terminal-workspace-keys.md)
 - Prefix is `ctrl+b`, and a chord without it is direct and needs no prefix
 - A popup floats over your layout and puts you back where you were when you close it
 
@@ -423,7 +426,8 @@ Each tool lists its own keys.
 | `alt+h` `alt+j` `alt+k` `alt+l` | Move between panes |
 | `alt+a` | Back to the last pane |
 | `alt+s` | Toggle sidebar |
-| `alt+g` | Goto picker |
+| `alt+g` / `alt+shift+g` | lazygit in a popup / in a new tab |
+| `prefix+t` | Goto picker |
 | `alt+z` | Zoom pane |
 | `alt+c` | New tab |
 | `alt+w` | New workspace |
@@ -486,7 +490,8 @@ switch_tab = "prefix+alt+1..9"
 
 # Overlays and movement.
 toggle_sidebar = ["prefix+b", "alt+s"]
-goto = ["prefix+g", "alt+g"]
+# g belongs to git: alt+g is lazygit and alt+shift+g is its tab.
+goto = "prefix+t"
 zoom = ["prefix+z", "alt+z"]
 last_pane = "alt+a"
 
@@ -494,7 +499,7 @@ last_pane = "alt+a"
 # kill a pane with an agent running in it.
 new_tab = ["prefix+c", "alt+c"]
 new_workspace = ["prefix+shift+n", "alt+w"]
-new_worktree = ["prefix+shift+g", "alt+r"]
+new_worktree = "alt+r"
 split_vertical = ["prefix+v", "alt+e"]
 split_horizontal = ["prefix+minus", "alt+minus"]
 
@@ -513,6 +518,20 @@ key = "alt+shift+f"
 type = "shell"
 command = "spechub-herdr-tab diff spechub-diff"
 description = "diff: branch vs dev (tab)"
+
+[[keys.command]]
+key = "alt+g"
+type = "popup"
+command = "lazygit"
+description = "git: stage, commit, push"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "alt+shift+g"
+type = "shell"
+command = "spechub-herdr-tab lazygit lazygit"
+description = "git: stage, commit, push (tab)"
 
 [[keys.command]]
 key = "alt+x"
@@ -611,7 +630,7 @@ You rarely have to run it.
 Two things the helper cannot fix.
 
 - Only rows 1 to 9 are reachable
-    - A tenth workspace needs `alt+g` or `alt+up` and `alt+down`
+    - A tenth workspace needs `prefix+t` or `alt+up` and `alt+down`
 - `prefix+N` stays positional
     - It names a row rather than a workspace and still moves when the rows move
 
