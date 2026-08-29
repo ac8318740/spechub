@@ -40,4 +40,6 @@ A host declares its dev setup, and a project does not.
 
 **route** – The single named answer to "how does this machine reach a browser", decided in one place and printed by `spechub-open --why`. Every script asks for the route instead of working it out again.
 
+**stale acknowledgement** – A `<handoff-file>.ack` sidecar written before the round the watcher is watching, reported as `staleAck`. A handoff file outlives the round that produced it, so the previous target's answer is still lying beside it. The watcher never counts one, and always reports it, so nobody calls a handoff unacknowledged while an answer sits on disk.
+
 **shipped path** – A file that an installed copy of the plugin loads or runs, so a change to it must roll out to every machine. The inert list in CONTRIBUTING.md names every path that does not ship. Every other path ships.
