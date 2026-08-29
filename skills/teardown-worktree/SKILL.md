@@ -6,7 +6,9 @@ argument-hint: "[worktree name, or nothing to scan the whole repo]"
 
 # Teardown worktree
 
-Retire finished worktrees. Move this session out first. Remove the worktrees next. Delete the branches they were on last.
+Retire finished worktrees.
+
+Move this session out first. Remove the worktrees next. Delete the branches they were on last.
 
 Removing a worktree this session is standing in, or one that still holds a running agent, destroys live work. The order below exists to prevent that, as far as either orchestrator can tell. Follow it.
 
@@ -22,7 +24,9 @@ One repo per run: the repo that owns the cwd. Resolve its main checkout from any
 dirname "$(git rev-parse --git-common-dir)"
 ```
 
-Submodules are separate repos with their own worktrees and their own remote. If the repo has submodules carrying worktrees, say so. Offer a second run against each. Never scan them silently.
+Submodules are separate repos with their own worktrees and their own remote.
+
+If the repo has submodules carrying worktrees, say so. Offer a second run against each. Never scan them silently.
 
 ## 1. Build the plan
 
@@ -47,7 +51,9 @@ Two different facts drive this skill:
 
 The rule in one line: the session's host creates a worktree, and the checkout's owner removes it.
 
-Host and owner are often the same, and they do not have to be. A herdr pane can open a checkout Orca created. A checkout herdr created can outlive the pane that made it. So read the owner per worktree, and never assume the host owns anything.
+Host and owner are often the same, and they do not have to be. A herdr pane can open a checkout Orca created. A checkout herdr created can outlive the pane that made it.
+
+So read the owner per worktree, and never assume the host owns anything.
 
 Neither tool sees the other's sessions. `herdr worktree list` never reports an Orca agent, and Orca's listing never reports a herdr pane. That is why the live-agent check below asks both tools about every candidate, whoever owns it.
 
@@ -59,7 +65,9 @@ SPECHUB_ROOT=$(cd -- "$(dirname -- "$(readlink -f "$HOME/.claude/spechub/bin/spe
 "$SPECHUB_ROOT/skills/new-worktree/detect-orchestrator.sh" <path>   # one checkout's owner
 ```
 
-The path goes through `~/.claude/spechub/bin/spechub`, the invariant symlink the SessionStart hook maintains. The plugin re-creates that symlink every time Claude Code starts. It is the only reliable way to find the plugin's own root. Do not invent a shorter path, and do not reach for `$CLAUDE_PLUGIN_ROOT` – the plugin deliberately does not depend on that variable reaching a fresh subshell.
+The path goes through `~/.claude/spechub/bin/spechub`, the invariant symlink the SessionStart hook maintains. The plugin re-creates that symlink every time Claude Code starts. It is the only reliable way to find the plugin's own root.
+
+Do not invent a shorter path, and do not reach for `$CLAUDE_PLUGIN_ROOT` – the plugin deliberately does not depend on that variable reaching a fresh subshell.
 
 Run the script once with no argument to read `active`. Then run it once per worktree in the plan, passing that worktree's path, and read `owner` from each run.
 
@@ -69,14 +77,25 @@ The script always exits 0 and prints exactly six lines:
 - `declared_orca` – the same yes-or-no answer for Orca, recorded under `host.orchestrators.orca`. One of `true`, `false`, `unset`. The two are independent: a host can have both installed, one, or neither, so one answer says nothing about the other.
 - `detected` – which orchestrator is actually hosting this session, read from the environment markers an orchestrator injects into the terminals it opens. One of `herdr`, `orca`, `none`.
 - `active` – the branch to run for this session. One of `herdr`, `orca`, `none`.
-- `owner` – which orchestrator owns the checkout the script examined. One of `herdr`, `orca`, `none`. The path settles it: a checkout under `~/orca/workspaces/` belongs to Orca, and a checkout under herdr's worktree root belongs to herdr. herdr's config names that root. Anything else is plain git.
+- `owner` – which orchestrator owns the checkout the script examined. One of `herdr`, `orca`, `none`.
+
+    The path settles it: a checkout under `~/orca/workspaces/` belongs to Orca, and a checkout under herdr's worktree root belongs to herdr. herdr's config names that root. Anything else is plain git.
+
 - `warning` – one line written for a human, empty when there is nothing to say.
 
-Declared means installed. Detected means hosting. Detected wins, so `active` always equals `detected`. This session cannot drive an installed orchestrator that does not host it. A marker for an orchestrator the host never declared earns a warning, not a refusal.
+Declared means installed. Detected means hosting.
+
+Detected wins, so `active` always equals `detected`. This session cannot drive an installed orchestrator that does not host it.
+
+A marker for an orchestrator the host never declared earns a warning, not a refusal.
 
 Repeat a non-empty `warning` to the user verbatim, before anything else happens. Then let `active` decide how this session moves itself out in step 2. Let each checkout's `owner` decide how step 3 removes it.
 
-The script sometimes does not run at all: no output, and a non-zero exit from the invocation itself. Then there is no `active` and no `owner` to read. Do not guess either one. Say so to the user. Then treat every worktree as plain git, the branch that touches nothing an orchestrator holds. A missing or non-executable script looks like this, and a plugin older than the script is the usual cause.
+The script sometimes does not run at all: no output, and a non-zero exit from the invocation itself. Then there is no `active` and no `owner` to read.
+
+Do not guess either one. Say so to the user. Then treat every worktree as plain git, the branch that touches nothing an orchestrator holds.
+
+A missing or non-executable script looks like this, and a plugin older than the script is the usual cause.
 
 This is the same detector `new-worktree` runs, so both skills always give the same answer on the same host.
 
@@ -102,7 +121,9 @@ git -C <path> status --porcelain --ignore-submodules=all
 
 Report pointer drift in the plan anyway, from `git -C <path> submodule status`. That way a real pending bump stays visible, and the ignore flag does not hide it.
 
-Any output from the status check means skip. Do not remove it. Do not force it. List it at the end with what it holds.
+Any output from the status check means skip.
+
+Do not remove it. Do not force it. List it at the end with what it holds.
 
 ### Merged
 
@@ -159,7 +180,9 @@ The listing covers every tab, not only the focused one. Each entry carries `pane
 
 Exclude this session's own pane by identifier, never by status. The own pane is the one whose `pane_id` equals `$HERDR_PANE_ID`. Every other pane still counts, whatever the workspace `agent_status` said.
 
-The `w26` teardown skipped this step. It read its own workspace's `done` as its own verdict, removed the workspace, and killed a live session in the second tab. Excluding by `pane_id` keeps every other pane inside the check. The step 3 rules then stop the removal.
+The `w26` teardown skipped this step. It read its own workspace's `done` as its own verdict, removed the workspace, and killed a live session in the second tab.
+
+Excluding by `pane_id` keeps every other pane inside the check. The step 3 rules then stop the removal.
 
 Then read what actually runs in each remaining pane:
 
@@ -173,7 +196,9 @@ Any one of these three makes the worktree a skip:
 - `foreground_processes` holds an agent, `claude` or `codex` for example.
 - A foreground process has a `cwd` inside the worktree's checkout path.
 
-The third case is not an agent. An editor or `gh dash` counts here. Deleting the directory under it still breaks it. Close it deliberately, or leave the worktree alone.
+The third case is not an agent. An editor or `gh dash` counts here. Deleting the directory under it still breaks it.
+
+Close it deliberately, or leave the worktree alone.
 
 One `cwd` never blocks: a path carrying the `(deleted)` marker. That shell sits in a directory somebody already removed, as step 2 describes. It holds nothing.
 
@@ -228,12 +253,18 @@ The blocking panes column names each pane that blocks the removal, pane id first
 
 Do this before removing anything, and only after approval.
 
-`EnterWorktree` cannot do this. It rejects the main checkout outright, "is the main working tree, not a linked worktree". So no tool call walks the session cwd back. `ExitWorktree` only unwinds a worktree this session entered with `EnterWorktree`. It is a no-op for a session that launched inside one.
+`EnterWorktree` cannot do this. It rejects the main checkout outright, "is the main working tree, not a linked worktree".
 
-The removal itself is what moves the session. Run it from the main checkout against an absolute path. The harness then resets the session cwd to the main checkout on its own. Confirm with `pwd` afterwards.
+So no tool call walks the session cwd back. `ExitWorktree` only unwinds a worktree this session entered with `EnterWorktree`. It is a no-op for a session that launched inside one.
+
+The removal itself is what moves the session. Run it from the main checkout against an absolute path.
+
+The harness then resets the session cwd to the main checkout on its own. Confirm with `pwd` afterwards.
 
 - Entered with `EnterWorktree`: call `ExitWorktree` with `action: "keep"` first. Keep, not remove: step 3 owns the removal, and `remove` refuses on a worktree entered by path.
-- Launched inside the worktree: no call needed. Take the pane with you below. Remove the worktree in step 3. Confirm the new cwd after.
+- Launched inside the worktree: no call needed.
+
+    Take the pane with you below. Remove the worktree in step 3. Confirm the new cwd after.
 
 That much is the same everywhere. What follows depends on the branch `active` names. This step is the one place `active` still decides anything: how this session moves itself.
 
@@ -243,7 +274,9 @@ When `active` is `herdr`, move the pane out first, or step 3 deletes the worktre
 
 The move needs this pane's own identifier, and `active` being `herdr` does not guarantee it. The detector reports `herdr` when either of herdr's two environment markers holds a value, and only one of them names the pane. So if `$HERDR_PANE_ID` is empty, herdr's markers are incomplete – say so and stop, rather than issuing a pane move against a blank target.
 
-Find the main repo's workspace in `herdr workspace list`: `worktree.repo_root` is the main checkout and `worktree.is_linked_worktree` is `false`. More than one workspace can match, since any pane opened at the repo root qualifies. Prefer the one whose label is the repo name, and ask when it stays ambiguous. Then:
+Find the main repo's workspace in `herdr workspace list`: `worktree.repo_root` is the main checkout and `worktree.is_linked_worktree` is `false`. More than one workspace can match, since any pane opened at the repo root qualifies. Prefer the one whose label is the repo name, and ask when it stays ambiguous.
+
+Then:
 
 ```bash
 herdr pane move "$HERDR_PANE_ID" --new-tab --workspace <main-workspace-id> --focus
@@ -273,9 +306,15 @@ There is no pane and no workspace, so the cwd move described above is the whole 
 
 ## 3. Remove the worktrees
 
-Every removal through herdr or plain git passes `--force`. Orca is the exception, and its own branch below says why. `--force` is necessary here, not a shortcut. Plain `git worktree remove` refuses on any worktree containing submodules with "working trees containing submodules cannot be moved or removed". That refusal hits every worktree in a repo that has them. Forcing is safe only because step 1 already proved the tree clean. It is never a way past uncommitted changes.
+Every removal through herdr or plain git passes `--force`. Orca is the exception, and its own branch below says why. `--force` is necessary here, not a shortcut.
 
-The hard rule: never run `worktree remove --force` on a workspace that still holds a pane other than this session's own. Forcing waives herdr's own check, so the pane enumeration is the only guard left. Enumerate the panes again immediately before the call. Refuse the removal while any other pane remains.
+Plain `git worktree remove` refuses on any worktree containing submodules with "working trees containing submodules cannot be moved or removed". That refusal hits every worktree in a repo that has them.
+
+Forcing is safe only because step 1 already proved the tree clean. It is never a way past uncommitted changes.
+
+The hard rule: never run `worktree remove --force` on a workspace that still holds a pane other than this session's own. Forcing waives herdr's own check, so the pane enumeration is the only guard left.
+
+Enumerate the panes again immediately before the call. Refuse the removal while any other pane remains.
 
 Take the branch each checkout's `owner` names, not the branch `active` names. Decide per worktree: one checkout in the plan can belong to herdr while the next is plain git.
 
@@ -306,7 +345,9 @@ git -C <main-root> worktree remove --force <path>
 git -C <main-root> worktree prune
 ```
 
-The worktree this session just left may still have a workspace. Moving the last pane out closes the workspace, and a pane in a second tab keeps it open. So read `open_workspace_id` from `herdr worktree list` again after step 2. A workspace id still set means the pane enumeration above runs on that workspace too, before you remove anything.
+The worktree this session just left may still have a workspace. Moving the last pane out closes the workspace, and a pane in a second tab keeps it open.
+
+So read `open_workspace_id` from `herdr worktree list` again after step 2. A workspace id still set means the pane enumeration above runs on that workspace too, before you remove anything.
 
 ### Owner: orca
 
@@ -319,9 +360,13 @@ ORCA_BIN="$(command -v orca-ide || command -v orca)"
 
 Never pass `--force`. It waives Orca's own safety checks, and those checks are the only ones left at this point.
 
-Orca refuses two cases by itself. It refuses a dirty tree, and it refuses a path outside `~/orca/workspaces`. Read either refusal rather than overriding it. Step 1 proved the tree clean, so a dirty-tree refusal means somebody changed the tree since.
+Orca refuses two cases by itself. It refuses a dirty tree, and it refuses a path outside `~/orca/workspaces`.
 
-`orca worktree rm` deletes the local branch itself, and it has no keep-branch flag. So decide keep-or-delete before you call it, using the merge result from step 1. Never call it on an unmerged branch: the branch goes with the checkout, and nothing asks first. Leave the checkout in place instead and report it.
+Read either refusal rather than overriding it. Step 1 proved the tree clean, so a dirty-tree refusal means somebody changed the tree since.
+
+`orca worktree rm` deletes the local branch itself, and it has no keep-branch flag. So decide keep-or-delete before you call it, using the merge result from step 1.
+
+Never call it on an unmerged branch: the branch goes with the checkout, and nothing asks first. Leave the checkout in place instead and report it.
 
 Step 4 then skips `git branch -d` for this checkout. Orca already deleted that branch. The remote branch is still step 4's job.
 

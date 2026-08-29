@@ -15,10 +15,14 @@ You **MUST** consider the user input before proceeding (if not empty).
 ## Purpose
 
 A map is scaffolding. It exists to clear fog – the questions nobody could
-state precisely when the effort started. Once the fog clears, the answers
-belong in living specs, ADRs and the glossary, not in a second copy that
-drifts. That is the residue – what survives the map. Archive verifies the
-residue reached those three places, then disposes of the nodes.
+state precisely when the effort started.
+
+Once the fog clears, the answers belong in living specs, ADRs and the
+glossary, not in a second copy that drifts. That is the residue – what
+survives the map.
+
+Archive verifies the residue reached those three places, then disposes of
+the nodes.
 
 ## Step 1: Locate the map
 
@@ -42,23 +46,29 @@ fog, no claims. Check all three on the files backend:
 
 On GitHub, compose the same checks per `trackers/github.md` in the map skill.
 `gh issue list --label "map:<name>" --state open` must come back empty. An
-open issue is open, fog or claimed, and all three fail the gate. Never run
-the files commands against a GitHub-tracked map. They come back empty because
-the directory does not exist, so the gate would pass on no evidence.
+open issue is open, fog or claimed, and all three fail the gate.
 
-All three must come back empty. Count open nodes directly rather than through
-the frontier query, because the frontier only lists nodes with no unresolved
-blockers. Two nodes that block each other show an empty frontier while both
-questions stay open. An empty frontier is therefore no proof of a cleared
-map. If anything remains, WARN with what it is and ask for confirmation –
+Never run the files commands against a GitHub-tracked map. They come back
+empty because the directory does not exist, so the gate would pass on no
+evidence.
+
+All three must come back empty.
+
+Count open nodes directly rather than through the frontier query, because the
+frontier only lists nodes with no unresolved blockers. Two nodes that block
+each other show an empty frontier while both questions stay open. An empty
+frontier is therefore no proof of a cleared map.
+
+If anything remains, WARN with what it is and ask for confirmation –
 archiving an uncleared map throws away open questions.
 
 ## Step 3: Extract the residue
 
 Walk the resolved nodes – read them in order, root first, then each node that
 hangs off it. On the files backend, run `spechub node walk --map <name> --full`.
-On GitHub, compose the walk per `trackers/github.md`. Check each resolution
-left what it should have:
+On GitHub, compose the walk per `trackers/github.md`.
+
+Check each resolution left what it should have:
 
 1. **Living specs** – behaviour the effort built should already be in
    `spechub/specs/` via commit-time sync. Spot-check the affected domains.
@@ -71,10 +81,11 @@ left what it should have:
 ## Step 4: Dispose of the nodes
 
 **Confirm first when you invoked this yourself.** A user who typed
-`/spechub:archive` has already asked for disposal – proceed. If you reached
-this skill on your own after a map cleared, name what you will delete or
-move. Then wait for the user's go-ahead. Deletion is irreversible and they
-never asked for it.
+`/spechub:archive` has already asked for disposal – proceed.
+
+If you reached this skill on your own after a map cleared, name what you
+will delete or move. Then wait for the user's go-ahead. Deletion is
+irreversible and they never asked for it.
 
 `workflow.maps.persist` in `spechub/project.yaml` decides (default `false`):
 
@@ -106,7 +117,8 @@ tasks.md. They still archive the old way, so an upgrade never strands work:
    paths in `tasks.md` via `spechub/domain-map.yaml`.
 2. For each domain, merge what the feature ADDED, MODIFIED or REMOVED into
    `spechub/specs/[domain]/spec.md`.
-3. Write a `delta.md` into the change directory. Then run the CLI's
-   `spechub archive <name>`. It moves the artifacts, delta included, to
-   `spechub/changes/archive/[YYYY-MM-DD]-[change-name]/`. It also removes the
-   change from `spechub/changes/`.
+3. Write a `delta.md` into the change directory.
+
+    Then run the CLI's `spechub archive <name>`. It moves the artifacts,
+    delta included, to `spechub/changes/archive/[YYYY-MM-DD]-[change-name]/`.
+    It also removes the change from `spechub/changes/`.

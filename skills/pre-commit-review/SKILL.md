@@ -24,7 +24,8 @@ Parse `$ARGUMENTS` and invocation context to determine mode:
   - Arguments contain `--auto-fix`, `fix everything`, `auto fix`, or `fix automatically`
   - The LLM works autonomously. The user asked it to implement, commit, and push, or work
     through a task list, or said "handle everything". The LLM itself decided to commit.
-    The user is likely not present, so don't block on questions.
+
+      The user is likely not present, so don't block on questions.
 
 - **Interactive mode** (default): Use when ANY of these are true:
   - No `--auto-fix` argument, and the user invoked the skill manually via `/pre-commit-review`
@@ -168,7 +169,9 @@ For each finding, report:
 ~/.claude/spechub/bin/spechub lint-prose <changed .md files>
 ```
 
-Run the lint on the changed Markdown files, and on nothing else. Skip the command when no Markdown file changed, because it exits 1 with no paths. The lint exits 0 even when it reports findings. It groups findings by file with line numbers, then prints a summary per file. It skips `skills/writing/vocabulary.md` on purpose.
+Run the lint on the changed Markdown files, and on nothing else. Skip the command when no Markdown file changed, because it exits 1 with no paths.
+
+The lint exits 0 even when it reports findings. It groups findings by file with line numbers, then prints a summary per file. It skips `skills/writing/vocabulary.md` on purpose.
 
 Add each finding to the review as `SHOULD | PROSE`, at the `file:line` it names. The writing standard is a project convention, so it sits at the same severity as other convention drift.
 

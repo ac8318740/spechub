@@ -1,8 +1,10 @@
 # GitHub tracker
 
-First-class backend. A node is an issue. The map is visible to the whole
-team, survives every device, and needs no sync. It requires `gh` authenticated
-against the repo's GitHub remote.
+First-class backend.
+
+A node is an issue. The map is visible to the whole team, survives every
+device, and needs no sync. It requires `gh` authenticated against the repo's
+GitHub remote.
 
 ## Mapping
 
@@ -91,24 +93,30 @@ higher one – a truncated list silently corrupts every composed query.
   Order by provenance depth (walk `parent` links up to the root), issue
   number as the final tiebreak.
 - **Walk**: start at the root (the map-labelled issue with no parent).
-  Recurse over sub-issues in number order. Read `pinned` nodes and the root
-  in full. For the rest, take the title as the gist. Do not open the body.
+  Recurse over sub-issues in number order.
+
+    Read `pinned` nodes and the root in full. For the rest, take the title
+    as the gist. Do not open the body.
+
 - The tracker derives depth from the parent chain and never stores it.
 
 ## Degraded remotes
 
 A degraded remote is one where GitHub's native link features are off or not
 permitted. The tracker then cannot store the edges between nodes as real
-links. Sub-issues and dependencies need a repo with those features enabled. If
-either API returns 404 or 403, fall back to declaring the edge in the issue
+links. Sub-issues and dependencies need a repo with those features enabled.
+
+If either API returns 404 or 403, fall back to declaring the edge in the issue
 body header instead – one line, first in the body:
 
 ```
 node-links: answers #12 · blocked-by #14, #17
 ```
 
-Use the same line for reading when the APIs are unavailable. Do not mix
-encodings within one map. Pick the encoding per map at materialisation. Note
-the encoding on the root node. If the APIs degrade mid-map after native edges
-already exist, transcribe the existing edges into body headers before
-continuing.
+Use the same line for reading when the APIs are unavailable.
+
+Do not mix encodings within one map. Pick the encoding per map at
+materialisation. Note the encoding on the root node.
+
+If the APIs degrade mid-map after native edges already exist, transcribe the
+existing edges into body headers before continuing.

@@ -29,14 +29,16 @@ Three terms, before they get used:
 The same repository gets opened on several machines, and those machines differ.
 A laptop with a screen can launch a visible browser; a headless build server
 cannot. One machine has herdr installed, another has Orca, another has neither.
+
 None of that is a property of the project, so none of it belongs in the
 project's config file.
 
 The answers therefore go to the global config of the SpecHub command-line
 interface. That is a JSON file at `~/.config/spechub/config.json`, or under
 `$XDG_CONFIG_HOME` when you set that environment variable. Run
-`~/.claude/spechub/bin/spechub config path` to print the real location. They do
-not go in `spechub/project.yaml`.
+`~/.claude/spechub/bin/spechub config path` to print the real location.
+
+They do not go in `spechub/project.yaml`.
 
 Project concerns stay in `project.yaml`. In particular
 `frontend.browser.mode` stays there as the *project's preference*, while
@@ -47,8 +49,10 @@ different questions, and they live in different files.
 
 This skill declares a setup, and it installs two parts of one. It offers to
 install Orca when Orca is missing here. It offers to write the managed block
-that points herdr at its worktree directory. Both offers live in Step 5. Each
-one plans first, shows you the steps, and waits for your approval.
+that points herdr at its worktree directory.
+
+Both offers live in Step 5. Each one plans first, shows you the steps, and waits
+for your approval.
 
 Linux is the only target both installs support. On macOS, on Windows and on the
 Windows Subsystem for Linux, each script says it does not support the install
@@ -69,10 +73,13 @@ bash "$plugin_root/skills/host/detect-host.sh"
 
 The path resolution looks odd, so here is why. The plugin's own files live in a
 versioned cache directory. Its path changes on every release, so nobody can
-hardcode it. The one invariant path is `~/.claude/spechub/bin/spechub`, a
-symlink to the CLI inside the current cache. The SessionStart hook re-points
-that symlink at the start of every session, and Claude Code runs that hook. The
-command above therefore derives the plugin root from the symlink rather than
+hardcode it.
+
+The one invariant path is `~/.claude/spechub/bin/spechub`, a symlink to the CLI
+inside the current cache. The SessionStart hook re-points that symlink at the
+start of every session, and Claude Code runs that hook.
+
+The command above therefore derives the plugin root from the symlink rather than
 from a written-down path.
 
 If that symlink is missing, the SessionStart hook did not run. Tell the user to
@@ -122,18 +129,20 @@ point, so a second run loses nothing.
 ## Step 2: The required axes – detection never decides them
 
 The rule for this whole step is simple. **Auto-detection may pre-fill the
-recommendation, but it never decides a required axis**. A detected fact belongs
-in an option's description – "detected: this session is running in a herdr pane"
-– and never in a silent write. The user answers, and the detection only makes
-the answer easy.
+recommendation, but it never decides a required axis**.
+
+A detected fact belongs in an option's description – "detected: this session is
+running in a herdr pane" – and never in a silent write. The user answers, and
+the detection only makes the answer easy.
 
 ### 2a. Orchestrators
 
 There are two orchestrators, and they are two separate questions rather than one
 choice between them. A machine can have both installed, one, or neither, so an
-answer about one says nothing about the other. Ask both in a single
-AskUserQuestion call, one question per orchestrator. There is no skip: every
-machine has an answer to each.
+answer about one says nothing about the other.
+
+Ask both in a single AskUserQuestion call, one question per orchestrator. There
+is no skip: every machine has an answer to each.
 
 Answering no to both is a real answer. It declares that this machine has no
 orchestrator. The worktree skills then fall back to plain git worktrees under
@@ -212,9 +221,10 @@ The fourth option exists because a multi-select gives the user no way to press
 "nothing". Choosing "none of these" writes all three axes –
 `host.browser.remote`, `host.browser.headless` and `host.browser.local` – as
 `false`. That is a declaration, not a skip: the user has said this machine
-cannot verify in a browser, and Step 4 writes it. If it comes back selected
-alongside a real mode, that is a contradiction; take the named modes as the
-answer and ignore it.
+cannot verify in a browser, and Step 4 writes it.
+
+If it comes back selected alongside a real mode, that is a contradiction; take
+the named modes as the answer and ignore it.
 
 The no-frontend branch below adds a fifth option, "Decide later". If that comes
 back selected alongside "none of these", those two are opposites: one writes all
@@ -222,26 +232,32 @@ three axes `false`, the other writes nothing at all. Take "Decide later" as the
 answer and write nothing.
 
 An unset axis is recoverable. The next run of this skill asks again, and the
-health check says plainly that the axis is missing. A `false` written by mistake
-is not recoverable in the same way. It reads as a decision the user made, so
-nothing asks again and the machine quietly looks incapable.
+health check says plainly that the axis is missing.
+
+A `false` written by mistake is not recoverable in the same way. It reads as a
+decision the user made, so nothing asks again and the machine quietly looks
+incapable.
 
 When to treat the question as required: the browser axes become required as soon
 as *any* project on this machine has a frontend. Nothing available here can see
-that. The detection output's `project.has_frontend` looks only at the git
-repository the current directory sits in. So it reports on that one project, and
-says nothing about the other checkouts on this machine.
+that.
+
+The detection output's `project.has_frontend` looks only at the git repository
+the current directory sits in. So it reports on that one project, and says
+nothing about the other checkouts on this machine.
 
 So read it as a floor, not as the whole answer:
 
 - `project.has_frontend` is true – ask with no escape. The modes have to be
   declared.
 - It is false, or there is no SpecHub project in the current directory at all –
-  still ask. The next project opened on this machine may well have a frontend,
-  and this skill runs once per machine. Add a "Decide later" option, and state
-  the consequence plainly. The three `host.browser.*` axes stay unset. The health
-  check `~/.claude/spechub/bin/spechub config check` then fails the first time
-  anyone runs it in a project that has a frontend.
+    still ask. The next project opened on this machine may well have a frontend,
+    and this skill runs once per machine.
+
+    Add a "Decide later" option, and state the consequence plainly. The three
+    `host.browser.*` axes stay unset. The health check
+    `~/.claude/spechub/bin/spechub config check` then fails the first time
+    anyone runs it in a project that has a frontend.
 
 ## Step 3: The optional axes – with skip
 
@@ -250,39 +266,44 @@ answered yes to Orca in Step 2. Otherwise omit that question rather than asking
 it and discarding the answer.
 
 1. **Preview publishing** (`host.preview.tailscale_serve`) – whether
-   `tailscale serve` can publish this machine's dev server to the user's own
-   private network. Another device can then open it. Options: yes, no, skip.
-   Detection reports whether this machine has Tailscale
-   (`preview.tailscale_binary`). It reports separately whether anyone has logged
-   it in (`preview.tailscale_logged_in`). Put both facts in the option
-   descriptions, because an installed-but-logged-out Tailscale publishes
-   nothing.
+    `tailscale serve` can publish this machine's dev server to the user's own
+    private network. Another device can then open it. Options: yes, no, skip.
+
+    Detection reports whether this machine has Tailscale
+    (`preview.tailscale_binary`). It reports separately whether anyone has
+    logged it in (`preview.tailscale_logged_in`). Put both facts in the option
+    descriptions, because an installed-but-logged-out Tailscale publishes
+    nothing.
 
 2. **Element picker** (`host.element_picker`) – the tool that lets the user
-   click an element in the running app. The user then hands that reference to an
-   agent. Options: `stagewise`, `orca-design-mode`, `none`, skip. Say plainly
-   that the config only records this axis. No skill changes its behaviour on it
-   yet, so a wrong answer costs nothing today.
+    click an element in the running app. The user then hands that reference to
+    an agent. Options: `stagewise`, `orca-design-mode`, `none`, skip.
+
+    Say plainly that the config only records this axis. No skill changes its
+    behaviour on it yet, so a wrong answer costs nothing today.
 
    Note that Orca's Design Mode needs the browser pane to render on the
    developer's own machine. So it is only a real option when Orca runs there.
 
 3. **Orca topology** (`host.orca.topology`) – how Orca runs. Ask it only when
-   the user answered yes to Orca in Step 2 above. Gate it on that answer, not on
-   a config read, because nothing has written `host.orchestrators.orca` yet.
-   Local runs Orca as a desktop application on the developer's own machine.
-   Remote runs `orca serve` – Orca's headless server – on another machine, and
-   the user views it through a paired client application. Options: local, remote,
-   skip.
+    the user answered yes to Orca in Step 2 above. Gate it on that answer, not
+    on a config read, because nothing has written `host.orchestrators.orca` yet.
+
+    Local runs Orca as a desktop application on the developer's own machine.
+    Remote runs `orca serve` – Orca's headless server – on another machine, and
+    the user views it through a paired client application. Options: local,
+    remote, skip.
 
 A skipped axis and an axis answered `none` or `false` are different things, and
 the difference matters:
 
 - **Skipped** means unset. This skill writes nothing for that axis. Note what
-  that costs at the command line. Run `spechub config get` on an unset axis. It
-  writes its message to standard error and exits 2 for required and optional
-  axes alike. Only the `(required)` or `(optional)` qualifier inside that message
-  tells the two apart.
+    that costs at the command line.
+
+    Run `spechub config get` on an unset axis. It writes its message to standard
+    error and exits 2 for required and optional axes alike. Only the
+    `(required)` or `(optional)` qualifier inside that message tells the two
+    apart.
 
   The difference that actually matters belongs to `spechub config check`, the
   health check. It lists an unset optional axis as informational, and fails only
@@ -324,10 +345,12 @@ The rules for this step:
   `host.orchestrators.orca` and `host.orca.topology` are the newest axes, so
   they are the ones an old cached tool rejects.
 - **Recovering from version skew.** Do not re-ask – the answer is not the
-  problem, and re-asking a boolean axis only loops. Tell the user to restart
-  Claude Code, so the SessionStart hook re-points
-  `~/.claude/spechub/bin/spechub` at the current cache. Skip the axis and carry
-  on. Do not report it to the user as their mistake.
+    problem, and re-asking a boolean axis only loops. Tell the user to restart
+    Claude Code, so the SessionStart hook re-points
+    `~/.claude/spechub/bin/spechub` at the current cache.
+
+    Skip the axis and carry on. Do not report it to the user as their mistake.
+
 - Setting `host.orca.topology` while `host.orchestrators.orca` is not true is
   accepted, and the CLI warns that nothing reads it, so do not write it in that
   case at all.
@@ -370,7 +393,9 @@ orca_bin="<orchestrator.orca_binary from the Step 1 detection output>"
 Fill the placeholder in from the detection output's
 `orchestrator.orca_binary`, an absolute path. Do not hardcode a name. The Linux
 executable is `orca-ide`, with `orca` as an alternative on some installs, so a
-hand-written name is right on only some machines. A `null` in that field means
+hand-written name is right on only some machines.
+
+A `null` in that field means
 this machine has no Orca, so nothing needs registering. See "When Orca is not
 installed here" below instead.
 
@@ -429,10 +454,13 @@ bash "$plugin_root/skills/host/install-orca.sh" --plan \
 ```
 
 `--mobile-pairing` gets a mobile-scoped pairing offer, which is what a phone
-needs. Run the plan and the apply with the same options. The script builds the
-unit text from the options. Three steps read their status from that text. A flag
-added after the plan therefore changes what runs. The plan is what the user
-approved.
+needs. Run the plan and the apply with the same options.
+
+The script builds the unit text from the options. Three steps read their status
+from that text.
+
+A flag added after the plan therefore changes what runs. The plan is what the
+user approved.
 
 `--plan` writes nothing. It prints one numbered line per step, and each line
 ends in `[todo]` or `[skip: <reason>]`. Show that list to the user verbatim,
@@ -479,12 +507,15 @@ The last step of the apply reads the journal itself and prints the pairing URL.
 The pairing URL is the link a client uses to connect to this Orca server. Give
 it to the user.
 
-That step skips in three cases. It skips when the apply neither started nor
-restarted the server, because an untouched server keeps the pairing URL it
-already had. It skips when the journal holds no readiness line yet, which
-happens when the server has started and has not printed its block. It skips when
-`journalctl` is missing, and prints this command instead. Run it yourself
-whenever a skip leaves the pairing URL unknown:
+That step skips in three cases.
+
+It skips when the apply neither started nor restarted the server, because an
+untouched server keeps the pairing URL it already had. It skips when the journal
+holds no readiness line yet, which happens when the server has started and has
+not printed its block. It skips when `journalctl` is missing, and prints this
+command instead.
+
+Run it yourself whenever a skip leaves the pairing URL unknown:
 
 ```bash
 journalctl --user -u orca.service -n 100 --no-pager
@@ -503,9 +534,10 @@ systemctl --user restart orca
 
 **Write the managed block.** herdr keeps its config at
 `~/.config/herdr/config.toml`. SpecHub needs one setting in that file: the
-directory herdr creates worktrees under. Offer to write it. The installer is
-`install-herdr-block.sh`, beside this file, and Step 1 above resolves the same
-`plugin_root`.
+directory herdr creates worktrees under. Offer to write it.
+
+The installer is `install-herdr-block.sh`, beside this file, and Step 1 above
+resolves the same `plugin_root`.
 
 Plan it first:
 
@@ -554,8 +586,9 @@ setting they depend on.
 
 The rest of a herdr setup is personal taste. This skill installs none of it: the
 keymap, the popup key bindings, the `spechub.herdr-numbers` plugin, and the
-`spechub-*` helper binaries in `~/.local/bin`. Copy your own if you want them.
-Nothing in SpecHub needs any of them.
+`spechub-*` helper binaries in `~/.local/bin`.
+
+Copy your own if you want them. Nothing in SpecHub needs any of them.
 
 **The terminal-workspace skill writes the same block, wider.**
 `assets/terminal-workspace/setup.sh apply` fences `[keys]`, one
@@ -566,6 +599,7 @@ nothing from this installer.
 
 The installer therefore leaves that block alone. It reports the step as skipped
 when the directory already agrees. It refuses with exit 4 when it does not.
+
 Change the directory in `terminal-workspace.yaml` and run `setup.sh apply`
 again, never this script.
 
@@ -599,8 +633,10 @@ the project in the current directory.]
 ```
 
 The last item on that list is easy to miss. "Show in worktree list" is a
-per-repository setting in the Orca desktop application. Turning it on is what
-puts herdr checkouts on a phone. The user turns it on once for each repository.
+per-repository setting in the Orca desktop application.
+
+Turning it on is what puts herdr checkouts on a phone. The user turns it on once
+for each repository.
 
 Get the `Config:` line by running the command, not by writing the usual path in:
 
@@ -624,7 +660,9 @@ At worktree time, `/spechub:new-worktree` and `/spechub:teardown-worktree` run
 the same detector. It reads the environment markers an orchestrator sets in the
 terminals it opens, and those markers name the orchestrator hosting this
 session. The markers are `HERDR_ENV` or `HERDR_PANE_ID` for herdr, and
-`ORCA_PANE_KEY` for Orca. When no marker holds a value, those skills use plain
+`ORCA_PANE_KEY` for Orca.
+
+When no marker holds a value, those skills use plain
 git worktrees and say so. An environment variable for an orchestrator that was
 never declared is worth a warning, not a refusal.
 
@@ -633,12 +671,15 @@ machine can do. `frontend.browser.mode` in `spechub/project.yaml` says what the
 project would like.
 
 Today the only thing that compares the two is the SpecHub command-line
-interface's own health check, `~/.claude/spechub/bin/spechub config check`. It
-passes when the host declares the project's preferred mode available. It passes
-with a note when the host does not. The note names the first mode the host does
-declare, in the order remote, headless, local, as the one that would stand in.
-It fails when the host declares none of the three. That is a report about the setup, not a choice
-made on the verifier's behalf.
+interface's own health check, `~/.claude/spechub/bin/spechub config check`.
+
+It passes when the host declares the project's preferred mode available. It
+passes with a note when the host does not. The note names the first mode the
+host does declare, in the order remote, headless, local, as the one that would
+stand in.
+
+It fails when the host declares none of the three. That is a report about the
+setup, not a choice made on the verifier's behalf.
 
 Nothing under `agents/` or `skills/browser-verify/` reads `host.browser.*` yet,
 so the frontend verifier still takes `frontend.browser.mode` at its word.

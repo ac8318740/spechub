@@ -107,7 +107,10 @@ Three terms, then the loop.
 - **Every key below** is one this setup binds (see sections 3 to 9)
 
 1. **Dispatch.** Press `alt+r` to create a worktree workspace. Or ask an agent, and the `new-worktree` skill registers one with herdr for you
-2. **Monitor.** Press `alt+s` for the sidebar, the strip listing every workspace and every agent. A blocked agent needs an answer from you. A done agent has finished and you have not looked yet. Leave a working agent alone
+2. **Monitor.** Press `alt+s` for the sidebar, the strip listing every workspace and every agent.
+
+    A blocked agent needs an answer from you. A done agent has finished and you have not looked yet. Leave a working agent alone
+
 3. **Review locally.** Press `alt+f` to see what the agent's branch adds to dev. Press `alt+x` to compare something else. Run the `pre-commit-review` skill in the agent's own pane for a deeper pass
 4. **Ship.** The agent commits, pushes, and opens the pull request from its worktree
 5. **Review the pull request.** Press `alt+i` for the dashboard. Press `p` then `]` to reach Files Changed. Press `D` to review it in tuicr, or `S` to hand it to an agent

@@ -3,8 +3,10 @@
 The fallback backend: no auth, works offline, works on any remote. One
 markdown file per node under `spechub/maps/<name>/`, managed by the SpecHub
 CLI. Nodes here are transient working state – scratch discarded once the map
-clears. Suggest adding `spechub/maps/` to `.gitignore` when you first create
-the map.
+clears.
+
+Suggest adding `spechub/maps/` to `.gitignore` when you first create the
+map.
 
 CLI path: `~/.claude/spechub/bin/spechub`
 

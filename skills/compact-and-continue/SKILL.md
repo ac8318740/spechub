@@ -16,10 +16,12 @@ that must survive above all else.
 # Compact and continue
 
 Compaction replaces the conversation with a summary. The summary carries the
-narrative better than any template, but it is lossy. A handful of items are
-too load-bearing to risk losing. This skill writes those items to an anchor
-file. A SessionStart hook re-injects the file the moment the session resumes,
-so the work continues here rather than moving to a fresh agent.
+narrative better than any template, but it is lossy.
+
+A handful of items are too load-bearing to risk losing. This skill writes
+those items to an anchor file. A SessionStart hook re-injects the file the
+moment the session resumes, so the work continues here rather than moving to
+a fresh agent.
 
 ## Only the lead session runs this
 
@@ -69,9 +71,11 @@ names a way the command has already been got wrong:
   whether you are the lead or not. So the loop reads the agent transcripts
   first, and treats that file as an early exit rather than evidence of a child.
 - **No evidence means lead.** The old gate read a variable that is always set.
-  It answered `child` in every session, and neither skill could run (#146). Ten
-  seconds with no matching transcript answers `lead` instead. A teammate running
-  as its own top-level session lands here, and rightly: it owns its own marker.
+  It answered `child` in every session, and neither skill could run (#146).
+
+    Ten seconds with no matching transcript answers `lead` instead. A teammate
+    running as its own top-level session lands here, and rightly: it owns its
+    own marker.
 
 ## The rule that governs the anchor
 
@@ -126,9 +130,11 @@ not optional.
 
 Write `spechub/HANDOFF.md`. The frontmatter is **mandatory and machine-read**.
 The hook ignores any file without the marker, so it never touches a user's own
-unrelated `HANDOFF.md`. Set `map` to the name of the active map, or to
-`ad-hoc` when none is active. Set `created` to the current time, in ISO 8601
-UTC. The title repeats the `map` value.
+unrelated `HANDOFF.md`.
+
+Set `map` to the name of the active map, or to `ad-hoc` when none is active.
+Set `created` to the current time, in ISO 8601 UTC. The title repeats the
+`map` value.
 
 **Example** – the anchor for a session working the `tracker-backend` map:
 
@@ -179,11 +185,14 @@ d="${SPECHUB_CONTEXT_PRESSURE_DIR:-${TMPDIR:-/tmp}/spechub-context-pressure}"
 
 `CLAUDE_CODE_SESSION_ID` is this session's own id, so the marker lands exactly
 where the hook looks for it. The lead check at the top ruled out the child
-sessions, where the variable names the lead instead. If the variable is unset, skip
-this step. Tell the user that the hook keeps nudging, which is noisy but
-harmless. The hook clears the marker when the session compacts. It resets its
-state on `SessionStart` with `source: compact`, so the nudge returns once the
-context grows again.
+sessions, where the variable names the lead instead.
+
+If the variable is unset, skip this step. Tell the user that the hook keeps
+nudging, which is noisy but harmless.
+
+The hook clears the marker when the session compacts. It resets its state on
+`SessionStart` with `source: compact`, so the nudge returns once the context grows
+again.
 
 ## Hand over the compact line
 
@@ -201,8 +210,11 @@ it, say so. The file holds conversation content, so nobody should commit it.
 
 - **The reload fires only when the session start source is `compact`**. It
   does not fire on a fresh start, on resuming an earlier session, or after
-  clearing the context. A stale anchor therefore never leaks into unrelated
-  work. The `handoff` skill moves the work to a genuinely new session
+  clearing the context.
+
+    A stale anchor therefore never leaks into unrelated work. The `handoff`
+    skill moves the work to a genuinely new session
+
 - **Consume-once.** The hook retires the anchor as it injects it, moving it to
   `spechub/handoffs/<map>/<created>.md` (legacy
   `spechub/changes/<name>/handoffs/` when that directory still exists).

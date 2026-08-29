@@ -13,13 +13,14 @@ $ARGUMENTS
 
 # Terminal workspace
 
-The user drives several coding agents from one terminal, on a machine they
-reach over the network. Every agent dies when the connection drops, and the
-tools that read diffs and pull requests expect a desktop that machine does not
-have. What does that machine need? This skill installs herdr, a terminal
-multiplexer that keeps sessions alive after a disconnect. It adds the tools
-that read diffs, pull requests and files around it, and writes every config
-from one YAML file.
+The user drives several coding agents from one terminal, on a machine they reach
+over the network. Every agent dies when the connection drops, and the tools that
+read diffs and pull requests expect a desktop that machine does not have. What
+does that machine need?
+
+This skill installs herdr, a terminal multiplexer that keeps sessions alive
+after a disconnect. It adds the tools that read diffs, pull requests and files
+around it, and writes every config from one YAML file.
 
 SpecHub does not need any of this. Offer it, do not assume it.
 
@@ -107,9 +108,10 @@ the same thing wherever the user is standing:
 
 *`status` reports what this machine already has, before anything changes it.*
 
-The script takes four commands, and this skill uses all of them. Section 2
-runs `status` to report. Section 4 runs `apply` to install. Section 8 runs
-`disable <component>` and `uninstall` to undo.
+The script takes four commands, and this skill uses all of them.
+
+Section 2 runs `status` to report. Section 4 runs `apply` to install. Section 8
+runs `disable <component>` and `uninstall` to undo.
 
 Run the script from the plugin directory. Resolve the path rather than
 guessing it:
@@ -119,9 +121,11 @@ SETUP="$(dirname "$(find ~/.claude/plugins -path '*spechub*/assets/terminal-work
 bash "$SETUP" status
 ```
 
-It reports three things. Which binaries this machine has. Which components the
-config enables. Whether the herdr config still holds the managed block, meaning
-the region between the `# >>> spechub terminal-workspace >>>` and
+It reports three things.
+
+Which binaries this machine has. Which components the config enables. Whether
+the herdr config still holds the managed block, meaning the region between the
+`# >>> spechub terminal-workspace >>>` and
 `# <<< spechub terminal-workspace <<<` comment lines that `apply` writes.
 
 Its last lines say where a copy and an open will land on this machine. Section
@@ -147,7 +151,10 @@ Then ask about these settings, in this order:
   - A Windows client attaching with `herdr --remote` never delivers `ctrl+alt`. Every such chord goes silently dead
   - Suggest `ctrl+alt` only to a user who attaches exactly one way and has tested it
   - `none` keeps herdr's prefix-only keymap. The user presses a prefix key first
-- **`herdr.worktrees_directory`**: keep it absolute. A worktree is a second checkout of the same repository on its own branch. A relative value resolves against the herdr session's base directory, not the repository you point at. Worktrees for a second repository then land inside the first
+- **`herdr.worktrees_directory`**: keep it absolute. A worktree is a second checkout of the same repository on its own branch.
+
+    A relative value resolves against the herdr session's base directory, not the repository you point at. Worktrees for a second repository then land inside the first
+
 - **`tuicr.build_from_fork`**: leave it `false`
   - Set it `true` for the two unmerged upstream pull requests, #607 stats and #633 resize
   - Set it `true` also for the fork's own fix for blank `+N -N` counts in pull request review mode
@@ -177,10 +184,12 @@ laptop.
 bash "$SETUP" apply
 ```
 
-`apply` installs any missing binary for an enabled component. It writes the
-helper scripts and the herdr keymap. It writes the gh-dash sections and
-keybindings. It sets delta as the git pager. Running it again after a config
-edit updates every managed region in place.
+`apply` installs any missing binary for an enabled component.
+
+It writes the helper scripts and the herdr keymap. It writes the gh-dash
+sections and keybindings. It sets delta as the git pager.
+
+Running it again after a config edit updates every managed region in place.
 
 The master switch comes first. With `enabled: false` at the top of the config,
 `apply` exits without installing anything.
@@ -258,10 +267,11 @@ same way section 6 hands them a prompt.
 *`apply` binds keys on this machine. The emulator the user types in may claim the same ones first.*
 
 `apply` binds the keymap on **this** machine. The terminal emulator on the
-machine the user types on intercepts the chords first. Windows Terminal binds
-`alt+shift+d` to "duplicate pane" by default and never forwards it, so a
-binding on that chord does nothing here. The diff keys avoid it by sitting on
-`alt+f` and `alt+shift+f`. Other emulators claim other chords.
+machine the user types on intercepts the chords first.
+
+Windows Terminal binds `alt+shift+d` to "duplicate pane" by default and never
+forwards it, so a binding on that chord does nothing here. The diff keys avoid
+it by sitting on `alt+f` and `alt+shift+f`. Other emulators claim other chords.
 
 When the user reports a key doing nothing, have them run `cat -v` in any pane
 and press it. A chord that arrives prints an escape sequence. One that prints
@@ -272,8 +282,10 @@ After `apply`, work out which case you are in.
 **Running on the user's own desktop**, meaning macOS, or Linux with a desktop
 session. The terminal emulator is right here. Read
 [assets/terminal-workspace/client-keybindings.md](../../assets/terminal-workspace/client-keybindings.md)
-and do the work yourself. Find the emulator's config, and back it up. Unbind
-only the chords the emulator actually holds. Show the diff, and verify.
+and do the work yourself.
+
+Find the emulator's config, and back it up. Unbind only the chords the emulator
+actually holds. Show the diff, and verify.
 
 **Running on a remote or headless host**, meaning no `DISPLAY`, or an
 `SSH_CONNECTION` in the environment. You cannot reach the emulator from here.
@@ -283,8 +295,9 @@ Ask first:
 > I can give you a prompt to hand to an agent there, which frees the keys their
 > terminal is swallowing.
 
-Only if they say yes, print the contents of `client-keybindings.md` verbatim
-for them to paste. Do not summarise it. Do not rewrite it for their emulator.
+Only if they say yes, print the contents of `client-keybindings.md` verbatim for
+them to paste. Do not summarise it. Do not rewrite it for their emulator.
+
 It already covers the common ones. The agent on that machine can see which
 emulator the user actually runs.
 
@@ -298,12 +311,13 @@ ask the user to paste their local config here so you can rewrite it.
 
 *Three gh-dash keys break there, and a file has no way off the machine at all. `apply` writes a route for each. The last lines of `status` say where a copy and an open will land.*
 
-The dev machine – the remote machine the user's agents run on, a virtual
-machine in this setup – has no display and no clipboard. Two gaps, and three
-gh-dash keys fall into them. The `o` key fails with `exit status 1`, because
-`xdg-open` has no display. The `y` and `Y` keys fail with `Failed copying to
-clipboard`, because gh-dash shells out to `xclip`, `xsel` or `wl-copy`, and the
-machine has none of them.
+The dev machine – the remote machine the user's agents run on, a virtual machine
+in this setup – has no display and no clipboard. Two gaps, and three gh-dash
+keys fall into them.
+
+The `o` key fails with `exit status 1`, because `xdg-open` has no display. The
+`y` and `Y` keys fail with `Failed copying to clipboard`, because gh-dash shells
+out to `xclip`, `xsel` or `wl-copy`, and the machine has none of them.
 
 `apply` closes both gaps. Setting a second machine up needs nothing extra:
 
@@ -314,10 +328,11 @@ bash "$SETUP" status     # read the last lines
 
 `y` and `Y` keep gh-dash's own behaviour, backed by an `xclip` stand-in that
 copies over OSC 52. OSC 52 is an escape sequence a terminal reads as "put this
-text on the clipboard of the machine I am running on". The `o` key becomes a
-keybinding running `spechub-open`, because gh-dash runs `$BROWSER` with its
-output discarded and the dashboard still drawn. A route that must hand you a
-link then has nowhere to draw it.
+text on the clipboard of the machine I am running on".
+
+The `o` key becomes a keybinding running `spechub-open`, because gh-dash runs
+`$BROWSER` with its output discarded and the dashboard still drawn. A route that
+must hand you a link then has nowhere to draw it.
 
 The last lines of `status` say where a copy and an open will actually land on
 **this** machine:
@@ -349,20 +364,23 @@ Every line `status` can print is here, in the order the code tries the routes:
 Two of those rows name services this skill does not install. The opener is a
 small service on the user's laptop that opens a page in their default browser.
 The Playwriter bridge lets this machine drive Chrome on that same laptop, and
-the `bridge` skill covers it. Each runs on its own reverse tunnel, port 19988
-for the bridge and port 19989 for the opener. One can be up while the other is
-down.
+the `bridge` skill covers it.
 
-The opener has no key in this config, so do not invent one. `spechub-open`
-takes that route only when two things hold. A token file sits at
+Each runs on its own reverse tunnel, port 19988 for the bridge and port 19989
+for the opener. One can be up while the other is down.
+
+The opener has no key in this config, so do not invent one. `spechub-open` takes
+that route only when two things hold. A token file sits at
 `~/.config/spechub/opener.token`. The service answers on
-`http://127.0.0.1:19989` with that token. Setting `SPECHUB_OPEN_OPENER=off` in
-the environment skips the route.
+`http://127.0.0.1:19989` with that token.
+
+Setting `SPECHUB_OPEN_OPENER=off` in the environment skips the route.
 
 `browser: none` is not a fault. Nothing on that machine can open a page, so `o`
 hands the terminal a link instead. That link is the one route that works over
-any number of SSH hops. To make it a real one-key open, give it a command that
-can:
+any number of SSH hops.
+
+To make it a real one-key open, give it a command that can:
 
 ```bash
 export SPECHUB_OPEN_CMD="ssh laptop open"   # any command taking a URL
@@ -373,18 +391,22 @@ this. The browser belongs on the machine the user is sitting at.
 
 Under `herdr --remote`, panes run on the remote host, so `spechub-open` looks
 for a browser there and normally finds none. That is normal, not a fault. It
-falls to the link route, which the client draws. Do not add per-host browser
-configuration to "fix" it.
+falls to the link route, which the client draws.
+
+Do not add per-host browser configuration to "fix" it.
 
 One thing to check rather than assume. We measured on herdr 0.8.2 that a pane's
-OSC 52 write crosses the remote link. A copy on the dev machine then reaches
-the clipboard the user attached from. The herdr documentation never promises
-this, and terminals differ in whether they act on OSC 52 at all.
+OSC 52 write crosses the remote link. A copy on the dev machine then reaches the
+clipboard the user attached from.
+
+The herdr documentation never promises this, and terminals differ in whether
+they act on OSC 52 at all.
 
 So have the user run `spechub-clip test-string` after the first attach, then
-paste on the client. Believe that test over the measurement. If it does not
-cross, say so plainly. The link is still on screen, and herdr's own drag-select
-copies it.
+paste on the client. Believe that test over the measurement.
+
+If it does not cross, say so plainly. The link is still on screen, and herdr's
+own drag-select copies it.
 
 ### 7.1. When `o` claims it opened something nobody saw
 
@@ -392,10 +414,11 @@ copies it.
 
 `agent-browser` launches a headless Chrome on the local machine when it cannot
 attach to the Chrome DevTools Protocol (CDP) endpoint the caller named. That
-Chrome navigates, reports success, and shows nobody anything. A bridge relay
-answering on its HTTP port does not rule this out. Ours answered
-`/json/version` while refusing every CDP connection with `Multiple extensions
-connected. Specify extensionId.`
+Chrome navigates, reports success, and shows nobody anything.
+
+A bridge relay answering on its HTTP port does not rule this out. Ours answered
+`/json/version` while refusing every CDP connection with
+`Multiple extensions connected. Specify extensionId.`
 
 Diagnose it by asking what is really on the other end, never by trusting a
 successful open. Port 9555 below is the CDP port SpecHub defaults to for a
@@ -463,9 +486,10 @@ bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash, lazygit, neovim, t
 
 `disable` takes those seven components and no others. For `diffnav`, `gh_dash`
 and `tuicr` it writes `<component>.enabled: false` into the config itself, then
-rebuilds the herdr keymap so the rest of it survives. For `herdr`, `delta` and
-`neovim` it does not. Set `<component>.enabled: false` yourself after those
-three, or the next `apply` restores them.
+rebuilds the herdr keymap so the rest of it survives.
+
+For `herdr`, `delta` and `neovim` it does not. Set `<component>.enabled: false`
+yourself after those three, or the next `apply` restores them.
 
 `neovim` is the one whose undo is a deletion. The component writes a whole file
 of SpecHub's own, so `disable` removes `~/.config/nvim/lua/plugins/spechub.lua`
@@ -481,6 +505,8 @@ bash "$SETUP" uninstall
 ```
 
 `uninstall` removes everything `apply` wrote. It strips the managed blocks from
-the herdr, tuicr and yazi configs. It unsets delta as the git pager. It deletes
-the helper scripts, the `xclip` stand-in, the neovim plugin file, and the
-keybindings it wrote into gh-dash. The user's own settings around them survive, and every binary stays.
+the herdr, tuicr and yazi configs. It unsets delta as the git pager.
+
+It deletes the helper scripts, the `xclip` stand-in, the neovim plugin file, and
+the keybindings it wrote into gh-dash. The user's own settings around them
+survive, and every binary stays.
