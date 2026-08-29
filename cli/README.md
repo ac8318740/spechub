@@ -5,8 +5,9 @@ spec-driven development workflow where an agent plans changes as a graph of
 nodes before writing code.
 
 **SpecHub does not publish this CLI to npm. You do not need to install it.**
-It ships inside the SpecHub plugin as a prebuilt bundle. The plugin's
-SessionStart hook links it into place. See
+It ships inside the SpecHub plugin as a prebuilt bundle.
+
+The plugin's SessionStart hook links it into place. See
 [CONTRIBUTING.md](../CONTRIBUTING.md) for why.
 
 ## What it does
@@ -36,6 +37,7 @@ machine with the plugin installed, and it has no Claude Code dependency.
 
 What it does not give you is the *method*. The plugin ships that separately,
 as skills and agent definitions that tell an agent how to use these commands.
+
 The CLI runs the commands. The skills and agent definitions define the
 workflow.
 

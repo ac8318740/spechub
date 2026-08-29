@@ -68,24 +68,33 @@ names a way the command has already been got wrong:
   whether you are the lead or not. So the loop reads the agent transcripts
   first, and treats that file as an early exit rather than evidence of a child.
 - **No evidence means lead.** The old gate read a variable that is always set.
-  It answered `child` in every session, and neither skill could run (#146). Ten
-  seconds with no matching transcript answers `lead` instead. A teammate running
-  as its own top-level session lands here, and rightly: it owns its own marker.
+    It answered `child` in every session, and neither skill could run (#146).
+
+    Ten seconds with no matching transcript answers `lead` instead. A teammate
+    running as its own top-level session lands here, and rightly: it owns its
+    own marker.
 
 ## First: is this yours to invoke?
 
 If the user asked for a handoff, proceed. If you are invoking it on your own
 initiative, read `workflow.handoff.self_invoke` from `spechub/project.yaml`
-first. If it is `false`, stop. Tell the user a handoff looks warranted and why.
-Ask permission. Unset means `true`.
+first.
+
+If it is `false`, stop. Tell the user a handoff looks warranted and why. Ask
+permission.
+
+Unset means `true`.
 
 ## Where the work goes
 
 herdr is the terminal workspace manager some sessions run inside. Four terms
-carry its vocabulary, defined once here. A **herdr workspace** is a git
-worktree. A **herdr tab** is a session working inside one. A **pane** is the
-terminal rectangle a session occupies. An **agent** is a named session herdr
-supervises.
+carry its vocabulary, defined once here.
+
+A **herdr workspace** is a git worktree. A **herdr tab** is a session working
+inside one.
+
+A **pane** is the terminal rectangle a session occupies. An **agent** is a named
+session herdr supervises.
 
 One rule decides the destination:
 
@@ -101,6 +110,7 @@ gives that variant.
 
 **Consider the agents already running before launching anything.** List live
 sessions with `claude agents --json`, which works with no terminal attached.
+
 Listed is not the same as reachable. Each row carries a `state` field. You
 cannot message a row that is not in a live or working state, even though the
 listing shows it.
@@ -113,9 +123,11 @@ already running*, below, gives the way to propose the work to such a session.
 ## Naming workspaces and tabs
 
 herdr labels a new tab with a number, such as `1` or `2`. A user with four tabs
-open cannot tell which agent works on what. So every workspace and tab a handoff
-touches carries a descriptive label. `label` is the only naming field herdr has.
-There is no `--name`, no `--title`, and no `tab update`.
+open cannot tell which agent works on what.
+
+So every workspace and tab a handoff touches carries a descriptive label.
+`label` is the only naming field herdr has. There is no `--name`, no `--title`,
+and no `tab update`.
 
 A tab label reads `<topic>-<thread>.<step>`.
 
@@ -126,9 +138,10 @@ A tab label reads `<topic>-<thread>.<step>`.
 - **thread** numbers a line of work inside the workspace. The numbering restarts
   in each workspace. So a handoff into a new worktree labels the receiving tab
   `<topic>-1.0`, and a handoff inside this workspace labels it `<topic>-1.1`.
-- **step** counts the handoffs along that line. The session that started the
-  line is step 0. The agent it hands to is step 1. That agent's own handoff is
-  step 2.
+- **step** counts the handoffs along that line.
+
+    The session that started the line is step 0. The agent it hands to is
+    step 1. That agent's own handoff is step 2.
 
 Keep the topic to two words at most, so the whole label fits the tab strip.
 
@@ -172,8 +185,10 @@ herdr workspace rename <workspace_id> <label>
 ```
 
 The first tab of a new workspace is the spare root pane's tab. Rename it to
-`<topic>-1.0` after `worktree create`. Read its tab id from the create JSON, or
-from `herdr tab list --workspace <new_ws_id>`. Never hardcode a tab id.
+`<topic>-1.0` after `worktree create`.
+
+Read its tab id from the create JSON, or from
+`herdr tab list --workspace <new_ws_id>`. Never hardcode a tab id.
 
 Match the agent name in `herdr agent start <name>` to the tab label. The handle
 regex is `[a-z][a-z0-9_-]{0,31}`, which allows no dot. So the agent whose tab is
@@ -251,6 +266,7 @@ Head the rest with the same skeleton the `compact-and-continue` anchor uses. The
 headings are Next action, Decisions made, Open questions and blockers,
 Agent-team plan, Suggested skills, References. That skeleton is the five carried
 items above, plus the commands from the reference table instead of copied state.
+
 Drop any heading with nothing under it.
 
 The launch prompt is a **single-line pointer at that file**, never the handoff
@@ -261,21 +277,29 @@ text itself. `herdr agent start` rejects newlines and tabs in its arguments.
 *The command records the decision. The typed word stays a convention.*
 
 Cross-session messaging has no accept-or-decline mechanism. A peer can read a
-message and simply ignore it, and nobody tells the sender. So the receiver
-acknowledges by running a command. `spechub handoff ack accept|decline` writes a
-sidecar file at `<handoff-file>.ack`, beside the handoff file in the temp
-directory. The watcher polls for that path.
+message and simply ignore it, and nobody tells the sender.
+
+So the receiver acknowledges by running a command.
+`spechub handoff ack accept|decline` writes a sidecar file at
+`<handoff-file>.ack`, beside the handoff file in the temp directory. The watcher
+polls for that path.
 
 The sidecar makes the decision a recorded fact, rather than a phrase the sender
-must recognise. A typed ACCEPT or DECLINE in the transcript still counts. The
-watcher reports that fallback as `ack.via: 'text'`. It stays a convention an
-agent can drift from. Every handoff prompt asks for the command.
+must recognise.
+
+A typed ACCEPT or DECLINE in the transcript still counts. The watcher reports
+that fallback as `ack.via: 'text'`. It stays a convention an agent can drift
+from.
+
+Every handoff prompt asks for the command.
 
 There are two prompts, because the two destinations differ in what else they
 must say. Use the matching one verbatim, and substitute only the handoff file
-path. Each one is a single line. `herdr agent start` rejects newlines and tabs
-in its arguments. So the instruction and the pointer at the handoff file share
-that one line.
+path.
+
+Each one is a single line. `herdr agent start` rejects newlines and tabs in its
+arguments. So the instruction and the pointer at the handoff file share that one
+line.
 
 **Fresh agent** – one launched for this handoff, into a new pane, worktree or
 tab, or as a `--bg` session. Reading the handoff file is the one tool call
@@ -285,8 +309,10 @@ subagent – leaves the acknowledgement still owed.
 > Before any other tool call, acknowledge this handoff by running ~/.claude/spechub/bin/spechub handoff ack accept --file <handoff-file> "<one-line reason>", or ack decline --file <handoff-file> "<one-line reason>". You may read <handoff-file> first to judge whether the work suits you, and nothing else until the command has run – the sender watches for the file it writes and cannot report this work as yours until it exists. Then continue that work.
 
 **Agent already running** – one reached by cross-session message. It runs the
-same command. A `SendMessage` reply is no longer required. A reply that begins
-ACCEPT or DECLINE is the recognised fallback:
+same command.
+
+A `SendMessage` reply is no longer required. A reply that begins ACCEPT or
+DECLINE is the recognised fallback:
 
 > Before any other tool call, acknowledge this handoff by running ~/.claude/spechub/bin/spechub handoff ack accept --file <handoff-file> "<one-line reason>", or ack decline --file <handoff-file> "<one-line reason>". You may read <handoff-file> first to judge whether the work suits you, and nothing else until the command has run – the sender watches for the file it writes and cannot report this work as yours until it exists. A SendMessage reply beginning ACCEPT or DECLINE is a recognised fallback, but the command is what this handoff expects. Then continue that work.
 
@@ -319,13 +345,16 @@ rule the `new-worktree` skill follows. Local `dev` is often behind. So the fetch
 comes first, and the command cuts the branch from the remote ref.
 
 Stop after `worktree create`. It already leaves a spare root shell pane in the
-new workspace, and that is the pane the agent goes into. The `new-worktree`
-skill's extra pane-move steps exist only because that skill wants the caller to
-end up there. A handoff does not.
+new workspace, and that is the pane the agent goes into.
 
-The agent name is the handle – `[a-z][a-z0-9_-]{0,31}`, unique among live agents.
-Every `herdr agent` subcommand accepts it in place of a pane ID, and it survives
-a pane move. So always name the agent something short that describes the work.
+The `new-worktree` skill's extra pane-move steps exist only because that skill
+wants the caller to end up there. A handoff does not.
+
+The agent name is the handle – `[a-z][a-z0-9_-]{0,31}`, unique among live
+agents. Every `herdr agent` subcommand accepts it in place of a pane ID, and it
+survives a pane move. So always name the agent something short that describes
+the work.
+
 Pass `--no-focus` on every create, so the user's view never jumps.
 
 ### When `agent start` times out
@@ -340,10 +369,11 @@ herdr pane get <pane-id>   # read .result.pane.agent_session.value
 
 If `agent_session.value` is present, the launch succeeded. herdr never
 registered the named handle. So use the pane ID in place of the agent name for
-every later `herdr agent ...` command – they all accept a pane ID. Use that
-value as the session id for the acknowledgement watcher. `agent wait <name>` and
-`agent get <name>` return `agent_not_found` here. That is normal, not a second
-failure.
+every later `herdr agent ...` command – they all accept a pane ID.
+
+Use that value as the session id for the acknowledgement watcher.
+`agent wait <name>` and `agent get <name>` return `agent_not_found` here. That
+is normal, not a second failure.
 
 If it is absent, wait a few seconds. Then check once more. Only then treat the
 launch as failed and report it.
@@ -372,8 +402,10 @@ opener, same handoff file path.
 Handle this, or the launch hangs silently. A new worktree is a new directory, so
 the launched session asks the user to trust the directory. It then sits at
 `blocked`, while `agent start` has *already* returned success with
-`interactive_ready: true`. Readiness is not proof the prompt is running. So after
-starting, wait for the blocked state instead of polling by hand:
+`interactive_ready: true`.
+
+Readiness is not proof the prompt is running. So after starting, wait for the
+blocked state instead of polling by hand:
 
 ```bash
 herdr agent wait <name> --until blocked --timeout <ms>
@@ -390,10 +422,12 @@ If either wait times out, read the agent's current state directly with
 `herdr agent get <name>` rather than guessing.
 
 Throughout this section `<name>` is the pane ID instead, whenever the launch
-timed out – see *When `agent start` times out*, above. Such a launch may already
-be past the trust dialog. The pane can report `agent_status: working`, so
-`herdr agent wait <pane-id> --until blocked` may simply time out. Read the
-real state with `herdr agent get <pane-id>`, and carry on from there.
+timed out – see *When `agent start` times out*, above.
+
+Such a launch may already be past the trust dialog. The pane can report
+`agent_status: working`, so `herdr agent wait <pane-id> --until blocked` may
+simply time out. Read the real state with `herdr agent get <pane-id>`, and carry
+on from there.
 
 Never write `hasTrustDialogAccepted` into `~/.claude.json`, and never edit any
 security settings file. SpecHub does not touch those.
@@ -410,9 +444,11 @@ background session using the command template from `workflow.handoff.agent`
 ```
 
 There are no tabs and no workspaces here, so the destination rule has two cases,
-not three. A continuation – what would have been a new tab – is a plain `--bg`
-session. It starts in the CURRENT directory, which is the checkout this session
-is already in. That is exactly what a continuation wants.
+not three.
+
+A continuation – what would have been a new tab – is a plain `--bg` session. It
+starts in the CURRENT directory, which is the checkout this session is already
+in. That is exactly what a continuation wants.
 
 Genuinely separate or parallel work still needs its own checkout, and `--bg`
 will not make one – launched as-is it would quietly share this one. So create
@@ -425,24 +461,30 @@ transcript.
 
 ## Routing to an agent already running
 
-Message that session by name. *Propose* the work, and point at the handoff
-file. Do not assign it, and do not assume the target accepted it. Open the
-message with the **agent already running** variant of the acknowledgement
-instruction above. That variant asks for the ack command, and names a reply
-beginning ACCEPT or DECLINE as the fallback.
+Message that session by name. *Propose* the work, and point at the handoff file.
+Do not assign it, and do not assume the target accepted it.
+
+Open the message with the **agent already running** variant of the
+acknowledgement instruction above. That variant asks for the ack command, and
+names a reply beginning ACCEPT or DECLINE as the fallback.
 
 Generate a short token – a random string that appears nowhere else, say
 `ack-7f3a91c4` – and include it in the message text. The token still belongs in
 the message, even though the acknowledgement no longer travels back over this
-channel. The watcher anchors on it, so counting starts when the target
-**receives** the message, not when this session sends it. The target's queue
-absorbs however long the target was busy. That is why a single number of turns
-serves both a running agent and a fresh launch.
+channel.
+
+The watcher anchors on it, so counting starts when the target **receives** the
+message, not when this session sends it. The target's queue absorbs however long
+the target was busy. That is why a single number of turns serves both a running
+agent and a fresh launch.
 
 Generate the token fresh for every attempt – at least 8 random characters, and
 never reused on a retry. The watcher matches it by substring, and anchors on the
-FIRST match. So a reused token anchors on the ORIGINAL delivery, where the turns
-have already elapsed. It then reports an instant silence that never happened.
+FIRST match.
+
+So a reused token anchors on the ORIGINAL delivery, where the turns have already
+elapsed. It then reports an instant silence that never happened.
+
 The nudge in *Nudge once, then watch again*, below, is one of those attempts,
 and carries a fresh token of its own.
 
@@ -471,8 +513,10 @@ The watcher reads two sources. The sidecar `<handoff-file>.ack` holds the
 acknowledgement the ack command writes, and the watcher reports it as
 `ack.via: 'cli'`. The transcript is the fallback, reported as `ack.via: 'text'`
 – a SendMessage beginning ACCEPT or DECLINE, or, for a fresh agent, a reply
-beginning with it. The word has to lead there. The watcher does not match a
-decision buried mid-sentence.
+beginning with it.
+
+The word has to lead there. The watcher does not match a decision buried
+mid-sentence.
 
 `--file` must be an absolute path here, the same rule `--cwd` follows, and the
 watcher exits 1 on a relative one. The sender types this path against another
@@ -481,11 +525,13 @@ receiver's `handoff ack --file` is the lenient half of the pair – it takes a
 relative path and resolves it against its own working directory.
 
 The two sources differ in when they count. The transcript stops counting once
-the target spends the turn budget, because the watch has resolved by then. The
-sidecar needs no anchor at all. The watcher reads it first on every tick, so a
-target whose delivery record has not landed yet still acknowledges. The
-transcript also shows whether the target is working, which separates `engaged`
-from `silence`.
+the target spends the turn budget, because the watch has resolved by then.
+
+The sidecar needs no anchor at all. The watcher reads it first on every tick, so
+a target whose delivery record has not landed yet still acknowledges.
+
+The transcript also shows whether the target is working, which separates
+`engaged` from `silence`.
 
 Every watch ignores any sidecar written before a cut-off. So a sidecar from an
 earlier round never closes this watch, and nothing has to delete
@@ -517,12 +563,15 @@ instead of `--token`, and counting starts at the first line of its transcript.
 and needs no terminal attached.
 
 For a new worktree, `cwd` identifies the freshly launched session – it is the
-new worktree's path. For a new tab, `cwd` cannot, because this session shares
-that same cwd. So snapshot `claude agents --json` before launching. The target
-is whichever session id appears afterward and was absent from the snapshot. The
-no-herdr `--bg` fallback needs no snapshot at all. This session launched it with
-`--name`, so find the row carrying that name in `claude agents --json`, and take
-its session id.
+new worktree's path.
+
+For a new tab, `cwd` cannot, because this session shares that same cwd. So
+snapshot `claude agents --json` before launching. The target is whichever
+session id appears afterward and was absent from the snapshot.
+
+The no-herdr `--bg` fallback needs no snapshot at all. This session launched it
+with `--name`, so find the row carrying that name in `claude agents --json`, and
+take its session id.
 
 When a herdr `agent start` timed out, there is no agent name to look up. The
 session id is the `agent_session.value` read from `herdr pane get <pane-id>`.
@@ -554,9 +603,10 @@ honestly without it:
 ## Nudge once, then watch again
 
 An unacknowledged target gets exactly one nudge. The watcher returns `silence`
-or `engaged`, and `nudged` is `false`. Send one message to the target saying it
-has not acknowledged, and that it must run the ack command now. Quote the
-command with the handoff file path in it.
+or `engaged`, and `nudged` is `false`.
+
+Send one message to the target saying it has not acknowledged, and that it must
+run the ack command now. Quote the command with the handoff file path in it.
 
 | The target is        | Nudge it with                                            |
 | -------------------- | -------------------------------------------------------- |
@@ -564,9 +614,11 @@ command with the handoff file path in it.
 | already running      | `SendMessage`                                            |
 
 Then restart the watcher. Keep every argument, add `--nudged`, and re-anchor.
+
 The second watch must not count from where the first one started. It would
-report an instant silence off turns that elapsed before the nudge. Each route
-re-anchors differently:
+report an instant silence off turns that elapsed before the nudge.
+
+Each route re-anchors differently:
 
 | The first watch used | Re-anchor the second one by                                              |
 | -------------------- | ------------------------------------------------------------------------ |
@@ -575,9 +627,10 @@ re-anchors differently:
 
 The token route gets a new anchor for free, because the nudge is a fresh
 delivery. The nudge counts as an attempt under *Generate the token fresh for
-every attempt*, above, so never send it carrying the first token. The fresh
-route has no such anchor – `--fresh` counts from record 0 again, over a
-transcript that already holds the spent turns. Double the budget covers the
+every attempt*, above, so never send it carrying the first token.
+
+The fresh route has no such anchor – `--fresh` counts from record 0 again, over
+a transcript that already holds the spent turns. Double the budget covers the
 spent turns and a fresh budget on top.
 
 On the token route, pass `--ack-after <startedAt>` too, carrying the
@@ -624,29 +677,37 @@ launch cut-off is the one that keeps the old decline out.
 
 **Acknowledged, but `ack.decision` is null** – the target replied with something
 that is neither ACCEPT nor DECLINE, such as a clarifying question. This is not
-acceptance. Report the reply verbatim and stop. Never treat it as ownership.
+acceptance.
+
+Report the reply verbatim and stop. Never treat it as ownership.
 
 This outcome only appears when the watch ran without `--file`. With `--file` the
 watcher never reports a null decision. The sidecar records one word or the
 other, and a keyword-free SendMessage is not an acknowledgement.
 
 **`ack.via: text`** – report it as an acknowledgement, and say the target typed
-the decision rather than recording it. The sidecar does not exist, so nothing
-on disk holds the decision. A target that cannot write the sidecar gets that
-instruction from the failing ack command itself. A read-only temp directory is
-one such case. The command tells the target to reply with a message beginning
-ACCEPT or DECLINE. Everything else about the outcome reads the same.
+the decision rather than recording it. The sidecar does not exist, so nothing on
+disk holds the decision.
+
+A target that cannot write the sidecar gets that instruction from the failing
+ack command itself. A read-only temp directory is one such case. The command
+tells the target to reply with a message beginning ACCEPT or DECLINE.
+
+Everything else about the outcome reads the same.
 
 **Engaged** – the target is doing the work without acknowledging it. On
 `nudged: false`, nudge once and watch again. On `nudged: true`, report
-"proceeding, unacknowledged", name the target, and stop. **Never relaunch the
-work elsewhere.** Two agents on the same files is the failure file ownership
-exists to prevent. A second launch causes exactly it.
+"proceeding, unacknowledged", name the target, and stop.
+
+**Never relaunch the work elsewhere.** Two agents on the same files is the
+failure file ownership exists to prevent. A second launch causes exactly it.
 
 **Silence** – a first-class outcome, not an error. The watcher saw the message
-land, or saw the agent launch, and N turns then passed with nothing back. Nudge
-once, then watch again. After the nudge, report exactly that. Name the target so
-the user can go and look. Then stop.
+land, or saw the agent launch, and N turns then passed with nothing back.
+
+Nudge once, then watch again. After the nudge, report exactly that.
+
+Name the target so the user can go and look. Then stop.
 
 **Timeout – read `anchored` before saying a word about the target.** One outcome
 covers two situations. Reporting the second as the first is the one report that
@@ -683,16 +744,20 @@ ruled out the child sessions, where it names the lead instead. So the marker lan
 exactly where the hook looks for it.
 
 If the variable holds nothing, skip this step and say so in the report. The hook
-then keeps nudging, which is noisy but harmless. The hook clears the marker when
-the session compacts, because it resets its state on `SessionStart` with
-`source: compact`. So the nudge can return once the context grows again.
+then keeps nudging, which is noisy but harmless.
+
+The hook clears the marker when the session compacts, because it resets its
+state on `SessionStart` with `source: compact`. So the nudge can return once the
+context grows again.
 
 ## Report
 
 Always name the target, the handoff file path, and the next action the receiving
 agent would take. The target is an agent name with its pane or workspace, or the
-existing session. For a launched agent, also name the workspace label and the
-tab label. Those are what the user reads off the tab strip to find the pane.
+existing session.
+
+For a launched agent, also name the workspace label and the tab label. Those are
+what the user reads off the tab strip to find the pane.
 
 Then say where the handoff stands, in the terms of the outcome above.
 

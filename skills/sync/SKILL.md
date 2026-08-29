@@ -83,10 +83,13 @@ so, surface it in the report:
 Glossary: 'ticket' may be stale – the diff renames Ticket to WorkItem
 ```
 
-Never edit the glossary. Never block the commit. For specs, the code wins.
-For the glossary, the human wins. The glossary records vocabulary that
-humans agreed on, so only a human decision changes it. This check only
-surfaces the drift.
+Never edit the glossary. Never block the commit.
+
+For specs, the code wins. For the glossary, the human wins. The glossary
+records vocabulary that humans agreed on, so only a human decision changes
+it.
+
+This check only surfaces the drift.
 
 ## Step 6: report
 

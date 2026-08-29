@@ -67,6 +67,16 @@ A compound sentence is two clauses joined by a comma, by `and`, `so`, `but`, `wh
 - Write: Claude writes the code, then writes tests that pass against that code.
 - Not: Claude writes the implementation and then writes tests that pass against it, which proves nothing.
 
+**When the trailing clause is the point, lead with it instead of cutting it.** Cutting loses the point. Inverting the sentence puts the answer where the reader looks first.
+
+- Write: Don't cache the token – it expires in five minutes.
+- Not: The token expires in five minutes, so don't cache it.
+
+- Write: Roll back the deploy – it broke the checkout page.
+- Not: The deploy broke the checkout page, so roll it back.
+
+Spot it by the joining word. `so`, `therefore` and `which means` all announce that the point comes second.
+
 **Never bolt a cross-reference onto a sentence with a comma.** Put it in parentheses.
 
 - Write: You get three commands (see section 1).

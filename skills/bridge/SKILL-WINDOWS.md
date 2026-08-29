@@ -67,6 +67,7 @@ playwriter --version
 ### 3. Install the Playwriter Chrome extension (dedicated profile)
 
 Create a new Chrome profile. Name it something like "Playwriter Dev".
+
 Do **not** sign in to sensitive accounts on this profile. It exists so a
 compromised VM can only drive this profile, not your real browser.
 
@@ -127,12 +128,14 @@ cd $env:USERPROFILE\playwriter-bridge
 .\build-launcher.ps1
 ```
 
-This compiles `launcher-src.cs` to `launcher.exe` in the same directory.
-It uses PowerShell's built-in `Add-Type`. You install no SDK, and you need
-no admin rights. The output must be a `WindowsApplication`, not a console
-application. The shipped `build-launcher.ps1` sets that correctly. It also
-references `System.Management`, because the launcher walks the process tree
-through WMI on shutdown.
+This compiles `launcher-src.cs` to `launcher.exe` in the same directory. It
+uses PowerShell's built-in `Add-Type`. You install no SDK, and you need no
+admin rights.
+
+The output must be a `WindowsApplication`, not a console application. The
+shipped `build-launcher.ps1` sets that correctly. It also references
+`System.Management`, because the launcher walks the process tree through
+WMI on shutdown.
 
 ### 7. Pair VM access
 
@@ -223,10 +226,12 @@ Get-ScheduledTask -TaskName 'Playwriter-Tunnel-*','Playwriter-OpenerTunnel-*' |
 
 Do not restart one tunnel with a bare `Stop-ScheduledTask` and
 `Start-ScheduledTask`. Task Scheduler stops the task, not the process tree
-under it. The old supervisor and its `ssh.exe` stay alive, still holding the
-reverse forward, so the instance you just started never binds the port.
-Meanwhile `/health` answers 200 off the orphan, so the bridge looks healthy
-and drives nothing.
+under it.
+
+The old supervisor and its `ssh.exe` stay alive, still holding the reverse
+forward, so the instance you just started never binds the port. Meanwhile
+`/health` answers 200 off the orphan, so the bridge looks healthy and drives
+nothing.
 
 Measured on `Playwriter-Tunnel-VM1` during the opener work (August 2026).
 Supervisor 38296 survived the stop. Its `ssh.exe` 5108 kept `-R 19989` open,
@@ -241,30 +246,37 @@ the recipe starts them all again.
 After initial setup you do not re-copy scripts by hand. The SpecHub
 SessionStart hook runs `sync.ps1` on each Claude Code launch. `sync.ps1`
 compares the deployed scripts in `%USERPROFILE%\playwriter-bridge\` against
-the plugin cache by content hash. It copies every script that changed. It
-rebuilds `launcher.exe` when the launcher source changed. It restarts only
-the affected tasks.
+the plugin cache by content hash.
+
+It copies every script that changed. It rebuilds `launcher.exe` when the
+launcher source changed. It restarts only the affected tasks.
 
 A plugin update therefore reaches the running bridge on the next launch.
 Each changed task costs at most one brief reconnect.
 
 The whole SessionStart hook is a `bash` script. Git for Windows provides
 `bash`. Put `bash` on `PATH`, or the hook never runs and auto-sync never
-fires. When `bash` is missing, re-copy the changed files per the setup
-step. Then restart the tasks.
+fires.
+
+When `bash` is missing, re-copy the changed files per the setup step.
+Then restart the tasks.
 
 ### Per-tab activation
 
 In Chrome, open the Playwriter Dev profile. Click the Playwriter toolbar
-icon on each tab you want the VM to automate. Playwriter attaches per tab.
-It cannot attach to `chrome://` and `about:` pages.
+icon on each tab you want the VM to automate.
+
+Playwriter attaches per tab. It cannot attach to `chrome://` and `about:`
+pages.
 
 ## The document opener
 
-The opener shows a page from a VM in this laptop's default browser. It is
-a second service, not part of the bridge. The bridge carries CDP to a Chrome
-the extension drives. The opener takes a document and opens a tab. See
-`docs/adr/0006-document-opener-service.md` for why these stay apart.
+The opener shows a page from a VM in this laptop's default browser. It is a
+second service, not part of the bridge.
+
+The bridge carries CDP to a Chrome the extension drives. The opener takes a
+document and opens a tab. See `docs/adr/0006-document-opener-service.md` for
+why these stay apart.
 
 Two tasks run it:
 
@@ -272,10 +284,12 @@ Two tasks run it:
   on Node, restarts it when it exits, and logs to
   `%LOCALAPPDATA%\playwriter-bridge\opener-supervisor.log`. `opener.js`
   listens on `127.0.0.1:19989`.
-- `Playwriter-OpenerTunnel-VM<N>` runs `tunnel.ps1 -TargetHost <vm> -Port
-  19989`. Each VM gets its own. The opener never shares the bridge's
-  connection, because `ExitOnForwardFailure=yes` makes one wedged port fail
-  the whole `ssh`. A stuck 19989 would take the bridge down with it.
+- `Playwriter-OpenerTunnel-VM<N>` runs
+  `tunnel.ps1 -TargetHost <vm> -Port 19989`. Each VM gets its own.
+
+    The opener never shares the bridge's connection, because
+    `ExitOnForwardFailure=yes` makes one wedged port fail the whole `ssh`.
+    A stuck 19989 would take the bridge down with it.
 
 ### The opener token
 
@@ -316,22 +330,31 @@ checks 19989 alongside 19988.
 - **Transient** – connection refused, timed out, unreachable, DNS failure,
   TCP reset under a live session, or a Win32 connect `Unknown error`. The
   tunnel backs off exponentially, 5 → 10 → 20 → 40 → 80 → 120 s cap. The
-  backoff resets when a run lasts at least 30 s. A dropped long-lived
-  session lands here, so the tunnel reconnects on its own. Laptop sleep, a
-  wifi roam and a VPN flap all drop a session that way.
-- **Stuck remote port** (`remote port forwarding failed for listen port
-  19988`). The dropped session left an orphaned forward channel, and the VM
-  still holds the port through it. `tunnel.ps1` retries this one forever. It
-  waits 30 s, then doubles the wait to a 120 s cap. Those waits outlast the
-  VM's `sshd` reap window, so the bridge heals itself without a restart.
+  backoff resets when a run lasts at least 30 s.
+
+    A dropped long-lived session lands here, so the tunnel reconnects on
+    its own. Laptop sleep, a wifi roam and a VPN flap all drop a session
+    that way.
+
+- **Stuck remote port**
+  (`remote port forwarding failed for listen port 19988`).
+
+    The dropped session left an orphaned forward channel, and the VM still
+    holds the port through it. `tunnel.ps1` retries this one forever. It
+    waits 30 s, then doubles the wait to a 120 s cap. Those waits outlast
+    the VM's `sshd` reap window, so the bridge heals itself without a
+    restart.
+
 - **Auth or host-key failure** – `tunnel.ps1` writes the marker and exits
   at once. These failures need user action. Retrying only floods the log.
 
 A port held past 8 consecutive stuck attempts, about 11 min, needs a human.
 The holder is not `sshd`, or the VM has keepalive turned off. `tunnel.ps1`
 writes `tunnel-<host>[-<port>].stuck` for `doctor.ps1` to report. It keeps
-retrying underneath it. Free the port on the VM and the next attempt binds.
-`tunnel.ps1` removes the marker once that forward stays up for 30 s.
+retrying underneath it.
+
+Free the port on the VM and the next attempt binds. `tunnel.ps1` removes
+the marker once that forward stays up for 30 s.
 
 `doctor.ps1` does not wait for the marker. It turns the `Tunnel logs` row
 amber from the first `stuck-retry` line in `tunnel-*.log`, inside a 5 minute
@@ -359,13 +382,16 @@ at logon. Two in-process tricks do not solve this on modern Windows:
 
 The fix is `launcher.exe`, a small C# `WindowsApplication`. It starts the
 child with `CreateNoWindow = true`, so `CREATE_NO_WINDOW` propagates and
-Windows attaches no console. The launcher also waits for the child. It
-propagates the child's exit code. When it shuts down on its own it kills the
-descendant process tree through WMI.
+Windows attaches no console.
 
-That last part does not fire under `Stop-ScheduledTask`, measured twice.
-Task Scheduler force-terminates `launcher.exe`, so the `ProcessExit` handler
-never runs, the WMI kill never happens, and the children outlive the task.
+The launcher also waits for the child. It propagates the child's exit code.
+When it shuts down on its own it kills the descendant process tree through
+WMI.
+
+That last part does not fire under `Stop-ScheduledTask`, measured twice. Task
+Scheduler force-terminates `launcher.exe`, so the `ProcessExit` handler never
+runs, the WMI kill never happens, and the children outlive the task.
+
 `stop.ps1`, `sync.ps1` and `register-tasks.ps1` each reap the tree themselves
 for that reason. Anything you stop by hand has to go through `stop.ps1` too.
 
@@ -389,8 +415,10 @@ report.
 
 - **`Register-ScheduledTask : Access is denied`** – the tasks already
   exist, and you registered them from an elevated PowerShell. A non-admin
-  shell cannot replace them. Right-click PowerShell and choose Run as
-  Administrator. Then retry. Fresh installs do not need admin.
+  shell cannot replace them.
+
+    Right-click PowerShell and choose Run as Administrator. Then retry.
+    Fresh installs do not need admin.
 
 - **Console windows appear at logon and stay visible** – the scheduled
   task action points at `powershell.exe` directly instead of at
@@ -401,17 +429,19 @@ report.
   ```
 
   `Execute` should end in `launcher.exe`. If it ends in `powershell.exe`,
-  someone registered the tasks before `launcher.exe` was in place. Re-run
-  `build-launcher.ps1`, then `register-tasks.ps1`. Use an elevated
+  someone registered the tasks before `launcher.exe` was in place.
+
+  Re-run `build-launcher.ps1`, then `register-tasks.ps1`. Use an elevated
   PowerShell if the tasks already exist.
 
 - **Tasks show `LastTaskResult: 267011` and `LastRunTime: 1999`** (epoch) –
   the task is ready, but Windows never launched it. The most common cause
   on a domain-joined laptop is a task under `LogonType S4U` without
   reachable Kerberos infrastructure at logon. The shipped
-  `register-tasks.ps1` uses `LogonType Interactive` to avoid this. When you
-  see this result, check that the registered tasks are Interactive.
-  Re-register them if they are not:
+  `register-tasks.ps1` uses `LogonType Interactive` to avoid this.
+
+    When you see this result, check that the registered tasks are
+    Interactive. Re-register them if they are not:
 
   ```powershell
   Get-ScheduledTask Playwriter-* |
@@ -430,21 +460,24 @@ report.
   endpoint products log an event each time you spawn `ssh.exe` with a
   reverse forward. They log the event and never block it, and they stay
   quiet for RFC1918 targets. That log is a detection record, not a
-  mitigation. A steady-state bridge produces no further events. If your
-  endpoint product starts *blocking* the ssh spawn rather than logging it,
-  escalate to whoever owns endpoint policy at your site. Ask them for a
-  behavioural exclusion, or one scoped to the process arguments
-  `ssh.exe -R 19988:127.0.0.1:19988`.
+  mitigation.
+
+    A steady-state bridge produces no further events. If your endpoint
+    product starts *blocking* the ssh spawn rather than logging it,
+    escalate to whoever owns endpoint policy at your site. Ask them for a
+    behavioural exclusion, or one scoped to the process arguments
+    `ssh.exe -R 19988:127.0.0.1:19988`.
 
 - **Endpoint security logs on `build-launcher.ps1`** – the
   `Add-Type -OutputAssembly` call invokes `csc.exe` from the .NET Framework
   to compile `launcher-src.cs`. Some endpoint products flag any `csc.exe`
   that PowerShell spawns, because malicious PowerShell often compiles
   payloads at runtime. One alert per build is normal in that environment.
-  The built `launcher.exe` runs clean from then on. If that alert disrupts
-  your site, the alternative is to ship a prebuilt `launcher.exe` with a
-  checksum and skip `csc.exe`. Raise that change with the plugin maintainer
-  rather than patching locally.
+
+    The built `launcher.exe` runs clean from then on. If that alert
+    disrupts your site, the alternative is to ship a prebuilt
+    `launcher.exe` with a checksum and skip `csc.exe`. Raise that change
+    with the plugin maintainer rather than patching locally.
 
 - **`tunnel-<host>.stuck` marker present** – `tunnel.ps1` saw a fatal
   classification and exited. Read the marker file for the reason and the
@@ -455,9 +488,10 @@ report.
 
 Some steps need VM-side action – fix `authorized_keys`, free a stuck port,
 or check host keys. Format any such request using
-[`HANDOFF.md`](HANDOFF.md). The `doctor.ps1` script does this automatically
-for its own red rows. When you need a handoff block by hand, copy the shape
-verbatim.
+[`HANDOFF.md`](HANDOFF.md).
+
+The `doctor.ps1` script does this automatically for its own red rows. When
+you need a handoff block by hand, copy the shape verbatim.
 
 ## Security notes
 

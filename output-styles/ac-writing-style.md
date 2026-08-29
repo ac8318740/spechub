@@ -116,6 +116,8 @@ keep-coding-instructions: true
     - Keep the second clause only when it carries a fact the first clause needs
     - Cut a trailing clause that only justifies, softens or restates the first half
     - Write "Claude starts building before the requirements are clear", never that plus ", so you get the wrong thing quickly"
+    - Lead with the conclusion when the trailing clause is the point, rather than cutting it
+    - Write "Don't cache the token – it expires in five minutes", never "The token expires in five minutes, so don't cache it"
     - Put a cross-reference in parentheses: "(see section 2)", never ", covered in section 2"
 - A sub-bullet carries what its parent can't hold on its own
     - It argues for the parent
@@ -154,6 +156,10 @@ keep-coding-instructions: true
 - Never write a compound sentence without a reason
     - Cut a trailing clause that only justifies, softens or restates the first half
     - Keep a second clause only when it carries a fact the first clause needs
+- Lead with the conclusion when the trailing clause is the point, rather than cutting it
+    - Write "Roll back the deploy – it broke the checkout page"
+    - Never write "The deploy broke the checkout page, so roll it back"
+    - Spot it by the joining word, because "so", "therefore" and "which means" all announce that the point comes second
 - Break a paragraph at three sentences, on the rare occasion you write one
 - Open each paragraph with its point
 

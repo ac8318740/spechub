@@ -52,14 +52,18 @@ Run the build, lint and typecheck commands from project.yaml. Allow no errors.
 **What `workflow.tdd.strict` changes here**
 
 Read the key in `spechub/project.yaml`. It names the order the first two phases
-ran in. Under `true` the test-writer ran first, so the task's new tests failed
-before the executor and pass now. Under `false` the executor ran first, so
-nothing can show those tests failing without the implementation.
+ran in.
+
+Under `true` the test-writer ran first, so the task's new tests failed before
+the executor and pass now. Under `false` the executor ran first, so nothing can
+show those tests failing without the implementation.
 
 Under `false` hold three things instead. The new tests exist and pass, the full
-suite passes, and the test count did not drop. Say in your report that the
-failing-first evidence is absent, because relaxed TDD cannot produce it. The
-mutation spot-check in section 4.7 is what stands in its place.
+suite passes, and the test count did not drop.
+
+Say in your report that the failing-first evidence is absent, because relaxed
+TDD cannot produce it. The mutation spot-check in section 4.7 is what stands in
+its place.
 
 Under `false` the test-writer read the requirements and wrote its tests against
 a working tree that already held the implementation. That is weaker than the
@@ -104,13 +108,17 @@ For each new/modified test file:
 
 2. **Circular assertion check**: If any test has the circular pattern -> FAIL
 
-3. **Mutation spot-check**: Pick one or two implemented functions. Add an early return to each. Run the tests. If tests still pass -> FAIL. Revert the change after the check.
+3. **Mutation spot-check**: Pick one or two implemented functions. Add an early return to each. Run the tests.
+
+    If tests still pass -> FAIL. Revert the change after the check.
 
 ### 4.8 TDD isolation audit
 
 This audit asks one question, and asks it under both settings. Did the
-task-executor write in the test directory? The ban is absolute. Only the
-test-writer writes tests, whichever order the two phases ran in.
+task-executor write in the test directory?
+
+The ban is absolute. Only the test-writer writes tests, whichever order
+the two phases ran in.
 
 List what changed in the test directory:
 
@@ -120,7 +128,9 @@ git diff --name-only -- <test_directory>/
 
 Two kinds of change are not executor edits. The test-writer owns every test
 file it wrote. The format step owns a test file it rewrote, which carries
-formatting only. Read the diff before you fail the audit.
+formatting only.
+
+Read the diff before you fail the audit.
 
 **Under `true`** the test-writer ran first, so its files were already in place
 when the executor started. Any further change to a test file is an executor
@@ -128,6 +138,7 @@ edit -> FAIL.
 
 **Under `false`** the executor ran first and the test-writer ran after it. The
 test directory changes for that reason, so the file list alone names no author.
+
 Audit the executor's own report of the files it changed. If that report names a
 file under the test directory -> FAIL.
 

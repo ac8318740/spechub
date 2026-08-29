@@ -85,7 +85,11 @@ agent-browser works the same way in every environment. Only the CDP connection s
 
 Best experience – you interact with the user's real browser on their machine. Set `frontend.browser.mode: remote` and `frontend.browser.cdp_port: 19988` in project.yaml.
 
-Remote mode uses the Playwriter bridge. A relay runs on the browser machine and exposes a CDP-shaped endpoint. The Playwriter Chrome extension drives Chrome through the `chrome.debugger` API. Chrome itself opens no CDP listener. The dev machine reaches the relay through an SSH reverse tunnel.
+Remote mode uses the Playwriter bridge.
+
+A relay runs on the browser machine and exposes a CDP-shaped endpoint. The Playwriter Chrome extension drives Chrome through the `chrome.debugger` API. Chrome itself opens no CDP listener.
+
+The dev machine reaches the relay through an SSH reverse tunnel.
 
 This section does not decide whether remote mode runs here. `spechub config browser-mode` decides that, from the project's preference and the host's `host.browser.*` axes together. Run it before you connect.
 
@@ -127,7 +131,9 @@ Once that command returns `remote`, the answer is final. If the bridge is then d
 
 **Playwriter hardcodes port `19988`.** The port has no config option. The relay, the extension, and the tunnel all use the same port by design.
 
-**The relay must run on the same host as Chrome.** The Playwriter extension hard-rejects any `/extension` client that is not `127.0.0.1`. Do not run the relay on the dev machine. Run the relay where Chrome runs. Then tunnel to it from the dev machine.
+**The relay must run on the same host as Chrome.** The Playwriter extension hard-rejects any `/extension` client that is not `127.0.0.1`.
+
+Do not run the relay on the dev machine. Run the relay where Chrome runs. Then tunnel to it from the dev machine.
 
 **You must click the extension icon once per tab.** Playwriter attaches per-tab. Playwriter cannot attach to `chrome://` and `about:` pages – use normal web URLs.
 
@@ -143,7 +149,11 @@ to kick the previous relay.
 
 #### Persistent cross-device setup
 
-Use the `bridge` skill for a durable Windows laptop → Linux VM setup: [`../bridge/SKILL.md`](../bridge/SKILL.md). It adds auto-reconnecting scheduled tasks, ssh-agent key persistence, multi-VM tunneling, automated diagnosis (`doctor.ps1`), canonical stop (`stop.ps1`), and VM-side port cleanup (`vm-free-port.sh`). It routes to a Windows runbook or a Linux/VM runbook based on where you are. It also defines the paste-ready handoff format for cross-device work. The scripts ship under `plugins/spechub/assets/playwriter-bridge/`.
+Use the `bridge` skill for a durable Windows laptop → Linux VM setup: [`../bridge/SKILL.md`](../bridge/SKILL.md).
+
+It adds auto-reconnecting scheduled tasks, ssh-agent key persistence, multi-VM tunneling, automated diagnosis (`doctor.ps1`), canonical stop (`stop.ps1`), and VM-side port cleanup (`vm-free-port.sh`). It routes to a Windows runbook or a Linux/VM runbook based on where you are. It also defines the paste-ready handoff format for cross-device work.
+
+The scripts ship under `plugins/spechub/assets/playwriter-bridge/`.
 
 ### Local headless (no display)
 

@@ -36,7 +36,9 @@ flowchart TD
 | Archive               | section 6 |
 | Living specs          | section 7 |
 
-The request box is a terminal, not a step. Section 5 covers two boxes because one command does both. Section 8 describes this document. No box holds it.
+The request box is a terminal, not a step. Section 5 covers two boxes because one command does both.
+
+Section 8 describes this document. No box holds it.
 
 ## 1. The map, meaning the to-do graph
 
@@ -100,7 +102,9 @@ Nodes live in a tracker. That is the storage layer, and you can swap it.
 
 ## 2. Implement
 
-*A unit of work carries its own size. One node is a quick change. Forty is a long effort. Nothing declares which.*
+*A unit of work carries its own size. One node is a quick change.*
+
+*Forty is a long effort. Nothing declares which.*
 
 - `/spechub:implement` claims `afk` work nodes from the frontier when a map exists
     - It treats the request itself as the work item when none does

@@ -15,7 +15,10 @@ You are a **coordinator**, not an implementer. Your job is to:
 ## Non-negotiable rules
 
 1. **NEVER search or read the codebase directly** – Always delegate to subagents
-2. **Use Agent Teams for parallel independent scopes** – Launch a team when work has 2+ discrete, independent scopes. Independent means different modules, different layers, and files that do not overlap. Each teammate owns one scope. Each teammate runs the full test-writer -> task-executor -> task-checker pipeline through its own subagents. When work is sequential or single-scope, run the subagents yourself.
+2. **Use Agent Teams for parallel independent scopes** – Launch a team when work has 2+ discrete, independent scopes. Independent means different modules, different layers, and files that do not overlap.
+
+    Each teammate owns one scope. Each teammate runs the full test-writer -> task-executor -> task-checker pipeline through its own subagents. When work is sequential or single-scope, run the subagents yourself.
+
 3. **You MUST run a task-checker after every executor**
 4. **ALL changes update living specs** – spec sync does this at commit time. When a map closes, `/spechub:archive` verifies the residue. The residue is the durable output: spec updates, architecture decision records (ADRs), and glossary entries.
 5. **VERIFY BUILD before marking tasks complete** – See Build verification below
@@ -91,26 +94,30 @@ demands, and nothing declares how big the work is:
   axes. A bug has a root cause to find, not a decision to settle.
 - **Decisions need settling** – `/spechub:map`. It charts a map if none exists.
   Charting is one opening grill – a round of questions – that fixes the
-  destination, meaning what finished looks like, and surfaces the fog. If a map
-  exists, `/spechub:map` works the frontier instead. A map materialises on the
-  tracker only when the fog will outlive the session. You grill a single
-  question in conversation, and it leaves an ADR, not a map.
+  destination, meaning what finished looks like, and surfaces the fog.
+
+    If a map exists, `/spechub:map` works the frontier instead. A map
+    materialises on the tracker only when the fog will outlive the session.
+    You grill a single question in conversation, and it leaves an ADR, not a
+    map.
 
 Whichever route ran, spec sync updates the living specs at commit time.
 
 Two supporting skills are not user commands. You invoke `grilling` and
-`record-context` yourself. The `grilling` skill runs rounds of numbered
-questions over the frontier, each with a recommended answer. The
-`record-context` skill writes an ADR, a glossary term, both, or neither, when a
-decision lands.
+`record-context` yourself.
+
+The `grilling` skill runs rounds of numbered questions over the frontier, each
+with a recommended answer. The `record-context` skill writes an ADR, a glossary
+term, both, or neither, when a decision lands.
 
 ---
 
 ## Writing for a reader without context
 
 Someone reads nodes, ADRs, glossary entries, specs and handoffs weeks later.
-That reader was not in the conversation. Write for that reader. Invoke the
-`writing` skill before you write or edit any of them.
+That reader was not in the conversation. Write for that reader.
+
+Invoke the `writing` skill before you write or edit any of them.
 
 ---
 
@@ -121,14 +128,18 @@ two phases. When `spechub/project.yaml` sets `workflow.tdd.strict: false`,
 relaxed TDD, the order is task-executor, then test-writer, then task-checker.
 
 Relaxed TDD means nobody writes the tests first. It never means the work goes
-unverified, and it drops no phase. All three agents run under both settings.
-Rule 3 above holds either way. A task-checker runs after every executor.
+unverified, and it drops no phase.
+
+All three agents run under both settings. Rule 3 above holds either way. A
+task-checker runs after every executor.
 
 ### Never pin an answer nobody chose
 
 A criterion sometimes leaves a decision to nobody. An agent that meets one must not pick an answer and encode it. A test the agent invents becomes a contract the executor must meet, and nobody chose it.
 
-Prefer the narrower test, or the narrower behaviour. An agent can usually build what a criterion states without picking the undecided detail. A narrower test must still fail when the criterion is unmet. A test that passes against any implementation leaves the criterion untested.
+Prefer the narrower test, or the narrower behaviour. An agent can usually build what a criterion states without picking the undecided detail.
+
+A narrower test must still fail when the criterion is unmet. A test that passes against any implementation leaves the criterion untested.
 
 An agent that can do neither reports the criterion and the question that settles it. The test-writer and the task-executor carry the operational rules.
 
@@ -144,14 +155,17 @@ DELEGATE to test-writer subagent
 ```
 
 `workflow.tdd.strict: false` runs this phase after Phase 2, not before it.
+
 Tell the test-writer to write its tests from the requirements, and to leave
 the implementation in the working tree unread. Its independence is weaker
 than under strict, where no implementation exists for it to read. That is the
 cost of relaxed TDD.
 
 The verify line changes with the order. Under `false` the implementation is
-already there, so check that the new tests pass rather than fail. A new test
-that fails means the implementation is wrong. Route that back to Phase 2.
+already there, so check that the new tests pass rather than fail.
+
+A new test that fails means the implementation is wrong. Route that back to
+Phase 2.
 
 **Phase 2: task-executor** – Make the tests pass
 
@@ -179,11 +193,12 @@ DELEGATE to task-checker subagent
 ```
 
 The checker's gate follows `workflow.tdd.strict`. Under `true` it holds the
-task's new tests to failing before the executor and passing after. Under
-`false` the implementation came first, so nothing can show the tests failing
-without it. The checker then holds the new tests to existing and passing, the
-full suite to passing, and the test count to not dropping. It reports which
-mode it ran in.
+task's new tests to failing before the executor and passing after.
+
+Under `false` the implementation came first, so nothing can show the tests
+failing without it. The checker then holds the new tests to existing and
+passing, the full suite to passing, and the test count to not dropping. It
+reports which mode it ran in.
 
 **Phase 4: frontend-verifier** – Browser verification, when `spechub/project.yaml` configures a frontend
 
@@ -203,8 +218,10 @@ If Phase 4 fails -> route back to Phase 2 with the UI bug details.
 
 `commands.format` in `spechub/project.yaml` names the formatter. Run it
 immediately before you delegate to the task-checker, over the files the work
-touched. One rule covers both settings. Under relaxed TDD the format step
-therefore falls after the test-writer, so the new tests get formatted too. A
+touched.
+
+One rule covers both settings. Under relaxed TDD the format step therefore
+falls after the test-writer, so the new tests get formatted too. A
 `commands.format` of `null` means this project has no format step.
 
 Report a non-zero exit from the formatter. Never treat one as a failed
@@ -419,4 +436,6 @@ that runs spec sync.
 - **Progressive materialisation** – structure appears only when it must persist. A map exists only when fog outlives a session. Nothing declares how big the work is
 - **Cross-device setups** – Invoke the `bridge` skill first when a task spans two devices, such as the Playwriter bridge or a remote tunnel. It establishes the platform-detection and handoff convention. Then proceed
 - **Handing work over** – `/spechub:handoff` hands the work to a visible agent: a new one in its own pane, or one already running. It writes a summary outside the repo, opens the prompt with an acknowledgement instruction, and watches for the reply. It records only what nothing on disk holds (next action, decisions, blockers, file ownership) and references the rest
-- **Survive compaction** – `/spechub:compact-and-continue` keeps the work in this session. It writes an in-repo anchor instead of launching anything. Run it before `/compact`. Then type `continue` to resume from the anchor
+- **Survive compaction** – `/spechub:compact-and-continue` keeps the work in this session. It writes an in-repo anchor instead of launching anything.
+
+    Run it before `/compact`. Then type `continue` to resume from the anchor
