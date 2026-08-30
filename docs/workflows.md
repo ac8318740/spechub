@@ -64,8 +64,11 @@ A node carries one of five statuses.
 | `resolved` | settled |
 | `out-of-scope` | deliberately dropped |
 
-A node carries a `mode` too. Two link types connect the nodes.
+A node carries a `kind`, a `label`, and a `mode` too. Two link types connect the nodes.
 
+- **`kind`** is one of five: `destination`, `notes`, `decision`, `research`, `work`
+    - It picks the node's shape in a diagram, never how the map routes it
+- **`label`** is the node's short name for a diagram, at most four words
 - **`mode`** says who settles the node: `hitl` for a human, `afk` for an agent alone
 - **`answers`** names the one node whose answer raised this one
     - The parent links form a tree, which gives you a reading order
@@ -73,6 +76,14 @@ A node carries a `mode` too. Two link types connect the nodes.
 - **`blocked-by`** names any number of nodes that must resolve before this one starts
     - The blocking edges form a directed acyclic graph, meaning the edges never loop back
     - These edges tell you what you can work right now
+
+Every node body carries a diagram, two at most. A childless `notes` node is the one exception.
+
+- A node with children draws its own subtree, rendered by `spechub node diagram`
+- Every other node draws what its question or its change touches, drawn by Claude
+- A second mermaid fence under each diagram is its legend, showing only the cues that diagram uses
+- On GitHub every node id in a diagram links to its issue
+- `skills/map/visuals.md` holds the rules
 
 SpecHub works depth out from `answers`. Nobody declares it. The map itself is five queries.
 
@@ -88,9 +99,11 @@ Nodes live in a tracker. That is the storage layer, and you can swap it.
 
 - A tracker provides four operations and nothing more: create, read, update, list
 - GitHub issues are the default
-    - A sub-issue records what raised a node
-    - A dependency records what must finish first
+    - The first line of every issue body carries all of that node's edges
+    - One list call therefore returns the whole graph
+    - A sub-issue and a dependency mirror those edges, so GitHub's own interface draws the map
 - Files under `spechub/maps/<name>/` are the fallback
+    - Frontmatter holds the edges, so those files carry no header line
 - Frontier, claim, and resolve build on those four operations
     - No tracker implements them itself
 

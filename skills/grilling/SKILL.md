@@ -97,7 +97,11 @@ the tracker's `update` and `create` operations:
 3. Invoke the `record-context` skill for each resolution – it decides whether
    the decision earns an ADR, a glossary term, both, or neither.
 
-4. Recompute the frontier with the tracker's query and present the next
+4. Redraw the resolved node's own diagram to mark the path you chose, then
+   regenerate its parent's. The map skill's `visuals.md` holds the rules and
+   its `SKILL.md` holds the command.
+
+5. Recompute the frontier with the tracker's query and present the next
    round.
 
 **Example** – the `## Answer` body of a node asking whether map nodes
