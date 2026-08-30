@@ -71,6 +71,7 @@ awk '
   # because the reminder names each rule and the file itself argues for it.
   /^## Who you are$/            { persona = 1; next }
   /^## Shape: Minto pyramid$/   { persona = 0 }
+  persona && /^### /            { emit(""); emit($0); next }
   persona && /^[*-]/            { emit($0); next }
   persona && /^\*\*/            { emit($0); next }
 
