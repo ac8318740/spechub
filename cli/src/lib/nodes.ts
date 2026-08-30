@@ -5,25 +5,63 @@
 // and live in the skills, not here.
 //
 // One file per node, no map.md, no index. The map is queries over the nodes.
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
+import { replaceFileAtomically } from './atomic-file.js';
 import { SPECHUB_DIR, MAPS_DIR } from './constants.js';
 import { ensureDir } from './utils.js';
 
 export const NODE_STATUSES = ['fog', 'open', 'claimed', 'resolved', 'out-of-scope'] as const;
 export const NODE_MODES = ['hitl', 'afk'] as const;
+// kind is a closed set: a diagram renderer will switch on it to pick a shape,
+// so an unknown value would have no drawing and the legend could not enumerate
+// itself. See docs/adr/0012-node-kind-is-a-closed-set-of-five.md.
+export const NODE_KINDS = ['destination', 'notes', 'decision', 'research', 'work'] as const;
 
 export type NodeStatus = (typeof NODE_STATUSES)[number];
 export type NodeMode = (typeof NODE_MODES)[number];
+export type NodeKind = (typeof NODE_KINDS)[number];
+
+// The label is what a diagram draws, so it is capped hard. An uncapped field
+// drifts back into a full title within a few rounds, and the diagram stops
+// being readable.
+export const LABEL_MAX_WORDS = 4;
+export const LABEL_MAX_CHARS = 30;
+// The one sentence that states the caps in prose. Every help string and every
+// "label is required" message reads it, so the numbers and the wording both
+// have a single home.
+export const LABEL_CAP_SENTENCE = `at most ${LABEL_MAX_WORDS} words and ${LABEL_MAX_CHARS} characters`;
+// The one sentence that names the five kinds. Every help string and every "kind
+// is not allowed" message reads it, on both backends, so the wording and the
+// separator before it cannot drift apart.
+export const ALLOWED_KINDS_SENTENCE = `one of: ${NODE_KINDS.join(', ')}`;
+
+/**
+ * A node the map is done with. Mode says who will settle a node, and nobody
+ * will settle a settled one, so the frontier and the diagram's mode cue both
+ * ask this rather than each listing the two settled statuses.
+ */
+export function isSettled(status: NodeStatus): boolean {
+  return status === 'resolved' || status === 'out-of-scope';
+}
+
+/**
+ * The one sentence both `walkTree` and the diagram refuse a rootless or
+ * many-rooted map with.
+ */
+export function rootCountError(roots: number): string {
+  return `map has ${roots} roots – expected exactly one`;
+}
 
 export interface MapNode {
   id: string; // zero-padded number, identity only – never order
   title: string;
   status: NodeStatus;
   mode: NodeMode;
-  kind?: string;
+  kind: NodeKind;
+  label: string; // short name for drawing – see LABEL_MAX_WORDS and LABEL_MAX_CHARS
   answers?: string; // provenance parent id; absent only on the root
   blockedBy: string[];
   pinned: boolean;
@@ -35,7 +73,8 @@ export interface CreateNodeInput {
   title: string;
   status?: NodeStatus;
   mode?: NodeMode;
-  kind?: string;
+  kind: NodeKind;
+  label: string;
   answers?: string;
   blockedBy?: string[];
   pinned?: boolean;
@@ -46,7 +85,8 @@ export interface UpdateNodeInput {
   title?: string;
   status?: NodeStatus;
   mode?: NodeMode;
-  kind?: string | null; // null clears
+  kind?: NodeKind; // no clear path – every node has a kind
+  label?: string;
   answers?: string;
   blockedBy?: string[];
   pinned?: boolean;
@@ -64,7 +104,18 @@ const idValue = z
 const frontmatterSchema = z.object({
   status: z.enum(NODE_STATUSES),
   mode: z.enum(NODE_MODES),
-  kind: z.string().optional(),
+  kind: z.enum(NODE_KINDS),
+  // A stored label is held to the same caps as one arriving through create or
+  // update – the file is the only place a hand-edit can slip a long one in. It
+  // trims before it checks and yields the trimmed value, so what passed the
+  // caps is also what the node carries.
+  label: z
+    .string()
+    .transform(value => value.trim())
+    .superRefine((trimmed, ctx) => {
+      const problem = labelCapProblem(trimmed);
+      if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+    }),
   answers: idValue.optional(),
   'blocked-by': z.array(idValue).default([]),
   pinned: z.boolean().default(false),
@@ -74,6 +125,14 @@ export function normalizeId(id: string): string {
   const trimmed = id.trim();
   if (!/^\d+$/.test(trimmed)) return trimmed;
   return trimmed.padStart(3, '0');
+}
+
+/**
+ * An id as a reader may have copied it out of a diagram or an issue title –
+ * `#12` – as the bare id. Padding is `normalizeId`'s job, not this one's.
+ */
+export function bareId(reference: string): string {
+  return reference.trim().replace(/^#/, '');
 }
 
 export function mapDir(root: string, map: string): string {
@@ -103,9 +162,103 @@ function validateTitle(title: string): string {
   return trimmed;
 }
 
-// Ids are compared numerically – zero-padding stops helping past 999.
-function compareIds(a: string, b: string): number {
-  return parseInt(a, 10) - parseInt(b, 10);
+// kind and label reach here from callers that can dodge the compile-time types
+// – CLI flags, a hand-written file, a cast – so both are checked at runtime, and
+// the error names the offending value beside what was allowed.
+function validateKind(kind: unknown): NodeKind {
+  if (typeof kind !== 'string' || !(NODE_KINDS as readonly string[]).includes(kind)) {
+    const shown = kind === undefined ? 'is missing' : `${JSON.stringify(kind)} is not allowed`;
+    throw new Error(`kind ${shown} – ${ALLOWED_KINDS_SENTENCE}`);
+  }
+  return kind as NodeKind;
+}
+
+// The cap is on what a reader sees, so it counts graphemes rather than UTF-16
+// code units: a family emoji is one drawn character and so is an accented
+// letter typed as a letter plus a combining mark. Intl.Segmenter is the only
+// thing in the platform that knows where a grapheme ends; code points are the
+// closest a runtime without it can get.
+const graphemes =
+  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : undefined;
+
+function countCharacters(text: string): number {
+  if (!graphemes) return [...text].length;
+  return [...graphemes.segment(text)].length;
+}
+
+// The one place every label rule is applied. The frontmatter schema,
+// validateLabel below and the github adapter all run a trimmed label through
+// this, so none restates a number, none holds a rule the others miss, and a
+// stored file fails the same way a rejected flag or a bad issue header does.
+export function labelCapProblem(trimmed: string): string | undefined {
+  if (!trimmed) return 'must not be empty';
+  if (/[\r\n]/.test(trimmed)) return 'must be a single line';
+  const words = trimmed.split(/\s+/);
+  if (words.length > LABEL_MAX_WORDS) {
+    return `is ${words.length} words – the cap is ${LABEL_MAX_WORDS}`;
+  }
+  const characters = countCharacters(trimmed);
+  if (characters > LABEL_MAX_CHARS) {
+    return `is ${characters} characters – the cap is ${LABEL_MAX_CHARS}`;
+  }
+  return undefined;
+}
+
+// Labels are trimmed on the way in, so surrounding whitespace never reaches the
+// file and never counts toward the word cap.
+function validateLabel(label: unknown): string {
+  // Absent and supplied-but-wrong read differently, the way validateKind above
+  // separates them. A blank label was supplied, so it is refused below by the
+  // same sentence a stored blank gets, not reported as missing.
+  if (typeof label !== 'string') {
+    const shown = label === undefined ? 'is required' : `${JSON.stringify(label)} is not allowed`;
+    throw new Error(`label ${shown} – ${LABEL_CAP_SENTENCE}`);
+  }
+  const trimmed = label.trim();
+  const problem = labelCapProblem(trimmed);
+  // The flag paths quote the offending label, which the schema path cannot.
+  if (problem) throw new Error(`label "${trimmed}" ${problem}`);
+  return trimmed;
+}
+
+/**
+ * Ids compared as a reader writes them.
+ *
+ * Two all-digit ids compare numerically, so `2`, `002` and `0002` are one id
+ * and zero-padding stops mattering past 999. That is what lets `--from` take an
+ * id copied out of either backend. Anything else falls back to text order,
+ * which is the only order a non-numeric id has.
+ */
+export function compareIds(a: string, b: string): number {
+  const left = a.trim();
+  const right = b.trim();
+  if (/^\d+$/.test(left) && /^\d+$/.test(right)) {
+    return parseInt(left, 10) - parseInt(right, 10);
+  }
+  return left.localeCompare(right);
+}
+
+// kind and label were added after the first maps were written, so a file
+// missing one is not corrupt – it is older than the field. Map nodes are
+// transient working state a map throws away at archive, so there is nothing to
+// migrate and nothing to repair: the map itself is what to discard.
+const FIELDS_ADDED_AFTER_THE_FIRST_MAPS: readonly string[] = ['kind', 'label'];
+
+function frontmatterProblem(issue: z.ZodIssue): string {
+  const field = String(issue.path[0] ?? '');
+  if (
+    issue.code === z.ZodIssueCode.invalid_type &&
+    issue.received === 'undefined' &&
+    FIELDS_ADDED_AFTER_THE_FIRST_MAPS.includes(field)
+  ) {
+    return (
+      `${field} is missing – this file predates the ${field} field. Map nodes are ` +
+      'transient working state, so discard this map and chart a new one rather than repairing it.'
+    );
+  }
+  return `${issue.path.join('.')} ${issue.message}`;
 }
 
 function parseNodeFile(dir: string, file: string): MapNode {
@@ -114,10 +267,17 @@ function parseNodeFile(dir: string, file: string): MapNode {
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
   }
-  const parsed = frontmatterSchema.safeParse(parseYaml(match[1]));
+  let frontmatter: unknown;
+  try {
+    frontmatter = parseYaml(match[1]);
+  } catch (err) {
+    // A YAML error names a line and a column but not the file, and label is the
+    // first free-text quoted value a hand-edit can leave unbalanced.
+    throw new Error(`${file}: ${(err as Error).message}`);
+  }
+  const parsed = frontmatterSchema.safeParse(frontmatter);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new Error(`${file}: ${issue.path.join('.')} ${issue.message}`);
+    throw new Error(`${file}: ${frontmatterProblem(parsed.error.issues[0])}`);
   }
   // The title must be the first non-blank line after the frontmatter –
   // scanning further would let a `# ` line inside the body win, and would
@@ -140,6 +300,7 @@ function parseNodeFile(dir: string, file: string): MapNode {
     status: parsed.data.status,
     mode: parsed.data.mode,
     kind: parsed.data.kind,
+    label: parsed.data.label,
     answers: parsed.data.answers,
     blockedBy: parsed.data['blocked-by'],
     pinned: parsed.data.pinned,
@@ -176,10 +337,16 @@ export function getNode(root: string, map: string, id: string): MapNode {
 }
 
 function serializeNode(node: MapNode): string {
-  const lines = ['---', `status: ${node.status}`, `mode: ${node.mode}`];
-  // kind is free text – JSON quoting keeps values like "true" or "a: b"
-  // from corrupting the YAML.
-  if (node.kind) lines.push(`kind: ${JSON.stringify(node.kind)}`);
+  const lines = [
+    '---',
+    `status: ${node.status}`,
+    `mode: ${node.mode}`,
+    // The five kinds are plain YAML identifiers and need no quoting. A label
+    // is free text, and JSON quoting keeps a colon or a quote inside one from
+    // corrupting the YAML.
+    `kind: ${node.kind}`,
+    `label: ${JSON.stringify(node.label)}`,
+  ];
   if (node.answers) lines.push(`answers: "${node.answers}"`);
   lines.push(
     node.blockedBy.length > 0
@@ -198,7 +365,9 @@ function serializeNode(node: MapNode): string {
 function writeNode(root: string, map: string, node: MapNode): void {
   const dir = mapDir(root, map);
   ensureDir(dir);
-  writeFileSync(join(dir, node.file), serializeNode(node), 'utf-8');
+  // Every command loads the whole map and throws on the first file it cannot
+  // parse, so one interrupted write would take the map down, not one node.
+  replaceFileAtomically(join(dir, node.file), serializeNode(node));
 }
 
 function requireExisting(nodes: MapNode[], id: string, role: string): void {
@@ -209,6 +378,8 @@ function requireExisting(nodes: MapNode[], id: string, role: string): void {
 
 export function createNode(root: string, map: string, input: CreateNodeInput): MapNode {
   const title = validateTitle(input.title);
+  const kind = validateKind(input.kind);
+  const label = validateLabel(input.label);
   const nodes = loadNodes(root, map);
   const answers = input.answers ? normalizeId(input.answers) : undefined;
   const blockedBy = (input.blockedBy ?? []).map(normalizeId);
@@ -229,7 +400,8 @@ export function createNode(root: string, map: string, input: CreateNodeInput): M
     title,
     status: input.status ?? 'open',
     mode: input.mode ?? 'hitl',
-    kind: input.kind,
+    kind,
+    label,
     answers,
     blockedBy,
     pinned: input.pinned ?? false,
@@ -298,7 +470,8 @@ export function updateNode(
   if (input.title !== undefined) node.title = validateTitle(input.title);
   if (input.status !== undefined) node.status = input.status;
   if (input.mode !== undefined) node.mode = input.mode;
-  if (input.kind !== undefined) node.kind = input.kind ?? undefined;
+  if (input.kind !== undefined) node.kind = validateKind(input.kind);
+  if (input.label !== undefined) node.label = validateLabel(input.label);
   if (input.pinned !== undefined) node.pinned = input.pinned;
   if (input.body !== undefined) node.body = input.body;
   if (input.appendBody !== undefined) {
@@ -349,15 +522,15 @@ export function deriveDepths(nodes: MapNode[]): Map<string, number> {
 export function frontier(nodes: MapNode[]): MapNode[] {
   const depths = deriveDepths(nodes);
   const byId = new Map(nodes.map(n => [n.id, n]));
-  const settled = (id: string): boolean => {
+  const blockerSettled = (id: string): boolean => {
     const blocker = byId.get(id);
     if (!blocker) {
       throw new Error(`blocking node ${id} is referenced but does not exist`);
     }
-    return blocker.status === 'resolved' || blocker.status === 'out-of-scope';
+    return isSettled(blocker.status);
   };
   return nodes
-    .filter(n => n.status === 'open' && n.blockedBy.every(settled))
+    .filter(n => n.status === 'open' && n.blockedBy.every(blockerSettled))
     .sort((a, b) => {
       const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
       return byDepth !== 0 ? byDepth : compareIds(a.id, b.id);
@@ -372,7 +545,7 @@ export function walkTree(nodes: MapNode[]): Array<{ node: MapNode; depth: number
   const roots = nodes.filter(n => !n.answers);
   if (nodes.length === 0) return [];
   if (roots.length !== 1) {
-    throw new Error(`map has ${roots.length} roots – expected exactly one`);
+    throw new Error(rootCountError(roots.length));
   }
   const children = new Map<string, MapNode[]>();
   for (const node of nodes) {

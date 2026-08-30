@@ -88,16 +88,31 @@ operation. First the root:
 ```bash
 # files backend – github.md has the equivalent
 ~/.claude/spechub/bin/spechub node create --map <name> --title "<destination>" \
-  --status resolved --kind grilling --body "<the destination, as settled>"
+  --status resolved --kind destination --label "<at most four words>" \
+  --body "<the destination, as settled>"
 ```
 
 - The root is the destination, already resolved. It counts as pinned without
   the flag. `node walk` returns pinned nodes in full at the start of every
-  session, so every session orients to the root.
+  session, so every session orients to the root. On GitHub it also carries
+  the `root-node` label, which is how a query finds the entry point without
+  walking parent links.
 
-- Standing preferences for the effort (style rules, constraints discovered in
-  the grill) become a resolved node with `--answers <root id> --kind notes
-  --pinned`.
+- On GitHub, every node body opens with a header line declaring its map, its
+  root, its `answers` parent, its `blocked-by` ids, and its short `label`.
+  `trackers/github.md` holds the format. It is the authoritative edge
+  encoding there, so one `list` call returns the whole graph. The files
+  backend writes no header, because frontmatter already holds `answers` and
+  `blocked-by`, and the directory name is the map.
+
+- Every node carries a `kind` and a `label`, both required. `kind` is one of
+  `destination`, `notes`, `decision`, `research`, or `work`. A `label` is the
+  node's short name for a diagram. `trackers/files.md` holds the caps and the
+  contract the CLI enforces.
+
+- Standing preferences for the effort become one resolved node. Style rules
+  and constraints the grill surfaced go there. Create it with
+  `--answers <root id> --kind notes --label "<at most four words>" --pinned`.
 
 - Every other surfaced question becomes a node. Give it `open` or `fog` per
   the fog test.
@@ -143,8 +158,8 @@ same queries per `trackers/github.md`.
    only as a tiebreak. Provenance depth is how many `answers` links separate
    a node from the root, so the broadest questions come first.
 
-3. **Route by `mode` – the only field the machine routes on** (`kind` is
-   advisory):
+3. **Route by `mode` – the only field the machine routes on** (`kind` picks
+   the node's diagram shape, never its route):
     - `hitl` nodes: run grilling rounds over them. A round is the whole hitl
      frontier.
     - `afk` nodes: claim and run without the user. Unlimited, and in parallel

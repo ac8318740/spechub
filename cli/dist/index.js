@@ -11357,7 +11357,7 @@ var require_dist = __commonJS({
 });
 
 // src/lib/utils.ts
-import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, readdirSync } from "node:fs";
+import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, readSync, readdirSync } from "node:fs";
 import { join as join4 } from "node:path";
 function fail(message, hint) {
   console.error(source_default.red(message));
@@ -11391,13 +11391,52 @@ function requireProject(root) {
 function formatDate() {
   return (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
 }
-var import_yaml;
+function readStdin() {
+  if (process.stdin.isTTY) {
+    throw new Error(
+      "nothing is piped into stdin - stdin is a terminal. Pipe the input in, as in `gh issue list --json ... | spechub ...`."
+    );
+  }
+  const chunks = [];
+  const buffer = Buffer.alloc(CHUNK_BYTES);
+  const deadline = Date.now() + STDIN_DEADLINE_MS;
+  for (; ; ) {
+    let read;
+    try {
+      read = readSync(0, buffer, 0, buffer.length, null);
+    } catch (err) {
+      const code = err.code;
+      if (code === "EAGAIN") {
+        if (Date.now() >= deadline) throw stdinTimedOut();
+        Atomics.wait(NAP, 0, 0, NAP_MS);
+        continue;
+      }
+      if (code === "EOF") break;
+      throw err;
+    }
+    if (read === 0) break;
+    chunks.push(Buffer.from(buffer.subarray(0, read)));
+  }
+  return Buffer.concat(chunks).toString("utf-8");
+}
+function stdinTimedOut() {
+  const err = new Error(
+    `nothing arrived on stdin within ${STDIN_DEADLINE_MS / 1e3} seconds - the pipe is open but the command on the other end has sent nothing.`
+  );
+  err.name = "StdinTimeoutError";
+  return err;
+}
+var import_yaml, NAP, NAP_MS, CHUNK_BYTES, STDIN_DEADLINE_MS;
 var init_utils = __esm({
   "src/lib/utils.ts"() {
     "use strict";
     import_yaml = __toESM(require_dist(), 1);
     init_source();
     init_constants();
+    NAP = new Int32Array(new SharedArrayBuffer(4));
+    NAP_MS = 5;
+    CHUNK_BYTES = 64 * 1024;
+    STDIN_DEADLINE_MS = 3e4;
   }
 });
 
@@ -15702,13 +15741,48 @@ var init_zod = __esm({
   }
 });
 
+// src/lib/atomic-file.ts
+import { randomBytes } from "node:crypto";
+import { renameSync, rmSync as rmSync2, writeFileSync } from "node:fs";
+function tempPathFor(path) {
+  return `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+}
+function replaceFileAtomically(path, text, beforeRename) {
+  const temp = tempPathFor(path);
+  try {
+    writeFileSync(temp, text, "utf-8");
+    beforeRename?.(temp);
+    renameSync(temp, path);
+  } catch (err) {
+    try {
+      rmSync2(temp, { force: true });
+    } catch {
+    }
+    throw err;
+  }
+}
+var init_atomic_file = __esm({
+  "src/lib/atomic-file.ts"() {
+    "use strict";
+  }
+});
+
 // src/lib/nodes.ts
-import { existsSync as existsSync6, readFileSync as readFileSync4, readdirSync as readdirSync4, writeFileSync } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync4, readdirSync as readdirSync4 } from "node:fs";
 import { join as join8 } from "node:path";
+function isSettled(status) {
+  return status === "resolved" || status === "out-of-scope";
+}
+function rootCountError(roots) {
+  return `map has ${roots} roots \u2013 expected exactly one`;
+}
 function normalizeId(id) {
   const trimmed = id.trim();
   if (!/^\d+$/.test(trimmed)) return trimmed;
   return trimmed.padStart(3, "0");
+}
+function bareId(reference) {
+  return reference.trim().replace(/^#/, "");
 }
 function mapDir(root, map) {
   return join8(root, SPECHUB_DIR, MAPS_DIR, map);
@@ -15726,8 +15800,54 @@ function validateTitle(title) {
   }
   return trimmed;
 }
+function validateKind(kind) {
+  if (typeof kind !== "string" || !NODE_KINDS.includes(kind)) {
+    const shown = kind === void 0 ? "is missing" : `${JSON.stringify(kind)} is not allowed`;
+    throw new Error(`kind ${shown} \u2013 ${ALLOWED_KINDS_SENTENCE}`);
+  }
+  return kind;
+}
+function countCharacters(text) {
+  if (!graphemes) return [...text].length;
+  return [...graphemes.segment(text)].length;
+}
+function labelCapProblem(trimmed) {
+  if (!trimmed) return "must not be empty";
+  if (/[\r\n]/.test(trimmed)) return "must be a single line";
+  const words = trimmed.split(/\s+/);
+  if (words.length > LABEL_MAX_WORDS) {
+    return `is ${words.length} words \u2013 the cap is ${LABEL_MAX_WORDS}`;
+  }
+  const characters = countCharacters(trimmed);
+  if (characters > LABEL_MAX_CHARS) {
+    return `is ${characters} characters \u2013 the cap is ${LABEL_MAX_CHARS}`;
+  }
+  return void 0;
+}
+function validateLabel(label) {
+  if (typeof label !== "string") {
+    const shown = label === void 0 ? "is required" : `${JSON.stringify(label)} is not allowed`;
+    throw new Error(`label ${shown} \u2013 ${LABEL_CAP_SENTENCE}`);
+  }
+  const trimmed = label.trim();
+  const problem = labelCapProblem(trimmed);
+  if (problem) throw new Error(`label "${trimmed}" ${problem}`);
+  return trimmed;
+}
 function compareIds(a, b) {
-  return parseInt(a, 10) - parseInt(b, 10);
+  const left = a.trim();
+  const right = b.trim();
+  if (/^\d+$/.test(left) && /^\d+$/.test(right)) {
+    return parseInt(left, 10) - parseInt(right, 10);
+  }
+  return left.localeCompare(right);
+}
+function frontmatterProblem(issue) {
+  const field = String(issue.path[0] ?? "");
+  if (issue.code === external_exports.ZodIssueCode.invalid_type && issue.received === "undefined" && FIELDS_ADDED_AFTER_THE_FIRST_MAPS.includes(field)) {
+    return `${field} is missing \u2013 this file predates the ${field} field. Map nodes are transient working state, so discard this map and chart a new one rather than repairing it.`;
+  }
+  return `${issue.path.join(".")} ${issue.message}`;
 }
 function parseNodeFile(dir, file) {
   const raw = readFileSync4(join8(dir, file), "utf-8").replace(/\r\n/g, "\n");
@@ -15735,10 +15855,15 @@ function parseNodeFile(dir, file) {
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
   }
-  const parsed = frontmatterSchema.safeParse((0, import_yaml2.parse)(match[1]));
+  let frontmatter;
+  try {
+    frontmatter = (0, import_yaml2.parse)(match[1]);
+  } catch (err) {
+    throw new Error(`${file}: ${err.message}`);
+  }
+  const parsed = frontmatterSchema.safeParse(frontmatter);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new Error(`${file}: ${issue.path.join(".")} ${issue.message}`);
+    throw new Error(`${file}: ${frontmatterProblem(parsed.error.issues[0])}`);
   }
   const rest = match[2].replace(/^\n+/, "");
   const newline = rest.indexOf("\n");
@@ -15758,6 +15883,7 @@ function parseNodeFile(dir, file) {
     status: parsed.data.status,
     mode: parsed.data.mode,
     kind: parsed.data.kind,
+    label: parsed.data.label,
     answers: parsed.data.answers,
     blockedBy: parsed.data["blocked-by"],
     pinned: parsed.data.pinned,
@@ -15788,8 +15914,16 @@ function getNode(root, map, id) {
   return node;
 }
 function serializeNode(node) {
-  const lines = ["---", `status: ${node.status}`, `mode: ${node.mode}`];
-  if (node.kind) lines.push(`kind: ${JSON.stringify(node.kind)}`);
+  const lines = [
+    "---",
+    `status: ${node.status}`,
+    `mode: ${node.mode}`,
+    // The five kinds are plain YAML identifiers and need no quoting. A label
+    // is free text, and JSON quoting keeps a colon or a quote inside one from
+    // corrupting the YAML.
+    `kind: ${node.kind}`,
+    `label: ${JSON.stringify(node.label)}`
+  ];
   if (node.answers) lines.push(`answers: "${node.answers}"`);
   lines.push(
     node.blockedBy.length > 0 ? `blocked-by: [${node.blockedBy.map((b) => `"${b}"`).join(", ")}]` : "blocked-by: []"
@@ -15803,7 +15937,7 @@ function serializeNode(node) {
 function writeNode(root, map, node) {
   const dir = mapDir(root, map);
   ensureDir(dir);
-  writeFileSync(join8(dir, node.file), serializeNode(node), "utf-8");
+  replaceFileAtomically(join8(dir, node.file), serializeNode(node));
 }
 function requireExisting(nodes, id, role) {
   if (!nodes.some((n) => n.id === id)) {
@@ -15812,6 +15946,8 @@ function requireExisting(nodes, id, role) {
 }
 function createNode(root, map, input) {
   const title = validateTitle(input.title);
+  const kind = validateKind(input.kind);
+  const label = validateLabel(input.label);
   const nodes = loadNodes(root, map);
   const answers = input.answers ? normalizeId(input.answers) : void 0;
   const blockedBy = (input.blockedBy ?? []).map(normalizeId);
@@ -15830,7 +15966,8 @@ function createNode(root, map, input) {
     title,
     status: input.status ?? "open",
     mode: input.mode ?? "hitl",
-    kind: input.kind,
+    kind,
+    label,
     answers,
     blockedBy,
     pinned: input.pinned ?? false,
@@ -15887,7 +16024,8 @@ function updateNode(root, map, id, input) {
   if (input.title !== void 0) node.title = validateTitle(input.title);
   if (input.status !== void 0) node.status = input.status;
   if (input.mode !== void 0) node.mode = input.mode;
-  if (input.kind !== void 0) node.kind = input.kind ?? void 0;
+  if (input.kind !== void 0) node.kind = validateKind(input.kind);
+  if (input.label !== void 0) node.label = validateLabel(input.label);
   if (input.pinned !== void 0) node.pinned = input.pinned;
   if (input.body !== void 0) node.body = input.body;
   if (input.appendBody !== void 0) {
@@ -15926,14 +16064,14 @@ function deriveDepths(nodes) {
 function frontier(nodes) {
   const depths = deriveDepths(nodes);
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const settled = (id) => {
+  const blockerSettled = (id) => {
     const blocker = byId.get(id);
     if (!blocker) {
       throw new Error(`blocking node ${id} is referenced but does not exist`);
     }
-    return blocker.status === "resolved" || blocker.status === "out-of-scope";
+    return isSettled(blocker.status);
   };
-  return nodes.filter((n) => n.status === "open" && n.blockedBy.every(settled)).sort((a, b) => {
+  return nodes.filter((n) => n.status === "open" && n.blockedBy.every(blockerSettled)).sort((a, b) => {
     const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
     return byDepth !== 0 ? byDepth : compareIds(a.id, b.id);
   });
@@ -15943,7 +16081,7 @@ function walkTree(nodes) {
   const roots = nodes.filter((n) => !n.answers);
   if (nodes.length === 0) return [];
   if (roots.length !== 1) {
-    throw new Error(`map has ${roots.length} roots \u2013 expected exactly one`);
+    throw new Error(rootCountError(roots.length));
   }
   const children = /* @__PURE__ */ new Map();
   for (const node of nodes) {
@@ -15961,25 +16099,649 @@ function walkTree(nodes) {
   visit(roots[0], 0);
   return out;
 }
-var import_yaml2, NODE_STATUSES, NODE_MODES, idValue, frontmatterSchema;
+var import_yaml2, NODE_STATUSES, NODE_MODES, NODE_KINDS, LABEL_MAX_WORDS, LABEL_MAX_CHARS, LABEL_CAP_SENTENCE, ALLOWED_KINDS_SENTENCE, idValue, frontmatterSchema, graphemes, FIELDS_ADDED_AFTER_THE_FIRST_MAPS;
 var init_nodes = __esm({
   "src/lib/nodes.ts"() {
     "use strict";
     import_yaml2 = __toESM(require_dist(), 1);
     init_zod();
+    init_atomic_file();
     init_constants();
     init_utils();
     NODE_STATUSES = ["fog", "open", "claimed", "resolved", "out-of-scope"];
     NODE_MODES = ["hitl", "afk"];
+    NODE_KINDS = ["destination", "notes", "decision", "research", "work"];
+    LABEL_MAX_WORDS = 4;
+    LABEL_MAX_CHARS = 30;
+    LABEL_CAP_SENTENCE = `at most ${LABEL_MAX_WORDS} words and ${LABEL_MAX_CHARS} characters`;
+    ALLOWED_KINDS_SENTENCE = `one of: ${NODE_KINDS.join(", ")}`;
     idValue = external_exports.union([external_exports.string(), external_exports.number()]).transform((v) => normalizeId(String(v))).pipe(external_exports.string().regex(/^\d{3,}$/, "node id must be a number"));
     frontmatterSchema = external_exports.object({
       status: external_exports.enum(NODE_STATUSES),
       mode: external_exports.enum(NODE_MODES),
-      kind: external_exports.string().optional(),
+      kind: external_exports.enum(NODE_KINDS),
+      // A stored label is held to the same caps as one arriving through create or
+      // update – the file is the only place a hand-edit can slip a long one in. It
+      // trims before it checks and yields the trimmed value, so what passed the
+      // caps is also what the node carries.
+      label: external_exports.string().transform((value) => value.trim()).superRefine((trimmed, ctx) => {
+        const problem = labelCapProblem(trimmed);
+        if (problem) ctx.addIssue({ code: external_exports.ZodIssueCode.custom, message: problem });
+      }),
       answers: idValue.optional(),
       "blocked-by": external_exports.array(idValue).default([]),
       pinned: external_exports.boolean().default(false)
     });
+    graphemes = typeof Intl !== "undefined" && typeof Intl.Segmenter === "function" ? new Intl.Segmenter(void 0, { granularity: "grapheme" }) : void 0;
+    FIELDS_ADDED_AFTER_THE_FIRST_MAPS = ["kind", "label"];
+  }
+});
+
+// src/lib/diagram.ts
+function cueRank(cue) {
+  return (cue.frontier ? 2 : 0) + (cue.hitl ? 1 : 0);
+}
+function className(status, cue) {
+  return STATUS_TOKENS[status] + (cue.frontier ? "Front" : "") + (cue.hitl ? "Hitl" : "");
+}
+function cueStroke(cue, fill) {
+  const parts = [];
+  if (cue.frontier) parts.push(`stroke:${FRONTIER_STROKE}`, "stroke-width:5px");
+  else if (cue.hitl) parts.push(`stroke:${HITL_STROKE}`, "stroke-width:2px");
+  else parts.push(`stroke:${fill}`);
+  if (cue.hitl) parts.push("stroke-dasharray:6 4");
+  return parts;
+}
+function classDefLine(status, cue) {
+  const fill = FILLS[status];
+  const parts = [
+    `classDef ${className(status, cue)} fill:${fill}`,
+    `color:${TEXT_COLOUR}`,
+    ...cueStroke(cue, fill)
+  ];
+  return `  ${parts.join(",")}`;
+}
+function escapeLabel(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function linkedId(node) {
+  const shown = `#${node.id}`;
+  if (!node.url || !node.url.startsWith("https://")) return shown;
+  const href = node.url.replace(/'/g, "&apos;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<a href='${href}'>${shown}</a>`;
+}
+function mermaidId(id) {
+  return `n${id}`;
+}
+function asMapNodes(nodes) {
+  return nodes.map((n) => ({ ...n, body: "", file: "" }));
+}
+function resolveStart(nodes, from) {
+  if (from === void 0) {
+    const roots = nodes.filter((n) => !n.answers);
+    if (roots.length !== 1) {
+      throw new Error(rootCountError(roots.length));
+    }
+    return roots[0];
+  }
+  const wanted = bareId(from);
+  const found = nodes.find((n) => compareIds(n.id, wanted) === 0);
+  if (!found) throw new Error(`node ${wanted} is not in this map`);
+  return found;
+}
+function collectDrawn(nodes, start) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const children = /* @__PURE__ */ new Map();
+  for (const node of nodes) {
+    if (!node.answers) continue;
+    children.set(node.answers, [...children.get(node.answers) ?? [], node]);
+  }
+  for (const kids of children.values()) kids.sort((a, b) => compareIds(a.id, b.id));
+  const wholly = /* @__PURE__ */ new Map();
+  const whollyResolved = (id) => {
+    const known2 = wholly.get(id);
+    if (known2 !== void 0) return known2;
+    const node = byId.get(id);
+    const value = node?.status === "resolved" && (children.get(id) ?? []).every((k) => whollyResolved(k.id));
+    wholly.set(id, value);
+    return value;
+  };
+  const sizes = /* @__PURE__ */ new Map();
+  const subtreeSize = (id) => {
+    const known2 = sizes.get(id);
+    if (known2 !== void 0) return known2;
+    const value = (children.get(id) ?? []).reduce((sum, k) => sum + subtreeSize(k.id), 1);
+    sizes.set(id, value);
+    return value;
+  };
+  const drawn = [];
+  const visit = (node, isStart) => {
+    if (!isStart && whollyResolved(node.id)) {
+      drawn.push({ node, hidden: subtreeSize(node.id) - 1 });
+      return;
+    }
+    drawn.push({ node, hidden: 0 });
+    for (const kid of children.get(node.id) ?? []) visit(kid, false);
+  };
+  visit(start, true);
+  return drawn;
+}
+function nodeLine({ node, hidden }, blockersOffMap2) {
+  const [open, close] = SHAPES[node.kind];
+  const parts = [`${linkedId(node)} ${node.kind} - ${node.status}`, escapeLabel(node.label)];
+  if (hidden > 0) parts.push(`+${hidden} more`);
+  if (blockersOffMap2.length > 0) {
+    parts.push(`blocked by ${blockersOffMap2.map((id) => `#${id}`).join(", ")}`);
+  }
+  return `  ${mermaidId(node.id)}${open}${parts.join("<br/>")}${close}`;
+}
+function partitions(n, count) {
+  if (count <= 1) return n >= 1 ? [[n]] : [];
+  const out = [];
+  for (let first2 = 1; first2 <= n - (count - 1); first2++) {
+    for (const rest of partitions(n - first2, count - 1)) out.push([first2, ...rest]);
+  }
+  return out;
+}
+function rowBoxes(shape, boxes) {
+  const sizes = [];
+  let at = 0;
+  for (const run of shape) {
+    sizes.push(boxes.slice(at, at + run).reduce((sum, n) => sum + n, 0));
+    at += run;
+  }
+  return sizes;
+}
+function spread(sizes) {
+  return Math.max(...sizes) - Math.min(...sizes);
+}
+function compareRowFullness(a, b) {
+  for (let at = 0; at < a.length; at++) {
+    if (a[at] !== b[at]) return b[at] - a[at];
+  }
+  return 0;
+}
+function mostBalanced(boxes, count) {
+  let best;
+  let bestSizes = [];
+  for (const shape of partitions(boxes.length, count)) {
+    const sizes = rowBoxes(shape, boxes);
+    const beats = !best || spread(sizes) < spread(bestSizes) || spread(sizes) === spread(bestSizes) && compareRowFullness(sizes, bestSizes) < 0;
+    if (beats) {
+      best = shape;
+      bestSizes = sizes;
+    }
+  }
+  return best;
+}
+function legendRows(items) {
+  const boxes = items.map((i) => i.boxIds.length);
+  const total = boxes.reduce((sum, n) => sum + n, 0);
+  const fewest = Math.min(MAX_ROWS, Math.max(1, Math.ceil(total / MAX_BOXES_PER_ROW)));
+  let fallback;
+  let chosen;
+  for (let count = fewest; count <= MAX_ROWS && !chosen; count++) {
+    const shape2 = mostBalanced(boxes, count);
+    if (!shape2) continue;
+    fallback ??= shape2;
+    if (Math.max(...rowBoxes(shape2, boxes)) <= MAX_BOXES_PER_ROW) chosen = shape2;
+  }
+  const shape = chosen ?? fallback ?? [items.length];
+  const rows = [];
+  let at = 0;
+  for (const run of shape) {
+    rows.push(items.slice(at, at + run));
+    at += run;
+  }
+  return rows;
+}
+function chainLines(row) {
+  const lines = [];
+  let run = [];
+  const flush = () => {
+    if (run.length > 1) lines.push(run.join(" ~~~ "));
+  };
+  for (const item of row) {
+    run.push(item.boxIds[0]);
+    if (item.boxIds.length > 1) {
+      flush();
+      run = [item.boxIds[item.boxIds.length - 1]];
+    }
+  }
+  flush();
+  return lines;
+}
+function linksIn(line) {
+  return (line.match(LINK_OPERATORS) ?? []).length;
+}
+function plainBox(id, text) {
+  const [open, close] = SHAPES.work;
+  return `${id}${open}${text}${close}`;
+}
+function legendItems(shown) {
+  const items = [];
+  let counter = 0;
+  const nextId = () => `lg${++counter}`;
+  const swatch = (text, name) => {
+    const id = nextId();
+    items.push({
+      boxIds: [id],
+      lines: [plainBox(id, text)],
+      classes: [{ id, className: name }]
+    });
+  };
+  for (const kind of NODE_KINDS) {
+    if (!shown.kinds.has(kind)) continue;
+    const id = nextId();
+    const [open, close] = SHAPES[kind];
+    items.push({
+      boxIds: [id],
+      lines: [`${id}${open}${kind}${close}`],
+      classes: [{ id, className: LEGEND_SHAPE_CLASS }]
+    });
+  }
+  for (const status of NODE_STATUSES) {
+    if (!shown.statuses.has(status)) continue;
+    swatch(status, className(status, PLAIN));
+  }
+  if (shown.hitl) {
+    swatch("afk (agent can work alone)", LEGEND_SHAPE_CLASS);
+    swatch("hitl (a human must answer)", LEGEND_HITL_CLASS);
+  }
+  if (shown.frontier) swatch("frontier (ready to work on)", LEGEND_FRONT_CLASS);
+  const edge = (from, to, arrow, dotted) => {
+    const fromId = nextId();
+    const toId = nextId();
+    items.push({
+      boxIds: [fromId, toId],
+      lines: [`${plainBox(fromId, from)} ${arrow} ${plainBox(toId, to)}`],
+      dotted,
+      classes: [
+        { id: fromId, className: LEGEND_SHAPE_CLASS },
+        { id: toId, className: LEGEND_SHAPE_CLASS }
+      ]
+    });
+  };
+  if (shown.answersEdge) edge("A", "B", '-->|"A surfaced B"|');
+  if (shown.blockedEdge) edge("C", "D", '-.->|"C must finish before D"|', true);
+  return items;
+}
+function legendClassDefs(shown) {
+  const defs = [
+    `  classDef ${LEGEND_SHAPE_CLASS} fill:${LEGEND_FILL},color:${TEXT_COLOUR},stroke:${NEUTRAL_STROKE}`,
+    ...NODE_STATUSES.filter((status) => shown.statuses.has(status)).map(
+      (status) => classDefLine(status, PLAIN)
+    )
+  ];
+  const cueDef = (name, cue) => `  classDef ${name} fill:${LEGEND_FILL},color:${TEXT_COLOUR},` + cueStroke(cue, LEGEND_FILL).join(",");
+  if (shown.hitl) defs.push(cueDef(LEGEND_HITL_CLASS, HITL_ONLY));
+  if (shown.frontier) defs.push(cueDef(LEGEND_FRONT_CLASS, FRONTIER_ONLY));
+  return defs;
+}
+function legendBody(items) {
+  const body = [];
+  const blockedStyle = [];
+  let declared = 0;
+  const emit = (line) => {
+    body.push(line);
+    declared += linksIn(line);
+  };
+  for (const row of legendRows(items)) {
+    for (const item of row) {
+      if (item.dotted) blockedStyle.push(`  linkStyle ${declared} ${BLOCKED_DASH}`);
+      for (const line of item.lines) emit(line);
+    }
+    for (const line of chainLines(row)) emit(line);
+  }
+  return { body, blockedStyle };
+}
+function classAssignments(items) {
+  const byClass = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    for (const { id, className: name } of item.classes) {
+      byClass.set(name, [...byClass.get(name) ?? [], id]);
+    }
+  }
+  return [...byClass.entries()].map(([name, ids]) => `  class ${ids.join(",")} ${name}`);
+}
+function renderLegend(shown) {
+  const items = legendItems(shown);
+  const { body, blockedStyle } = legendBody(items);
+  return [
+    "flowchart LR",
+    '  subgraph Legend["Legend"]',
+    "    direction LR",
+    ...body.map((line) => `    ${line}`),
+    "  end",
+    ...blockedStyle,
+    ...legendClassDefs(shown),
+    ...classAssignments(items)
+  ];
+}
+function buildEdges(drawn, start, drawnIds) {
+  const edges = { answers: [], blocked: [] };
+  for (const { node } of drawn) {
+    if (node.id !== start.id && node.answers && drawnIds.has(node.answers)) {
+      edges.answers.push(`  ${mermaidId(node.answers)} --> ${mermaidId(node.id)}`);
+    }
+    for (const blocker of node.blockedBy) {
+      if (drawnIds.has(blocker)) {
+        edges.blocked.push(`  ${mermaidId(blocker)} -.-> ${mermaidId(node.id)}`);
+      }
+    }
+  }
+  return edges;
+}
+function blockedLinkStyle(edges) {
+  if (edges.blocked.length === 0) return [];
+  const named = edges.blocked.map((_edge, at) => edges.answers.length + at).join(",");
+  return [`  linkStyle ${named} ${BLOCKED_DASH}`];
+}
+function blockersOffMap(drawn, drawnIds) {
+  const off = /* @__PURE__ */ new Map();
+  for (const { node } of drawn) {
+    const outside = node.blockedBy.filter((blocker) => !drawnIds.has(blocker));
+    if (outside.length > 0) off.set(node.id, outside);
+  }
+  return off;
+}
+function groupByClass(drawn, cueOf) {
+  const members = /* @__PURE__ */ new Map();
+  for (const { node } of drawn) {
+    const cue = cueOf(node);
+    const name = className(node.status, cue);
+    const group = members.get(name) ?? { status: node.status, cue, ids: [] };
+    group.ids.push(mermaidId(node.id));
+    members.set(name, group);
+  }
+  return [...members.entries()].sort((a, b) => cueRank(a[1].cue) - cueRank(b[1].cue));
+}
+function renderDiagram(nodes, options = {}) {
+  if (nodes.length === 0) {
+    throw new Error("the map has no nodes \u2013 there is nothing to draw");
+  }
+  const start = resolveStart(nodes, options.from);
+  const onFrontier = new Set(frontier(asMapNodes(nodes)).map((n) => n.id));
+  const drawn = collectDrawn(nodes, start);
+  const drawnIds = new Set(drawn.map((d) => d.node.id));
+  const cueOf = (node) => ({
+    frontier: onFrontier.has(node.id),
+    // Mode says who will settle a node, and nobody will settle a settled one.
+    // The border marks hitl rather than afk, because a human answering is the
+    // scarce case and the one a reader is hunting for.
+    hitl: node.mode === "hitl" && !isSettled(node.status)
+  });
+  const edges = buildEdges(drawn, start, drawnIds);
+  const offMap = blockersOffMap(drawn, drawnIds);
+  const groups = groupByClass(drawn, cueOf);
+  const main = [
+    "flowchart TD",
+    ...drawn.map((entry) => nodeLine(entry, offMap.get(entry.node.id) ?? [])),
+    ...edges.answers,
+    ...edges.blocked,
+    ...blockedLinkStyle(edges),
+    ...groups.map(([, group]) => classDefLine(group.status, group.cue)),
+    ...groups.map(([name, group]) => `  class ${group.ids.join(",")} ${name}`)
+  ];
+  const legend = renderLegend({
+    kinds: new Set(drawn.map((d) => d.node.kind)),
+    statuses: new Set(drawn.map((d) => d.node.status)),
+    hitl: drawn.some((d) => cueOf(d.node).hitl),
+    frontier: drawn.some((d) => cueOf(d.node).frontier),
+    answersEdge: edges.answers.length > 0,
+    blockedEdge: edges.blocked.length > 0
+  });
+  return [
+    DIAGRAM_START,
+    "",
+    "```mermaid",
+    ...main,
+    "```",
+    "",
+    "```mermaid",
+    ...legend,
+    "```",
+    "",
+    DIAGRAM_END
+  ].join("\n");
+}
+var DIAGRAM_START, DIAGRAM_END, SHAPES, FILLS, STATUS_TOKENS, TEXT_COLOUR, FRONTIER_STROKE, HITL_STROKE, NEUTRAL_STROKE, LEGEND_FILL, BLOCKED_DASH, PLAIN, HITL_ONLY, FRONTIER_ONLY, LEGEND_SHAPE_CLASS, LEGEND_HITL_CLASS, LEGEND_FRONT_CLASS, MAX_BOXES_PER_ROW, MAX_ROWS, LINK_OPERATORS;
+var init_diagram = __esm({
+  "src/lib/diagram.ts"() {
+    "use strict";
+    init_nodes();
+    DIAGRAM_START = "<!-- spechub:diagram -->";
+    DIAGRAM_END = "<!-- /spechub:diagram -->";
+    SHAPES = {
+      destination: ['{{"', '"}}'],
+      notes: ['[["', '"]]'],
+      decision: ['{"', '"}'],
+      research: ['(["', '"])'],
+      work: ['["', '"]']
+    };
+    FILLS = {
+      fog: "#f6f8fa",
+      open: "#ddf4ff",
+      claimed: "#fff8c5",
+      resolved: "#dafbe1",
+      "out-of-scope": "#ffebe9"
+    };
+    STATUS_TOKENS = {
+      fog: "fog",
+      open: "open",
+      claimed: "claimed",
+      resolved: "resolved",
+      "out-of-scope": "outOfScope"
+    };
+    TEXT_COLOUR = "#1f2328";
+    FRONTIER_STROKE = "#bf3989";
+    HITL_STROKE = "#1f2328";
+    NEUTRAL_STROKE = "#d0d7de";
+    LEGEND_FILL = "#ffffff";
+    BLOCKED_DASH = "stroke-dasharray:10 8";
+    PLAIN = { frontier: false, hitl: false };
+    HITL_ONLY = { frontier: false, hitl: true };
+    FRONTIER_ONLY = { frontier: true, hitl: false };
+    LEGEND_SHAPE_CLASS = "legendShape";
+    LEGEND_HITL_CLASS = "legendHitl";
+    LEGEND_FRONT_CLASS = "legendFront";
+    MAX_BOXES_PER_ROW = 6;
+    MAX_ROWS = 3;
+    LINK_OPERATORS = /-\.->|-->|---|~~~/g;
+  }
+});
+
+// src/lib/github-issues.ts
+function firstNonBlankLine(body) {
+  for (const line of body.replace(/\r\n/g, "\n").split("\n")) {
+    if (line.trim()) return line.trim();
+  }
+  return "";
+}
+function parseHeader(line) {
+  if (!/^map\s*:/i.test(line)) return void 0;
+  const fields = /* @__PURE__ */ new Map();
+  let head = line;
+  const label = LABEL_FIELD.exec(line);
+  if (label) {
+    const after = line.slice(label.index + label[0].length);
+    const next = FIELD_AFTER_LABEL.exec(after);
+    fields.set("label", (next ? after.slice(0, next.index) : after).trim());
+    head = line.slice(0, label.index) + (next ? after.slice(next.index) : "");
+  }
+  for (const part of head.split(HEADER_SEPARATOR)) {
+    const at = part.indexOf(":");
+    if (at < 0) continue;
+    fields.set(part.slice(0, at).trim().toLowerCase(), part.slice(at + 1).trim());
+  }
+  return fields;
+}
+function describe(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "an array";
+  return `a ${typeof value}`;
+}
+function textOf(value) {
+  return typeof value === "string" ? value : "";
+}
+function labelsOf(named, raw) {
+  if (raw === void 0 || raw === null) return /* @__PURE__ */ new Set();
+  if (!Array.isArray(raw)) {
+    throw new Error(
+      `${named}: labels is ${describe(raw)}, not the array of {name} objects \`gh issue list --json labels\` emits`
+    );
+  }
+  const names = /* @__PURE__ */ new Set();
+  raw.forEach((entry, at) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      throw new Error(
+        `${named}: labels[${at}] is ${describe(entry)}, not a {name} object`
+      );
+    }
+    const name = entry.name;
+    if (name !== void 0 && name !== null && typeof name !== "string") {
+      throw new Error(`${named}: labels[${at}].name is ${describe(name)}, not a string`);
+    }
+    if (name) names.add(name);
+  });
+  return names;
+}
+function bodyOf(named, raw) {
+  if (raw === void 0 || raw === null) return "";
+  if (typeof raw !== "string") {
+    throw new Error(`${named}: body is ${describe(raw)}, not the markdown text gh emits`);
+  }
+  return raw;
+}
+function issueStatus(state, stateReason, labels) {
+  if (state.toUpperCase() === "CLOSED") {
+    return stateReason.toUpperCase() === "NOT_PLANNED" ? "out-of-scope" : "resolved";
+  }
+  if (labels.has("fog")) return "fog";
+  if (labels.has("claimed")) return "claimed";
+  return "open";
+}
+function issueKind(named, labels) {
+  const kinds = [...labels].filter((label) => label.startsWith(KIND_LABEL_PREFIX));
+  if (kinds.length > 1) {
+    throw new Error(
+      `${named}: carries ${kinds.length} kind labels (${kinds.join(", ")}) \u2013 a node has exactly one kind, ${ALLOWED_KINDS_SENTENCE}`
+    );
+  }
+  if (kinds.length === 0) {
+    throw new Error(`${named}: no kind:<value> label \u2013 ${ALLOWED_KINDS_SENTENCE}`);
+  }
+  const value = kinds[0].slice(KIND_LABEL_PREFIX.length);
+  if (!NODE_KINDS.includes(value)) {
+    throw new Error(`${named}: kind label '${kinds[0]}' is not allowed \u2013 ${ALLOWED_KINDS_SENTENCE}`);
+  }
+  return value;
+}
+function issueLabel(named, header) {
+  const trimmed = (header.get("label") ?? "").trim();
+  const problem = labelCapProblem(trimmed);
+  if (problem) throw new Error(`${named}: label "${trimmed}" ${problem}`);
+  return trimmed;
+}
+function nodeFromIssue(entry, at) {
+  const where = `the issue at position ${at + 1}`;
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+    throw new Error(`${where} is ${describe(entry)}, not an issue object`);
+  }
+  const issue = entry;
+  if (typeof issue.number !== "number" || !Number.isFinite(issue.number)) {
+    throw new Error(
+      `${where} has no number \u2013 the number is the node's whole identity, and a node without one would draw as \`undefined\``
+    );
+  }
+  const named = `issue ${issue.number}`;
+  const labels = labelsOf(named, issue.labels);
+  const header = parseHeader(firstNonBlankLine(bodyOf(named, issue.body)));
+  if (!header) {
+    throw new Error(
+      `${named}: the body does not open with the "map: ..." header line, which is where every edge and the node label live`
+    );
+  }
+  const answers = header.get("answers");
+  return {
+    id: String(issue.number),
+    title: textOf(issue.title),
+    status: issueStatus(textOf(issue.state), textOf(issue.stateReason), labels),
+    mode: labels.has("afk") ? "afk" : "hitl",
+    kind: issueKind(named, labels),
+    label: issueLabel(named, header),
+    answers: answers ? bareId(answers) : void 0,
+    blockedBy: (header.get("blocked-by") ?? "").split(",").map(bareId).filter(Boolean),
+    pinned: labels.has("pinned"),
+    url: typeof issue.url === "string" ? issue.url : void 0
+  };
+}
+function refuseDuplicateNumbers(nodes) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const node of nodes) {
+    if (seen.has(node.id)) {
+      throw new Error(
+        `issue ${node.id}: duplicate issue number \u2013 two issues in this list are both numbered ${node.id}`
+      );
+    }
+    seen.add(node.id);
+  }
+}
+function refuseUnknownBlockers(nodes) {
+  const known2 = new Set(nodes.map((n) => n.id));
+  for (const node of nodes) {
+    for (const blocker of node.blockedBy) {
+      if (!known2.has(blocker)) {
+        throw new Error(
+          `issue ${node.id}: blocked-by names ${blocker}, which is not in this map \u2013 the list is truncated or the header is stale`
+        );
+      }
+    }
+  }
+}
+function refuseBlockedByCycles(nodes) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const acyclic = /* @__PURE__ */ new Set();
+  const walk = (id, trail) => {
+    if (acyclic.has(id)) return;
+    if (trail.has(id)) {
+      throw new Error(
+        `issue ${id}: blocked-by cycle through issue ${id} \u2013 these nodes would block each other forever`
+      );
+    }
+    trail.add(id);
+    for (const blocker of byId.get(id)?.blockedBy ?? []) walk(blocker, trail);
+    trail.delete(id);
+    acyclic.add(id);
+  };
+  for (const node of nodes) walk(node.id, /* @__PURE__ */ new Set());
+}
+function nodesFromIssues(json) {
+  let raw;
+  try {
+    raw = JSON.parse(json);
+  } catch (err) {
+    throw new Error(`could not parse the issue list as JSON: ${err.message}`);
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error("the issue list must be a JSON array, as `gh issue list --json` emits it");
+  }
+  const nodes = raw.map(nodeFromIssue);
+  refuseDuplicateNumbers(nodes);
+  refuseUnknownBlockers(nodes);
+  refuseBlockedByCycles(nodes);
+  return nodes;
+}
+var HEADER_SEPARATOR, KIND_LABEL_PREFIX, HEADER_FIELDS, LABEL_FIELD, FIELD_AFTER_LABEL;
+var init_github_issues = __esm({
+  "src/lib/github-issues.ts"() {
+    "use strict";
+    init_nodes();
+    HEADER_SEPARATOR = "\xB7";
+    KIND_LABEL_PREFIX = "kind:";
+    HEADER_FIELDS = ["map", "root", "answers", "blocked-by", "label"];
+    LABEL_FIELD = /(^|·)\s*label\s*:\s*/i;
+    FIELD_AFTER_LABEL = new RegExp(`\xB7\\s*(?:${HEADER_FIELDS.join("|")})\\s*:`, "i");
   }
 });
 
@@ -15988,7 +16750,7 @@ var node_exports = {};
 __export(node_exports, {
   register: () => register4
 });
-import { readFileSync as readFileSync5 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync5 } from "node:fs";
 import { join as join9 } from "node:path";
 function parseStatus(value) {
   if (!NODE_STATUSES.includes(value)) {
@@ -16020,28 +16782,32 @@ function toJson(node) {
     title: node.title,
     status: node.status,
     mode: node.mode,
-    kind: node.kind ?? null,
+    kind: node.kind,
+    label: node.label,
     answers: node.answers ?? null,
     "blocked-by": node.blockedBy,
     pinned: node.pinned,
     file: node.file
   };
 }
+function labelFragment(node) {
+  return `label ${JSON.stringify(node.label)}`;
+}
 function printNode(node) {
-  const flags = [node.kind, node.pinned ? "pinned" : void 0].filter(Boolean).join(", ");
+  const flags = [node.kind, labelFragment(node), node.pinned ? "pinned" : void 0].filter(Boolean).join(", ");
   const links = [
     node.answers ? `answers ${node.answers}` : "root",
     node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(", ")}` : void 0
   ].filter(Boolean).join(", ");
   console.log(
-    `${source_default.bold(node.id)}  ${node.status.padEnd(12)} ${node.mode.padEnd(4)} ${node.title}` + source_default.dim(`  (${links}${flags ? `; ${flags}` : ""})`)
+    `${source_default.bold(node.id)}  ${node.status.padEnd(12)} ${node.mode.padEnd(4)} ${node.title}` + source_default.dim(`  (${links}; ${flags})`)
   );
 }
 function register4(program3) {
   const nodeCmd = program3.command("node").description(
     "Map nodes: small markdown records, one file each, under spechub/maps/<name>/.\nStatus: fog (not yet stated precisely), open (ready), claimed (being worked),\nresolved (settled), out-of-scope (dropped)."
   );
-  nodeCmd.command("create").description("Create a node; the first node in a map is the root").requiredOption("--map <name>", "map name").requiredOption("--title <title>", "node title").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", "hitl (a human settles it) or afk (an agent settles it alone)", parseMode).option("--kind <kind>", "free-text label for what kind of node this is (grilling, research, task, ...) \u2013 advisory only").option("--answers <id>", "the node whose resolution raised this one (its provenance parent) \u2013 required except on the root").option("--blocked-by <ids>", "comma-separated ids of nodes that must settle before this one can be worked", parseIdList).option("--pinned", "load in full every session").option("--body <text>", "markdown body").option("--body-file <path>", "read body from file, or - for stdin").option("--json", "output as JSON").action(
+  nodeCmd.command("create").description("Create a node; the first node in a map is the root").requiredOption("--map <name>", "map name").requiredOption("--title <title>", "node title").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", "hitl (a human settles it) or afk (an agent settles it alone)", parseMode).requiredOption("--kind <kind>", ALLOWED_KINDS_SENTENCE).requiredOption("--label <label>", `short name for diagrams: ${LABEL_CAP_SENTENCE}`).option("--answers <id>", "the node whose resolution raised this one (its provenance parent) \u2013 required except on the root").option("--blocked-by <ids>", "comma-separated ids of nodes that must settle before this one can be worked", parseIdList).option("--pinned", "load in full every session").option("--body <text>", "markdown body").option("--body-file <path>", "read body from file, or - for stdin").option("--json", "output as JSON").action(
     (opts) => {
       const root = findProjectRoot();
       requireProject(root);
@@ -16051,6 +16817,7 @@ function register4(program3) {
           status: opts.status,
           mode: opts.mode,
           kind: opts.kind,
+          label: opts.label,
           answers: opts.answers,
           blockedBy: opts.blockedBy,
           pinned: opts.pinned,
@@ -16080,7 +16847,7 @@ function register4(program3) {
       fail(err.message);
     }
   });
-  nodeCmd.command("update").description("Update node fields or body").argument("<id>", "node id").requiredOption("--map <name>", "map name").option("--title <title>", "new title (the filename keeps its original slug)").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", `one of: ${NODE_MODES.join(", ")}`, parseMode).option("--kind <kind>", "advisory kind hint; empty string clears it").option("--answers <id>", "new provenance parent").option("--blocked-by <ids>", "comma-separated blocking ids; empty string clears", parseIdList).option("--pinned <bool>", "true or false").option("--body <text>", "replace the body").option("--body-file <path>", "replace the body from file, or - for stdin").option("--append-body <text>", "append to the body").option("--json", "output as JSON").action(
+  nodeCmd.command("update").description("Update node fields or body").argument("<id>", "node id").requiredOption("--map <name>", "map name").option("--title <title>", "new title (the filename keeps its original slug)").option("--status <status>", `one of: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--mode <mode>", `one of: ${NODE_MODES.join(", ")}`, parseMode).option("--kind <kind>", ALLOWED_KINDS_SENTENCE).option("--label <label>", `new short name for diagrams: ${LABEL_CAP_SENTENCE}`).option("--answers <id>", "new provenance parent").option("--blocked-by <ids>", "comma-separated blocking ids; empty string clears", parseIdList).option("--pinned <bool>", "true or false").option("--body <text>", "replace the body").option("--body-file <path>", "replace the body from file, or - for stdin").option("--append-body <text>", "append to the body").option("--json", "output as JSON").action(
     (id, opts) => {
       const root = findProjectRoot();
       requireProject(root);
@@ -16092,7 +16859,8 @@ function register4(program3) {
           title: opts.title,
           status: opts.status,
           mode: opts.mode,
-          kind: opts.kind === "" ? null : opts.kind,
+          kind: opts.kind,
+          label: opts.label,
           answers: opts.answers,
           blockedBy: opts.blockedBy,
           pinned: opts.pinned === void 0 ? void 0 : opts.pinned === "true",
@@ -16172,6 +16940,7 @@ function register4(program3) {
           node.status,
           node.mode,
           node.kind,
+          labelFragment(node),
           node.pinned ? "pinned" : void 0,
           node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(", ")}` : void 0
         ].filter(Boolean).join(", ");
@@ -16182,6 +16951,33 @@ function register4(program3) {
 ${body}` : ""}`);
       }
       console.log(sections.join("\n\n"));
+    } catch (err) {
+      fail(err.message);
+    }
+  });
+  nodeCmd.command("diagram").description(
+    "Render the map as mermaid, wrapped in the replaceable diagram markers.\nReads the files backend with --map, or a `gh issue list --json number,title,body,state,stateReason,labels,url` pipe with --stdin."
+  ).option("--map <name>", "map name (files backend)").option("--stdin", "read the github issue list as JSON from stdin").option("--from <id>", "draw this node and its descendants only, rather than the whole map").action((opts) => {
+    const root = findProjectRoot();
+    requireProject(root);
+    if (opts.map && opts.stdin) {
+      fail("Use --map <name> for the files backend or --stdin for the github one, not both.");
+    }
+    if (!opts.map && !opts.stdin) {
+      fail("Name a backend: --map <name> for the files backend, or --stdin for the github one.");
+    }
+    try {
+      let nodes;
+      if (opts.stdin) {
+        nodes = nodesFromIssues(readStdin());
+      } else {
+        const map = opts.map;
+        if (!existsSync7(mapDir(root, map))) {
+          fail(`Map '${map}' does not exist - there is no ${mapDir(root, map)} directory.`);
+        }
+        nodes = loadNodes(root, map);
+      }
+      console.log(renderDiagram(nodes, { from: opts.from }));
     } catch (err) {
       fail(err.message);
     }
@@ -16212,12 +17008,14 @@ var init_node = __esm({
     init_source();
     init_project();
     init_utils();
+    init_diagram();
+    init_github_issues();
     init_nodes();
   }
 });
 
 // src/lib/global-config.ts
-import { existsSync as existsSync7, mkdirSync as mkdirSync2, readFileSync as readFileSync6, writeFileSync as writeFileSync2 } from "node:fs";
+import { existsSync as existsSync8, mkdirSync as mkdirSync2, readFileSync as readFileSync6, writeFileSync as writeFileSync2 } from "node:fs";
 import { dirname as dirname3 } from "node:path";
 function parseBooleanWord(key, raw) {
   const normalized = raw.toLowerCase();
@@ -16255,7 +17053,7 @@ function assertSettableKey(key) {
   assertReadableKey(key);
 }
 function readGlobalConfig(file) {
-  if (!existsSync7(file)) return {};
+  if (!existsSync8(file)) return {};
   const raw = readFileSync6(file, "utf-8");
   try {
     return JSON.parse(raw);
@@ -16557,38 +17355,12 @@ var init_host_status = __esm({
   }
 });
 
-// src/lib/atomic-file.ts
-import { randomBytes } from "node:crypto";
-import { renameSync, rmSync as rmSync2, writeFileSync as writeFileSync3 } from "node:fs";
-function tempPathFor(path) {
-  return `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-}
-function replaceFileAtomically(path, text, beforeRename) {
-  const temp = tempPathFor(path);
-  try {
-    writeFileSync3(temp, text, "utf-8");
-    beforeRename?.(temp);
-    renameSync(temp, path);
-  } catch (err) {
-    try {
-      rmSync2(temp, { force: true });
-    } catch {
-    }
-    throw err;
-  }
-}
-var init_atomic_file = __esm({
-  "src/lib/atomic-file.ts"() {
-    "use strict";
-  }
-});
-
 // src/lib/project-config.ts
 import {
   accessSync,
   chmodSync,
   constants as fsConstants,
-  existsSync as existsSync8,
+  existsSync as existsSync9,
   readFileSync as readFileSync7,
   readdirSync as readdirSync5,
   realpathSync,
@@ -16603,7 +17375,7 @@ function profileNames() {
   const pluginRoot = findPluginRoot();
   if (!pluginRoot) return [];
   const dir = join10(pluginRoot, PROFILES_DIR);
-  if (!existsSync8(dir)) return [];
+  if (!existsSync9(dir)) return [];
   return readdirSync5(dir).filter((name) => name.endsWith(".yaml")).map((name) => basename(name, ".yaml")).sort();
 }
 function parseEnum(key, raw, values) {
@@ -16721,7 +17493,7 @@ function fsReason(err) {
   return err instanceof Error ? err.message.split("\n")[0] : String(err);
 }
 function readSource(file) {
-  if (!existsSync8(file)) return "";
+  if (!existsSync9(file)) return "";
   let bytes;
   try {
     bytes = readFileSync7(file);
@@ -16737,7 +17509,7 @@ function readSource(file) {
   }
 }
 function replaceFile(file, text) {
-  const present = existsSync8(file);
+  const present = existsSync9(file);
   const target = present ? realpathSync(file) : file;
   const existing = present ? statSync2(target) : null;
   if (existing) accessSync(target, fsConstants.W_OK);
@@ -17083,7 +17855,7 @@ var init_host_probe = __esm({
 });
 
 // src/commands/config-check.ts
-import { existsSync as existsSync9, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync10, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { join as join12 } from "node:path";
 function checkRequiredAxes(report, config, project) {
@@ -17234,7 +18006,7 @@ function firstLineOf(err) {
   return (err instanceof Error ? err.message : String(err)).split("\n")[0];
 }
 function readJsonFile(path) {
-  if (!existsSync9(path)) return { status: "missing" };
+  if (!existsSync10(path)) return { status: "missing" };
   try {
     return { status: "read", value: JSON.parse(readFileSync8(path, "utf-8")) };
   } catch (err) {
@@ -17252,7 +18024,7 @@ function checkDomainMap(report, root, specSync) {
   const id = "domain-map";
   const consequence = "spec sync then skips silently and the living specs stop being updated";
   const path = domainMapFile(root);
-  if (!existsSync9(path)) {
+  if (!existsSync10(path)) {
     report.line(
       specSync ? "fail" : "info",
       id,
@@ -17923,7 +18695,7 @@ var init_feedback = __esm({
 });
 
 // src/lib/ackfile.ts
-import { existsSync as existsSync10, readFileSync as readFileSync9 } from "node:fs";
+import { existsSync as existsSync11, readFileSync as readFileSync9 } from "node:fs";
 function isAckDecision(value) {
   return typeof value === "string" && ACK_DECISIONS.includes(value);
 }
@@ -17975,7 +18747,7 @@ function writeAck(args) {
       `That is a sidecar path, not a handoff file. Pass ${file.slice(0, -ACK_SUFFIX.length)} instead.`
     );
   }
-  if (!existsSync10(file)) {
+  if (!existsSync11(file)) {
     throw new Error(`No handoff file at ${file}. Check the path the handoff gave you.`);
   }
   const record2 = {
@@ -24560,7 +25332,7 @@ __export(lint_prose_exports, {
   reportFile: () => reportFile,
   summarize: () => summarize
 });
-import { existsSync as existsSync11, readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
+import { existsSync as existsSync12, readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
 import { join as join14, relative, resolve as resolve4 } from "node:path";
 function loadVocabulary() {
   const pluginRoot = findPluginRoot();
@@ -24598,7 +25370,7 @@ function collectFiles(paths, opts) {
   if (opts.all) files.push(...markdownIn(opts.root));
   for (const path of paths) {
     const full = resolve4(path);
-    if (!existsSync11(full)) {
+    if (!existsSync12(full)) {
       missing.push(path);
       continue;
     }
