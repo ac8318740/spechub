@@ -110,6 +110,12 @@ operation. First the root:
   node's short name for a diagram. `trackers/files.md` holds the caps and the
   contract the CLI enforces.
 
+- Every node body carries a diagram, two at most. A childless `notes` node is
+  the one exception.
+
+    `visuals.md` holds which visual each kind gets, where it sits in the body,
+    and the rules a hand-drawn one follows. Read it before the first body.
+
 - Standing preferences for the effort become one resolved node. Style rules
   and constraints the grill surfaced go there. Create it with
   `--answers <root id> --kind notes --label "<at most four words>" --pinned`.
@@ -132,6 +138,10 @@ operation. First the root:
 - Write every title and body per the `writing` skill.
 - Nodes describe behaviour, not file paths. A node can sit on the frontier for
   weeks while the codebase moves – you resolve the paths at claim time.
+
+- Draw every parent's diagram once every node exists, per Regenerating
+  diagrams below. A parent draws its subtree, so nothing can draw one earlier.
+  The root is a parent too, and it draws the whole map.
 
 - On the files backend, suggest adding `spechub/maps/` to `.gitignore`. Nodes
   are transient working state – scratch you throw away once the map clears,
@@ -186,10 +196,18 @@ same queries per `trackers/github.md`.
    phase field to maintain. If the work stalls or fails, release the claim
    (`--status open`) and the node is plainly open again.
 
-5. **After every resolution**: invoke `record-context`, create nodes for
-   anything the resolution surfaced, then recompute the frontier. A shallow
-   node arriving late jumps the queue – that is correct, something big just
-   opened up.
+5. **After every resolution**, in order:
+    - Invoke `record-context`
+    - Create nodes for anything the resolution surfaced
+    - Regenerate the diagram on the resolved node's parent (see Regenerating
+      diagrams)
+    - Recompute the frontier
+
+    The regeneration comes after the new nodes exist. A surfaced node hangs
+    off the node you just resolved, inside that same subtree.
+
+    A shallow node arriving late jumps the queue – that is correct, something
+    big just opened up.
 
 6. **Graduate fog as it sharpens.** When you can state a fog node precisely,
    run `update <id> --status open` – one field, one write. Rewrite the title
@@ -198,6 +216,41 @@ same queries per `trackers/github.md`.
 Never filter on leaf position or "has a resolved question above it". Work
 nodes can hang anywhere, including straight off the root – a bug is work with
 no question above it.
+
+## Regenerating diagrams
+
+A parent's diagram draws its subtree, so any status change below it leaves
+that diagram wrong. A parent is any node another node's `answers` names, and
+the root is always one.
+
+Regenerate at two moments: on the resolved node's parent after every
+resolution, and on every parent at each frontier recompute. The second sweep
+catches a claim or a release, which changes a node's fill without resolving
+anything.
+
+```bash
+# files backend
+~/.claude/spechub/bin/spechub node diagram --map <name> --from <parent id>
+
+# github backend – one list call feeds every parent's render
+gh issue list --label "map:<name>" --state all --limit 500 \
+  --json number,title,body,state,stateReason,labels,url > /tmp/<name>.json
+~/.claude/spechub/bin/spechub node diagram --stdin --from <parent id> < /tmp/<name>.json
+```
+
+The renderer prints the two markers itself, so its output is the whole block.
+Replace the parent's existing block, markers included, and leave every word
+around it untouched. Skip any marker inside a fenced code block – that pair is
+an example, and `visuals.md` gives the rule.
+
+- **Skip the write when the rendered block matches the body's block byte for
+  byte**, so a quiet round costs no write at all
+- **Never write the output between the existing markers**, since that nests one
+  pair inside another and leaves two top-level pairs behind
+- **Render every parent from one `list` call**, since the renderer reads
+  nothing but the JSON you hand it
+- `visuals.md` holds the rest – the markers, the body template, and the cue
+  vocabulary every diagram draws with
 
 ## Done
 

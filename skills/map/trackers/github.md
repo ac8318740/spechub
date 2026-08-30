@@ -26,21 +26,20 @@ GitHub remote.
 | the root     | issue label `root-node` |
 | node `label` | the `label:` field of the body header |
 
-Create the labels once at materialisation:
+Create every label at materialisation, in one pass:
 
 ```bash
-for l in "map:<name>" fog claimed afk pinned root-node; do gh label create "$l" 2>/dev/null || true; done
+for l in "map:<name>" fog claimed afk pinned root-node \
+         kind:destination kind:notes kind:decision kind:research kind:work; do
+  gh label create "$l" 2>/dev/null || true
+done
 ```
 
 The `root-node` label is how a reader and a query find the entry point.
 Without it, finding the root means walking `parent` links until one is
 missing, at one GraphQL call per hop.
 
-`kind` is a closed set of five, so create all five at materialisation too:
-
-```bash
-for k in destination notes decision research work; do gh label create "kind:$k" 2>/dev/null || true; done
-```
+`kind` is a closed set of five, so all five labels exist from the start.
 
 To enumerate a repo's maps: `gh label list --search "map:" --json name`.
 
@@ -117,8 +116,8 @@ gh issue list --label "map:<name>" --state all --limit 500 \
 ```
 
 `body` carries the edges and the node's `label`. `url` is the address a node
-id links to in a generated diagram, which `visuals.md` will specify. Neither
-field is optional.
+id links to in a generated diagram, and `../visuals.md` gives the anchor syntax.
+Neither field is optional.
 
 `--limit` caps the result. Closed issues count toward it, so history alone
 can hit the ceiling. If the result count equals the limit, re-query with a

@@ -98,14 +98,23 @@ Each node carries one of five statuses.
 | `resolved` | done |
 | `out-of-scope` | dropped on purpose |
 
-Each node also records four things.
+Each node also records six things.
 
 - **Which earlier answer led to this question**
     - You can read the decisions back in the order you made them
 - **Which other nodes have to finish before this one starts**
     - SpecHub uses that to tell you what is ready to start
 - **Who answers it**: you, or Claude working alone
+- **What kind it is**: a destination, a standing note, a decision, research, or work
+- **A short name**, which labels the node in a diagram
 - **Where it lives**: a GitHub issue by default, or a markdown file under `spechub/maps/` with no GitHub remote
+
+Almost every node explains itself with a diagram.
+
+- The entry node draws the whole map, and collapses the parts you have finished
+- Every other node draws its own question or its own change
+- A legend sits under each diagram, showing only the symbols that diagram uses
+- On GitHub you click a node in the diagram to open its issue
 
 Two things SpecHub does with a finished map.
 
@@ -142,14 +151,15 @@ SpecHub ships a Node.js CLI: `spechub config`, `spechub list`, `spechub node ...
 
 - The storage behind a map provides four operations and nothing more: create, read, update, list
     - GitHub issues are the default
-        - An issue already holds the two links a map needs
-    - A sub-issue records what raised a node
-    - An issue dependency records what must finish first
+        - The first line of every issue body carries all of that node's edges
+        - One call therefore reads the whole map
+        - A sub-issue and an issue dependency mirror those edges, so GitHub's own interface draws the map
     - Markdown files are the fallback, one per node under `spechub/maps/<name>/`
 - The CLI builds everything else on those four operations
     - `spechub node frontier` lists what is ready to start now, closest to the original goal first
     - `spechub node walk` packs the whole map into one brief for a fresh session, in the order the decisions happened
     - The brief always includes the original goal, plus any node you marked as worth carrying along
+    - `spechub node diagram` draws a map, or any part of one, as a mermaid diagram with a legend under it
     - The skills claim and resolve a node with `update` calls
 
 Two symlinks reach the CLI. The SessionStart hook maintains both.
