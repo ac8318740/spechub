@@ -16,6 +16,7 @@ decision and the reasoning behind it. Write one only when the decision is:
 1. **Hard to reverse** – undoing it later means real rework, not an edit.
 2. **Surprising without context** – a competent newcomer would ask "why on
    earth is it like this?"
+
 3. **A real trade-off** – the decision gives something up. A choice with no
    losing side needs no record.
 
@@ -35,6 +36,7 @@ an obvious choice buries the ones that matter.
 - Body: a `# title` heading, then one to three sentences stating the decision
   and the why. Optional short `## Considered options` and `## Consequences`
   sections when they carry weight the summary cannot.
+
 - Tone: per the `writing` skill.
 
 ### Example
@@ -81,6 +83,7 @@ sharpened a fuzzy term, coined one – record it:
 - **Cross-domain terms** go in `CONTEXT.md` at the repo root.
 - **Domain terms** go in `spechub/specs/<domain>/CONTEXT.md`, beside that
   domain's `spec.md`. Find the domain in `spechub/domain-map.yaml`.
+
 - Create both files lazily; there is no index file –
   `domain-map.yaml` already lists every domain.
 

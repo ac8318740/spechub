@@ -14,9 +14,11 @@ it matters.
 - **Auto-bump on push to `main`.** CI raises the patch version whenever shipped
   files land. Removes the failure, but a feature or a breaking change ships as
   a patch, and CI has to write to `main`.
+
 - **release-please.** Derives the level from Conventional Commit prefixes and
   opens a release pull request. Correct only when every commit is labelled
   correctly, which squashed merges and hand-written subjects do not guarantee.
+
 - **A pull request gate.** CI refuses the merge; a human sets the version.
   Chosen.
 
@@ -24,8 +26,10 @@ it matters.
 
 - `main` needs branch protection with `version-gate` as a required status
   check. Without it the gate is advisory.
+
 - A shipped change that genuinely should not roll out needs the `no-bump` label
   on the pull request. A version that goes down fails even with the label.
+
 - Documentation-only paths are exempt, listed as `INERT_PATHS` in the script
   and duplicated in CONTRIBUTING.md. The two lists have to be kept in sync by
   hand.

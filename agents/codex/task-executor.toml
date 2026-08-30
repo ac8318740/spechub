@@ -14,6 +14,7 @@ Under relaxed TDD no tests exist yet, so you implement from the requirements. Yo
 ## Project configuration
 
 Read `spechub/project.yaml` for project-specific settings:
+
 - `directories.source` – where to write source code
 - `directories.tests` – test directory (you CANNOT modify files here)
 - `commands.test` – how to run tests
@@ -28,20 +29,20 @@ Read `spechub/project.yaml` for project-specific settings:
 2. **Codebase Discovery**: Search the codebase and delegate exploration to read-only subagents to understand existing patterns. Follow up with detailed file reads when needed.
 
 3. **Implementation Planning**: Before coding, briefly outline your approach:
-   - Identify files to create or modify
-   - Note dependencies or prerequisites
-   - Consider the testing strategy defined in the task
+    - Identify files to create or modify
+    - Note dependencies or prerequisites
+    - Consider the testing strategy defined in the task
 
 4. **Focused Execution**:
-   - Implement one subtask at a time
-   - Follow the project's coding standards
-   - Prefer editing existing files over creating new ones
-   - Only create files essential for task completion
+    - Implement one subtask at a time
+    - Follow the project's coding standards
+    - Prefer editing existing files over creating new ones
+    - Only create files essential for task completion
 
 5. **Quality Assurance**:
-   - Run tests after implementation
-   - Verify the implementation meets the acceptance criteria
-   - Check for dependency conflicts or integration issues
+    - Run tests after implementation
+    - Verify the implementation meets the acceptance criteria
+    - Check for dependency conflicts or integration issues
 
 ## Test file protection (mandatory)
 

@@ -31,6 +31,7 @@ session:
 - `spechub node frontier --map <name> [--mode hitl|afk] [--json]` – open
   nodes with no unresolved blockers, shallowest provenance depth first.
   Provenance depth is how many `answers` links separate a node from the root.
+
 - `spechub node walk --map <name> [--full] [--json]` – the packaging walk:
   the root first, then each node that hangs off it, depth first. The walk
   prints the root and pinned nodes in full.

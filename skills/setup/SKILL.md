@@ -33,8 +33,10 @@ Three terms, before they get used:
 
 - A **health check** is one run of `spechub config check`. It audits the machine
   and the project. It changes nothing.
+
 - A **row** is one line of that report. It carries an `id`, a `status` and a
   `message`.
+
 - An **axis** is one setting of the machine, recorded as one `host.*` key in the
   global config.
 
@@ -140,10 +142,12 @@ user did not select.
 
 - **Profile & paths** – ask the language or framework, then the source and test
   directories.
+
 - **Commands** – show the proposed commands and ask what to adjust.
 - **Frontend** – show the proposed frontend settings and ask what to adjust.
 - **Grilling** – ask `tool`, the host's question tool, against `inline` prose.
   Recommend `tool`. It writes `workflow.grilling.questions`.
+
 - **TDD strictness** – ask strict against relaxed, and write
   `workflow.tdd.strict`.
 
@@ -167,6 +171,7 @@ paths reach Step 10 through the health check.
 2. Write `spechub/project.yaml` from the profile and the answers.
 3. Leave the project CLAUDE.md alone. The SessionStart hook loads the
    orchestrator instructions.
+
 4. Remove a legacy `@import` line from the project CLAUDE.md, if one is there.
    It points at `.../plugins/cache/ac8318740-plugins/spechub/<version>/CLAUDE.md`.
 
@@ -222,9 +227,11 @@ Offer a row when any of these holds:
 - Its `id` is `preferred-browser-mode`, its `status` is `info`, and
   `spechub/project.yaml` configures a `frontend` block. The project has a
   frontend and has named no browser mode for it.
+
 - Its `id` is `output-style` and its `status` is `info`. The row passes when the
   settings files select `spechub:ac-writing-style`, so `info` means they select
   some other style, or select none.
+
 - Its `id` is `frontend-verification` and its `status` is `info`. The project
   configures a frontend and `workflow.frontend_verification` is not `true`.
 
@@ -249,6 +256,7 @@ Add three options at the end of the list, whatever the check reported:
   ```
 
   Do not restate the reference here.
+
 - **Skip** – leave everything as it is.
 
 On a first run the menu carries several rows, and only one of them failed. A
@@ -333,9 +341,11 @@ Guidance for the subagent:
 
 - Group by responsibility, not by layer. Use `auth`, `billing` and `search`,
   never `models`, `controllers` and `utils`.
+
 - Prefer a directory prefix over a file list. Consumers match a path as a prefix.
 - Aim for 3 to 10 domains. Fewer, and spec sync cannot tell two changes apart.
   More, and every commit touches several.
+
 - Leave tests, config, build files and docs unmapped. Consumers skip a path that
   no domain covers.
 
@@ -569,8 +579,10 @@ Show these gotchas after the steps:
 - Playwriter hardcodes port `19988`. Nobody can change it.
 - The relay runs on the same host as Chrome. The extension rejects any
   `/extension` client that is not `127.0.0.1`.
+
 - Each tab needs the extension icon clicked once. Playwriter cannot attach to a
   `chrome://` or `about:` page.
+
 - A stale relay holds port 19988 on the browser machine. Run
   `playwriter serve --host 127.0.0.1 --replace` to kick the previous one.
 
@@ -627,11 +639,14 @@ List every row still failing under the summary. Name the row and what it needs.
 
 - `spechub config check` owns every audit rule. Do not re-probe the machine with
   shell commands of your own.
+
 - `spechub config show` owns printing the current setup. It reports the profile,
   the commands, the directories and what the project says about its browser. This
   skill never re-prints those itself.
+
 - `docs/config-reference.md` owns the key reference. It lists each key, its
   values, its default, and what changes when you change it.
+
 - `spechub config set <key> <value>` owns the single-key change, in both files.
   It reads the key to decide which one.
 

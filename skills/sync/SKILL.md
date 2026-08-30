@@ -41,9 +41,9 @@ For each affected domain:
 
 1. Read `spechub/specs/[domain]/spec.md` (if it exists)
 2. Analyze changes:
-   - New functions/endpoints/components -> ADDED requirements
-   - Modified signatures or behavior -> MODIFIED requirements
-   - Deleted functions/endpoints -> REMOVED requirements
+    - New functions/endpoints/components -> ADDED requirements
+    - Modified signatures or behavior -> MODIFIED requirements
+    - Deleted functions/endpoints -> REMOVED requirements
 
 Write each functional requirement (FR) entry per the `writing` skill.
 

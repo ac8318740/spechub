@@ -72,6 +72,7 @@ Windows Terminal binds three more chords from the same family. Check
 - **Back up the config before editing**, and show the change before saving.
 - Unbind only. Do not remap these chords to something else, and do not touch
   bindings unrelated to the table above.
+
 - Leave a chord alone when the terminal emulator does not bind it locally.
 
 ## 4. Confirm exactly one thing happens

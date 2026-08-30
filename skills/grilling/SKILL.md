@@ -27,17 +27,22 @@ session.
 
 1. **Compute the frontier.** Every question with settled prerequisites,
    nothing else. Never ask a question whose answer depends on one still open.
+
 2. **Facts are your job, never the user's.** Skip a question that an
    environment fact would answer. Dispatch parallel `Explore` subagents, one
    per distinct place to look, not a fixed count. Fold what they find into
    the round.
+
 3. **Number the questions.** Attach a recommended answer to each, with one
    line of reasoning. A question you cannot recommend an answer for is usually
    two questions.
+
 4. **Present the whole round at once** (see Presentation). One round, one
    message. Never trickle questions one at a time.
+
 5. **Record each answer.** If no option matches, the reply itself is the
    answer, never the nearest option.
+
 6. **Recompute the frontier.** Answers surface new questions and unblock old
    ones. Derive the next round fresh. Never continue down a list planned in
    advance.
@@ -88,8 +93,10 @@ the tracker's `update` and `create` operations:
 2. Create a node for each new question the answer surfaced, with `answers`
    naming the node that surfaced it. Questions that can be stated precisely
    are `open`; the rest are `fog`.
+
 3. Invoke the `record-context` skill for each resolution – it decides whether
    the decision earns an ADR, a glossary term, both, or neither.
+
 4. Recompute the frontier with the tracker's query and present the next
    round.
 

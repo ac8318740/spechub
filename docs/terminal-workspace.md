@@ -236,6 +236,7 @@ Two upstream pull requests are still open:
 - [agavra/tuicr#607](https://github.com/agavra/tuicr/pull/607) by
   [antonio2368](https://github.com/antonio2368) – configurable per-file
   `+added -removed` counts in the tree, and the `show_file_line_stats` key
+
 - [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633), opened from SpecHub's own
   fork – move the file list boundary with `<leader>L` / `<leader>H`, and the
   `file_list_width` key
@@ -789,6 +790,7 @@ neither:
 
 - `style`, `classDef`, `class`, `linkStyle`, and `click` lines, which it would
   otherwise draw as if each were a node
+
 - node shapes other than `[square]` – `{decision}`, `((circle))`, `([stadium])`,
   `[(database)]`, `{{hexagon}}` – whose syntax would otherwise leak into the label
 
