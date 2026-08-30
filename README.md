@@ -133,8 +133,8 @@ For the full picture of each step and how they connect, read [docs/workflows.md]
 
 - `spechub/project.yaml` holds every project-scoped setting
     - [docs/config-reference.md](docs/config-reference.md) gives each key, its values, its default and what changes
-- `~/.config/spechub/config.json` holds the eight `host.*` axes
-    - `/spechub:host` writes them once per machine
+- `~/.config/spechub/config.json` holds the nine `host.*` axes
+    - `/spechub:host` writes eight of them once per machine, and `/spechub:setup` writes the ninth
     - [docs/dev-setups.md](docs/dev-setups.md) gives every axis, what reads it, and how to describe a fresh machine
 - `/spechub:setup` copies the commands and directories from one of three language profiles
     - **python** – pytest, ruff, mypy

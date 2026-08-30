@@ -133,7 +133,7 @@ Its last lines say where a copy and an open will land on this machine. Section
 
 ## 3. Copy the config, then walk the user through the choices
 
-*The config exposes far more keys than this. Nine of them are worth raising with the user, and the two that need no new vocabulary come first.*
+*The config exposes far more keys than this. Thirteen of them are worth raising with the user, and the two that need no new vocabulary come first.*
 
 Copy the example config before the first `apply`:
 
@@ -155,11 +155,24 @@ Then ask about these settings, in this order:
 
     A relative value resolves against the herdr session's base directory, not the repository you point at. Worktrees for a second repository then land inside the first
 
+- **`herdr.theme.name`**: leave it empty unless the user asks for a theme, and `apply` then writes none
+    - Set `herdr.theme.light` too for a user who attaches from two devices with different backgrounds, such as a dark terminal and an e-ink panel
+    - `auto_switch` asks each attached client for its background colour over OSC 11, an escape sequence a terminal answers with the colour it paints
+    - herdr then picks the dark or the light theme from that answer
+    - Without a light theme there is nothing to switch to, so `apply` writes the name alone
+- **`herdr.toast_delivery`** and **`herdr.agent_panel_sort`**: empty by default, and `apply` writes neither
+    - Set `toast_delivery` to `herdr` on a machine reached over SSH, where the terminal is the only surface herdr can draw a message on
+    - Set `agent_panel_sort` to `priority` to put the agents waiting on the user at the top
+- **`herdr.agent_labels_on_pane_borders`**: leave it `true`. Several agents in several panes is what this workspace is for, and an unlabelled pane does not say which agent it holds
 - **`tuicr.build_from_fork`**: leave it `false`
     - Set it `true` for the two unmerged upstream pull requests, #607 stats and #633 resize
     - Set it `true` also for the fork's own fix for blank `+N -N` counts in pull request review mode
     - `true` needs cargo, the Rust build tool, and takes a few minutes to build
     - Tell the user it is temporary. `status` tracks the two upstream pull requests, not the local fix
+- **`tuicr.appearance`**: pin it to `dark` or `light` on any machine the user reaches over the network
+    - Detection asks the terminal for its background colour over OSC 11, and nothing answers under `herdr --remote`
+    - tuicr then falls back to a desktop setting that a headless machine reports as light, and paints dark text on a black terminal
+    - Empty leaves the detection in place, which is right on a machine the user sits at
 - **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave it empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
 - **`yazi.download_target`**: the Tailscale node name of the machine the user sits at. Setting it puts a download key in yazi. Leave it empty for a user who does not run Tailscale, and `apply` writes no key
     - Ask for the name `tailscale status` prints on **this** machine, not the name the user calls their laptop
@@ -168,7 +181,9 @@ Then ask about these settings, in this order:
 - **`neovim.enabled`**: off by default, and the only component that is. Turn it on for a user who edits in LazyVim and wants a visible mark on a buffer with unsaved changes
     - LazyVim recolours the filename and shows no sign of its own, so a modified buffer is easy to miss
     - `apply` writes `~/.config/nvim/lua/plugins/spechub.lua` and edits nothing the user wrote
-    - Tell a user who already added this override themselves to delete their copy, or the statusline draws two dots
+    - `apply` skips the file when a lualine override the user wrote already marks a modified buffer, and names that file
+        - The statusline would otherwise carry two dots side by side
+    - Tell such a user to delete their own file to hand the dot to this component
 - **`remote.clipboard_shim`**: leave it `true` on any machine reached over SSH. It puts an `xclip` on `$PATH`, backed by `spechub-clip`. That stand-in is the only reason gh-dash's `y` and `Y` work there. `apply` skips it when the machine has a real `xclip` or a display
 
 One setting sits outside the config. `spechub-md --serve` takes its port from
@@ -199,7 +214,13 @@ The master switch comes first. With `enabled: false` at the top of the config,
 *Marked regions only. Whatever the user wrote outside them survives every re-apply.*
 
 - Every edit sits between `# >>> spechub terminal-workspace >>>` and `# <<< spechub terminal-workspace <<<` markers. Hand-written config around them survives, and re-applying replaces only the managed region
-- The herdr config carries up to three managed regions: one inside `[keys]`, one inside `[ui]` for `pane_scrollbars`, and one at the end for `[[keys.command]]` and `[worktrees]`. A key inside a marked region is spechub's, whatever table it sits in
+- The herdr config carries up to five managed regions, one each inside `[keys]`, `[ui]`, `[theme]` and `[ui.toast]`, plus one at the end for `[[keys.command]]` and `[worktrees]`
+    - A key inside a marked region is spechub's, whatever table it sits in
+    - A table gets a region only when the config names a value for it
+    - So a user who asks for no theme keeps the one they wrote
+- `apply` replaces a value the user set by hand on a key it manages, rather than joining it
+    - TOML forbids two of one key, and yazi and herdr both answer an unparseable config by throwing the whole file away
+    - `apply` drops a hand-written `[[mgr.prepend_keymap]]` on a key it claims, for the same reason: yazi would otherwise list two entries for one key
 - `apply` merges the gh-dash config rather than overwriting it. It keeps the sections, themes and keybindings the user added
 - Never edit the user's herdr or gh-dash config outside the managed markers
 

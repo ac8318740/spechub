@@ -148,7 +148,13 @@ awk "/^  SPECHUB_ARGS=.*py \"\\\$HERDR_CFG\" <<'PY'\$/{f=1; next} f && /^PY\$/{e
   "$SETUP" > "$HERDR_KEYMAP"
 BEGIN_MARK="# >>> spechub terminal-workspace >>>"
 END_MARK="# <<< spechub terminal-workspace <<<"
-args() { echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|alt+g|alt+shift+g|false|$BEGIN_MARK|$END_MARK"; }
+# args <chord-modifier> [theme] [theme-light] [toast-delivery] [labels] [panel-sort]
+# Everything after the modifier is a setting that is not a key. Each one is
+# empty here unless a check names it, which is the shape a config that says
+# nothing about them produces.
+args() {
+  echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|alt+g|alt+shift+g|false|${2-}|true|${3-}|${4-}|${5-true}|${6-}|$BEGIN_MARK|$END_MARK"
+}
 
 cat > "$WORK/hand.toml" <<'T'
 [keys]
@@ -178,7 +184,10 @@ pane_scrollbars = true
 directory = "~/.herdr/worktrees"
 T
 
-run_keymap() { SPECHUB_ARGS="$(args "$1")" python3 "$HERDR_KEYMAP" "$2" 2>/dev/null; }
+run_keymap() {
+  local mod="$1" file="$2"; shift 2
+  SPECHUB_ARGS="$(args "$mod" "$@")" python3 "$HERDR_KEYMAP" "$file" 2>/dev/null
+}
 parses() { python3 -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$1" 2>/dev/null; }
 
 cp "$WORK/hand.toml" "$WORK/merged.toml"
@@ -262,6 +271,116 @@ if parses "$WORK/commented.toml" \
   && grep -q 'my_own_setting' "$WORK/commented.toml"
 then ok "a comment introducing a managed binding leaves with it"
 else no "a comment introducing a managed binding leaves with it"; fi
+
+# Four settings that are not keys: a pane label, an agent-panel sort, a toast
+# delivery and a theme. Only the label is written unconditionally, so a config
+# that names none of the others must leave all of them exactly as they were.
+labels_value=$(python3 -c "import tomllib,sys; print(tomllib.load(open(sys.argv[1],'rb'))['ui']['show_agent_labels_on_pane_borders'])" \
+  "$WORK/merged.toml" 2>/dev/null)
+if [ "$labels_value" = "True" ]; then ok "apply writes show_agent_labels_on_pane_borders into [ui]"
+else no "expected [ui] show_agent_labels_on_pane_borders true, parsed: ${labels_value:-nothing}"; fi
+
+if ! grep -q 'agent_panel_sort' "$WORK/merged.toml" \
+  && ! grep -q 'delivery' "$WORK/merged.toml" \
+  && ! grep -q 'auto_switch' "$WORK/merged.toml" \
+  && grep -q 'name = "catppuccin"' "$WORK/merged.toml"
+then ok "a config naming no sort, toast or theme writes none of the three"
+else no "a config naming no sort, toast or theme writes none of the three"; fi
+
+# The same file again, this time with all four named. The theme the user wrote
+# by hand has to be replaced rather than joined: TOML forbids two `name` keys
+# in one table, and herdr throws out a file it cannot parse.
+cp "$WORK/hand.toml" "$WORK/settings.toml"
+run_keymap alt "$WORK/settings.toml" catppuccin catppuccin-latte herdr true priority
+if parses "$WORK/settings.toml"; then ok "writing a theme, a toast and a sort stays valid TOML"
+else no "writing a theme, a toast and a sort stays valid TOML"; fi
+
+theme_tables=$(grep -c '^\[theme\]' "$WORK/settings.toml")
+if [ "$theme_tables" = "1" ]; then ok "the managed theme merges into the user's [theme] instead of declaring a second ($theme_tables)"
+else no "expected 1 [theme] table, found $theme_tables"; fi
+
+settings_read=$(python3 - "$WORK/settings.toml" <<'PYX'
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], 'rb'))
+t, u = d.get('theme', {}), d.get('ui', {})
+print(t.get('name'), t.get('auto_switch'), t.get('dark_name'), t.get('light_name'),
+      u.get('agent_panel_sort'), (u.get('toast') or {}).get('delivery'))
+PYX
+)
+if [ "$settings_read" = "catppuccin True catppuccin catppuccin-latte priority herdr" ]
+then ok "the theme, its light variant, the sort and the toast all land where herdr reads them"
+else no "expected 'catppuccin True catppuccin catppuccin-latte priority herdr', parsed: ${settings_read:-nothing}"; fi
+
+# A theme with no light variant has nothing to switch to, so the switch and
+# both variant names stay out of the file.
+cp "$WORK/hand.toml" "$WORK/onetheme.toml"
+run_keymap alt "$WORK/onetheme.toml" catppuccin
+if parses "$WORK/onetheme.toml" \
+  && grep -q 'name = "catppuccin"' "$WORK/onetheme.toml" \
+  && ! grep -q 'auto_switch' "$WORK/onetheme.toml" \
+  && ! grep -q 'light_name' "$WORK/onetheme.toml"
+then ok "a theme with no light variant writes the name alone"
+else no "a theme with no light variant writes the name alone"; fi
+
+cp "$WORK/settings.toml" "$WORK/settings-twice.toml"
+run_keymap alt "$WORK/settings-twice.toml" catppuccin catppuccin-latte herdr true priority
+if diff -q "$WORK/settings.toml" "$WORK/settings-twice.toml" >/dev/null
+then ok "re-applying the theme, toast and sort is idempotent"
+else no "re-applying the theme, toast and sort is idempotent"; fi
+
+# Turning the pane labels off has to write `false`, not drop the key: herdr's
+# own default is on, so an absent key reads as the opposite of the answer.
+cp "$WORK/hand.toml" "$WORK/nolabels.toml"
+run_keymap alt "$WORK/nolabels.toml" "" "" "" false
+if grep -q 'show_agent_labels_on_pane_borders = false' "$WORK/nolabels.toml"
+then ok "turning the pane labels off writes false rather than dropping the key"
+else no "turning the pane labels off writes false rather than dropping the key"; fi
+
+# A value can run over several lines, because TOML lets an array span as many
+# as it likes. Dropping the first line alone strands the rest as bare list
+# items, and herdr answers invalid TOML by rejecting every binding in the file.
+cat > "$WORK/multiline.toml" <<'T'
+[keys]
+focus_pane_left = [
+  "prefix+h",
+  "alt+h",
+]
+my_own_setting = "untouched"
+
+[ui]
+pane_scrollbars = [
+  "not really an array, but it spans lines",
+]
+my_own_ui = true
+T
+run_keymap alt "$WORK/multiline.toml"
+if parses "$WORK/multiline.toml" \
+  && grep -q 'my_own_setting' "$WORK/multiline.toml" \
+  && grep -q 'my_own_ui' "$WORK/multiline.toml" \
+  && ! grep -q 'not really an array' "$WORK/multiline.toml"
+then ok "a managed value spanning several lines is dropped whole"
+else no "a managed value spanning several lines is dropped whole"; fi
+
+# A theme is one setting spelled across four keys. Claiming only the keys this
+# run writes leaves a hand-written auto_switch and light_name beside the new
+# name, and a light client then keeps the theme the user is replacing.
+cat > "$WORK/oldtheme.toml" <<'T'
+[theme]
+name = "gruvbox"
+auto_switch = true
+dark_name = "gruvbox"
+light_name = "gruvbox-light"
+T
+run_keymap alt "$WORK/oldtheme.toml" mocha
+theme_read=$(python3 - "$WORK/oldtheme.toml" <<'PYTH'
+import sys, tomllib
+th = tomllib.load(open(sys.argv[1], 'rb')).get('theme', {})
+print(th.get('name'), th.get('auto_switch'), th.get('dark_name'), th.get('light_name'))
+PYTH
+)
+if [ "$theme_read" = "mocha None None None" ]
+then ok "a theme replaces the user's whole theme, not just the name"
+else no "expected 'mocha None None None', parsed: ${theme_read:-nothing (invalid TOML)}"; fi
 
 echo "yazi merge safety"
 # apply_yazi has the same shape of bug as the keymap writer above, but worse:
@@ -2257,6 +2376,232 @@ else
   no "download_target binds the key to Taildrop on the hovered file"
 fi
 
+# A binding the user wrote by hand on a key this writer claims. yazi accepts
+# both, lists both in its help, and runs one of them - so the user gets two
+# entries saying different things and no way to tell which one fires.
+cat > "$WORK/km-hand.toml" <<'T'
+[[mgr.prepend_keymap]]
+on = "e"
+run = 'shell --block -- my-own-editor "%h"'
+desc = "Mine, on a key this script claims"
+
+[[mgr.prepend_keymap]]
+on = "D"
+run = 'shell --block -- tailscale file cp "%h" old-laptop:'
+desc = "Mine, on a key this script claims only with a target"
+
+[[mgr.prepend_keymap]]
+on = "<C-y>"
+run = 'shell --block -- my-own-tool "%h"'
+desc = "Mine, on a key this script never claims"
+
+[input]
+cursor_blink = true
+T
+cp "$WORK/km-hand.toml" "$WORK/km-hand-out.toml"
+run_keymap b "#" "$WORK/km-hand-out.toml" my-laptop
+if parses "$WORK/km-hand-out.toml" && python3 - "$WORK/km-hand-out.toml" <<'PYH'
+import sys, tomllib
+data = tomllib.load(open(sys.argv[1], "rb"))
+binds = data.get("mgr", {}).get("prepend_keymap", [])
+for key in ("e", "D", "b", "#"):
+    hit = [b for b in binds if b.get("on") == key]
+    if len(hit) != 1:
+        sys.exit(f"{len(hit)} bindings on {key}, expected exactly 1")
+if "my-own-editor" in open(sys.argv[1]).read():
+    sys.exit("the hand-written binding on a claimed key survived")
+if "old-laptop" in open(sys.argv[1]).read():
+    sys.exit("the hand-written download binding survived")
+if not [b for b in binds if b.get("on") == "<C-y>"]:
+    sys.exit("a hand-written binding on an unclaimed key was dropped")
+# The table after the last binding belongs to the file, not to the binding.
+if not data.get("input", {}).get("cursor_blink"):
+    sys.exit("a table following a dropped binding went with it")
+PYH
+then
+  ok "a hand-written binding on a claimed key is replaced, not stacked"
+else
+  no "a hand-written binding on a claimed key is replaced, not stacked"
+fi
+
+# The download key is only claimed when a target is configured, so with none
+# the user's own binding on that key has to survive untouched.
+cp "$WORK/km-hand.toml" "$WORK/km-hand-nodl.toml"
+run_keymap b "#" "$WORK/km-hand-nodl.toml"
+if parses "$WORK/km-hand-nodl.toml" && grep -q 'old-laptop' "$WORK/km-hand-nodl.toml"
+then ok "with no download target, a hand-written binding on that key survives"
+else no "with no download target, a hand-written binding on that key survives"; fi
+
+cp "$WORK/km-hand-out.toml" "$WORK/km-hand-twice.toml"
+run_keymap b "#" "$WORK/km-hand-twice.toml" my-laptop
+if diff -q "$WORK/km-hand-out.toml" "$WORK/km-hand-twice.toml" >/dev/null
+then ok "dropping a claimed hand-written binding is idempotent"
+else no "dropping a claimed hand-written binding is idempotent"; fi
+
+# yazi spells `on` four ways, and reading only the double-quoted scalar leaves
+# the other three standing beside the managed binding.
+cat > "$WORK/km-spellings.toml" <<'T'
+[[mgr.prepend_keymap]]
+on = [ "b" ]
+run = 'shell --block -- my-own-browser "%h"'
+desc = "A one-element array"
+
+[[mgr.prepend_keymap]]
+on = 'e'
+run = 'shell --block -- my-own-editor "%h"'
+desc = "Single-quoted"
+
+[[mgr.prepend_keymap]]
+on = "#"  # mine, with a trailing comment
+run = 'shell --block -- my-own-numbers "%h"'
+desc = "A trailing comment after the key"
+
+[[mgr.prepend_keymap]]
+on = [ "g", "c" ]
+run = 'shell --block -- my-own-sequence "%h"'
+desc = "A real multi-key sequence, which collides with nothing"
+T
+run_keymap b "#" "$WORK/km-spellings.toml"
+if parses "$WORK/km-spellings.toml" && python3 - "$WORK/km-spellings.toml" <<'PYSP'
+import sys, tomllib
+raw = open(sys.argv[1]).read()
+binds = tomllib.loads(raw).get("mgr", {}).get("prepend_keymap", [])
+for key in ("b", "e", "#"):
+    hit = [x for x in binds if x.get("on") == key or x.get("on") == [key]]
+    if len(hit) != 1:
+        sys.exit(f"{len(hit)} bindings on {key}, expected exactly 1")
+for gone in ("my-own-browser", "my-own-editor", "my-own-numbers"):
+    if gone in raw:
+        sys.exit(f"{gone} survived on a claimed key")
+if "my-own-sequence" not in raw:
+    sys.exit("a multi-key sequence was dropped, though it collides with nothing")
+PYSP
+then
+  ok "every spelling of a claimed key is replaced, and a multi-key sequence is not"
+else
+  no "every spelling of a claimed key is replaced, and a multi-key sequence is not"
+fi
+
+
+echo "tuicr config merge safety"
+# tuicr's config is flat, so every key this script writes is top level and a
+# value the user set by hand before the script managed it is a duplicate. TOML
+# forbids that, and tuicr answers an unparseable config by ignoring it.
+TUICR_CFG_PY="$WORK/tuicr-config.py"
+awk "/^    py \"\\\$HOME\/\.config\/tuicr\/config\.toml\" <<'PY'\$/{f=1; next} f && /^PY\$/{exit} f" \
+  "$SETUP" > "$TUICR_CFG_PY"
+if [ -s "$TUICR_CFG_PY" ]; then
+  ok "the tuicr config writer is extractable from setup.sh"
+else
+  no "the tuicr config writer is extractable from setup.sh"
+fi
+
+# run_tuicr <from-fork> <appearance> <path>
+run_tuicr() { SPECHUB_ARGS="$1|30|true|$2|$BEGIN_MARK|$END_MARK" python3 "$TUICR_CFG_PY" "$3" 2>/dev/null; }
+
+cat > "$WORK/tuicr-hand.toml" <<'T'
+# Local build, wired up before this script ever managed these.
+show_file_line_stats = true
+file_list_width = 40
+no_update_check = true
+
+# Pinned, not detected.
+appearance = "light"
+
+# Mine, and nothing to do with this script.
+my_own_setting = "untouched"
+T
+
+cp "$WORK/tuicr-hand.toml" "$WORK/tuicr-fork.toml"
+run_tuicr true dark "$WORK/tuicr-fork.toml"
+tuicr_read=$(python3 - "$WORK/tuicr-fork.toml" <<'PYT'
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], 'rb'))
+print(d.get('show_file_line_stats'), d.get('file_list_width'),
+      d.get('no_update_check'), d.get('appearance'), d.get('my_own_setting'))
+PYT
+)
+if [ "$tuicr_read" = "True 30 True dark untouched" ]
+then ok "a hand-written value is replaced by the managed one, and an unmanaged key survives"
+else no "expected 'True 30 True dark untouched', parsed: ${tuicr_read:-nothing (invalid TOML)}"; fi
+
+# The comment that introduced a replaced key has to leave with it, or the file
+# is left with a heading over settings that are no longer there.
+if ! grep -q 'wired up before' "$WORK/tuicr-fork.toml" \
+  && ! grep -q 'Pinned, not detected' "$WORK/tuicr-fork.toml" \
+  && grep -q 'Mine, and nothing to do' "$WORK/tuicr-fork.toml"
+then ok "a comment introducing a replaced key leaves with it"
+else no "a comment introducing a replaced key leaves with it"; fi
+
+cp "$WORK/tuicr-fork.toml" "$WORK/tuicr-twice.toml"
+run_tuicr true dark "$WORK/tuicr-twice.toml"
+if diff -q "$WORK/tuicr-fork.toml" "$WORK/tuicr-twice.toml" >/dev/null
+then ok "re-applying the tuicr config is idempotent"
+else no "re-applying the tuicr config is idempotent"; fi
+
+# A stock release warns on every start about a key it does not know, so the
+# three fork-only keys are not written - and a hand-written one is therefore
+# not this script's to remove.
+cp "$WORK/tuicr-hand.toml" "$WORK/tuicr-stock.toml"
+run_tuicr false "" "$WORK/tuicr-stock.toml"
+stock_read=$(python3 - "$WORK/tuicr-stock.toml" <<'PYS'
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], 'rb'))
+print(d.get('file_list_width'), d.get('appearance'))
+PYS
+)
+if [ "$stock_read" = "40 light" ]
+then ok "with the stock release and no appearance, both hand-written values are left alone"
+else no "expected '40 light', parsed: ${stock_read:-nothing (invalid TOML)}"; fi
+
+# A fresh machine, with nothing written yet.
+rm -f "$WORK/tuicr-fresh.toml"
+run_tuicr true dark "$WORK/tuicr-fresh.toml"
+fresh_read=$(python3 - "$WORK/tuicr-fresh.toml" <<'PYF'
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], 'rb'))
+print(d.get('file_list_width'), d.get('appearance'))
+PYF
+)
+if [ "$fresh_read" = "30 dark" ]
+then ok "a fresh tuicr config gets the managed keys"
+else no "expected '30 dark', parsed: ${fresh_read:-nothing (invalid TOML)}"; fi
+
+# Every key this writer produces is top level, so the block has to go ABOVE the
+# first table header. Appended at the end it lands inside whatever section came
+# last: tuicr then reports an unknown key in that section and never sees the
+# setting, and a name the section already uses makes the file invalid outright.
+cat > "$WORK/tuicr-tables.toml" <<'T'
+appearance = "light"
+my_own_setting = "untouched"
+
+# Mine, and it introduces the section below it.
+[export]
+legend = false
+appearance = "light"
+T
+cp "$WORK/tuicr-tables.toml" "$WORK/tuicr-tables-out.toml"
+run_tuicr true dark "$WORK/tuicr-tables-out.toml"
+tables_read=$(python3 - "$WORK/tuicr-tables-out.toml" <<'PYTT'
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], 'rb'))
+print(d.get('appearance'), d.get('my_own_setting'),
+      (d.get('export') or {}).get('appearance'), (d.get('export') or {}).get('legend'))
+PYTT
+)
+if [ "$tables_read" = "dark untouched light False" ]
+then ok "the managed block lands above the first table, not inside it"
+else no "expected 'dark untouched light False', parsed: ${tables_read:-nothing (invalid TOML)}"; fi
+
+if grep -q 'Mine, and it introduces' "$WORK/tuicr-tables-out.toml"
+then ok "the comment introducing the user's table stays with that table"
+else no "the comment introducing the user's table stays with that table"; fi
+
+cp "$WORK/tuicr-tables-out.toml" "$WORK/tuicr-tables-twice.toml"
+run_tuicr true dark "$WORK/tuicr-tables-twice.toml"
+if diff -q "$WORK/tuicr-tables-out.toml" "$WORK/tuicr-tables-twice.toml" >/dev/null
+then ok "re-applying over a file with tables is idempotent"
+else no "re-applying over a file with tables is idempotent"; fi
 
 echo "the opener route"
 # The opener is a service on the user's laptop that takes a page and puts it in
@@ -3034,6 +3379,72 @@ else
       "uninstall deletes the plugin file too"
 fi
 
+# LazyVim loads every file under lua/plugins, so a lualine override the user
+# wrote in a file of their own does exactly what this component does. Writing
+# on top of it draws two dots side by side, and neither file looks wrong on
+# its own - the only place the collision is visible is the statusline.
+rm -f "$NPLUG"
+cat > "$NWORK/home/.config/nvim/lua/plugins/mine.lua" <<'NLUA'
+return {
+  {
+    "nvim-lualine/lualine.nvim",
+    opts = function(_, opts)
+      table.insert(opts.sections.lualine_c, {
+        function()
+          return vim.bo.modified and "*" or ""
+        end,
+      })
+    end,
+  },
+}
+NLUA
+out=$(nw apply)
+if [ ! -e "$NPLUG" ] && printf '%s' "$out" | grep -qF "mine.lua"; then
+  okn "apply writes no dot when the user's own lualine override already draws one, and names the file"
+else
+  non "apply writes no dot when the user's own lualine override already draws one, and names the file (said: $(flat "$out"))" \
+      "apply writes no dot when the user's own lualine override already draws one, and names the file"
+fi
+
+# A lualine override that says nothing about a modified buffer is a different
+# thing entirely, and must not block the dot.
+cat > "$NWORK/home/.config/nvim/lua/plugins/mine.lua" <<'NLUA'
+return { { "nvim-lualine/lualine.nvim", opts = { options = { globalstatus = true } } } }
+NLUA
+out=$(nw apply)
+if [ -f "$NPLUG" ]; then
+  okn "an unrelated lualine override does not block the dot"
+else
+  non "an unrelated lualine override does not block the dot (said: $(flat "$out"))" \
+      "an unrelated lualine override does not block the dot"
+fi
+# The order that bites: install first, write your own override later. The guard
+# has to remove the dot this component already wrote, or the user keeps exactly
+# the two dots it exists to prevent.
+cat > "$NWORK/home/.config/nvim/lua/plugins/mine.lua" <<'NLUA'
+return {
+  {
+    "nvim-lualine/lualine.nvim",
+    opts = function(_, opts)
+      table.insert(opts.sections.lualine_c, {
+        function()
+          return vim.bo.modified and "*" or ""
+        end,
+      })
+    end,
+  },
+}
+NLUA
+out=$(nw apply)
+if [ ! -e "$NPLUG" ] && printf '%s' "$out" | grep -qF "was removed"; then
+  okn "apply removes the dot it wrote earlier once the user's own override appears"
+else
+  non "apply removes the dot it wrote earlier once the user's own override appears (said: $(flat "$out"))" \
+      "apply removes the dot it wrote earlier once the user's own override appears"
+fi
+
+rm -f "$NWORK/home/.config/nvim/lua/plugins/mine.lua" "$NPLUG"
+
 
 echo "disable answers for every component"
 # The config names ten components. `disable` has a branch for seven of them,
@@ -3161,7 +3572,8 @@ GHUSER
 # are exactly the ones apply leaves behind.
 mkdir -p "$UWORK/home/.config/herdr"
 : > "$UWORK/home/.config/herdr/config.toml"
-SPECHUB_ARGS="$(args alt)" python3 "$HERDR_KEYMAP" "$UWORK/home/.config/herdr/config.toml"
+SPECHUB_ARGS="$(args alt catppuccin catppuccin-latte herdr true priority)" \
+  python3 "$HERDR_KEYMAP" "$UWORK/home/.config/herdr/config.toml"
 
 if grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/yazi.toml" \
    && grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/keymap.toml" \
@@ -3178,6 +3590,16 @@ if ! grep -qF "$BEGIN_MARK" "$UWORK/home/.config/herdr/config.toml" \
   ok "uninstall removes pane_scrollbars with the rest of the herdr managed block"
 else
   no "uninstall removes pane_scrollbars with the rest of the herdr managed block (rc=$uninstall_rc, said: $(flat "$uninstall_out"))"
+fi
+
+# The theme and the toast each get a region of their own, and uninstall strips
+# every region rather than only the two it knew about when it was written.
+if ! grep -q 'light_name' "$UWORK/home/.config/herdr/config.toml" \
+   && ! grep -q 'agent_panel_sort' "$UWORK/home/.config/herdr/config.toml" \
+   && ! grep -q 'delivery' "$UWORK/home/.config/herdr/config.toml"; then
+  ok "uninstall removes the theme, sort and toast regions too"
+else
+  no "uninstall removes the theme, sort and toast regions too (rc=$uninstall_rc, said: $(flat "$uninstall_out"))"
 fi
 
 if ! grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/yazi.toml" \

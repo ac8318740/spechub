@@ -8,7 +8,7 @@ You run SpecHub on more than one machine. Those machines are not the same.
 - **One can drive a real Chrome window**
 - **Another has no display at all**
 - **A skill cannot guess which**
-    - Each machine answers eight questions once, with `/spechub:host`
+    - Each machine answers nine questions once, with `/spechub:host` and `/spechub:setup`
 - **The answers live in `~/.config/spechub/config.json`** as `host.*` keys
 - **The worktree skills and the frontend verifier read them** instead of probing
 
@@ -24,7 +24,7 @@ flowchart TD
     HOST["Describe this machine once<br/>(/spechub:host - section 4)"] --> AXES["Every axis, and what reads it<br/>(host.* in ~/.config/spechub/config.json - section 1)"]
     AXES --> ORCH["Orchestrator axes<br/>(host.orchestrators.* - section 2)"]
     AXES --> BROW["Browser axes<br/>(host.browser.* - section 3)"]
-    AXES --> OPT["Optional axes<br/>(preview, element picker, Orca topology)"]
+    AXES --> OPT["Optional axes<br/>(preview, terminal workspace, element picker, Orca topology)"]
     ORCH -->|"pick the worktree tool"| WT["new-worktree, teardown-worktree"]
     BROW -->|"pick the browser"| FV["frontend-verifier"]
     PROJ["What this project prefers<br/>(frontend.browser.* in spechub/project.yaml)"] --> FV
@@ -33,7 +33,7 @@ flowchart TD
 
 ## 1. Every axis, and what reads it
 
-*Eight `host.*` axes describe the machine. Three `frontend.browser.*` keys state what one project would like.*
+*Nine `host.*` axes describe the machine. Three `frontend.browser.*` keys state what one project would like.*
 
 | Axis | Values | Required | Stored in | What changes behaviour on it |
 | --- | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ flowchart TD
 | `host.browser.headless` | `true`, `false` | yes, with a frontend | global config | the same |
 | `host.browser.local` | `true`, `false` | yes, with a frontend | global config | the same |
 | `host.preview.tailscale_serve` | `true`, `false` | no | global config | nothing; check 5 lists it |
+| `host.terminal_workspace` | `true`, `false` | no | global config | `/spechub:setup` offers the workspace once, and never asks again after this is set |
 | `host.element_picker` | `stagewise`, `orca-design-mode`, `none` | no | global config | nothing; check 5 lists it |
 | `host.orca.topology` | `local`, `remote` | no | global config | nothing; check 5 marks it inert unless `host.orchestrators.orca` is `true` |
 | `frontend.browser.mode` | `remote`, `headless`, `local` | no | `spechub/project.yaml` | the preference, weighed against the three host axes |
@@ -145,6 +146,13 @@ How the two sides meet:
 6. `install-herdr-block.sh --plan` lists the steps, and `--apply` writes the block. The block goes into `~/.config/herdr/config.toml`. It names the directory herdr creates worktrees under.
 7. Run `~/.claude/spechub/bin/spechub config check`. It prints five numbered checks.
 8. Read its exit code. It exits 2 on an unset required axis, 1 on any other failure, and 0 when everything passes.
+
+This skill asks eight of the nine axes. `/spechub:setup` asks the ninth, at
+the end of its own run, and writes `host.terminal_workspace` from the answer.
+
+- The offer comes last on purpose: the workspace installs binaries, and nothing in SpecHub needs it
+- Either answer ends the offer for good
+- `/spechub:terminal-workspace` installs it directly, for a user who does not want to wait for the offer
 
 Four things stay yours.
 

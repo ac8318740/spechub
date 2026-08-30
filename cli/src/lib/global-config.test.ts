@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('HOST_AXES', () => {
-  it('declares the eight host axes with kind, required and allowed values', () => {
+  it('declares the nine host axes with kind, required and allowed values', () => {
     const byKey = Object.fromEntries(HOST_AXES.map(a => [a.key, a]));
 
     // One boolean per orchestrator, each required in its own right: a host can
@@ -48,6 +48,13 @@ describe('HOST_AXES', () => {
       required: false,
       kind: 'boolean',
     });
+    // SpecHub works without the terminal workspace, so this is never
+    // required. It is recorded all the same, so a declined offer and an
+    // unanswered one stop looking identical.
+    expect(byKey['host.terminal_workspace']).toMatchObject({
+      required: false,
+      kind: 'boolean',
+    });
     expect(byKey['host.element_picker']).toMatchObject({
       required: false,
       kind: 'enum',
@@ -59,7 +66,7 @@ describe('HOST_AXES', () => {
       values: ['local', 'remote'],
     });
 
-    expect(HOST_AXES).toHaveLength(8);
+    expect(HOST_AXES).toHaveLength(9);
   });
 
   it('no longer declares the single host.orchestrator enum axis', () => {
@@ -145,6 +152,7 @@ describe('parseValue: host.* boolean axes', () => {
     'host.browser.headless',
     'host.browser.local',
     'host.preview.tailscale_serve',
+    'host.terminal_workspace',
   ];
 
   for (const key of booleanKeys) {

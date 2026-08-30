@@ -79,14 +79,19 @@ Add `shift` to any of these to open it in a full tab instead of a popup.
 
 ### tuicr
 
+`;` is tuicr's leader: press it, release it, then press the second key.
+
 | Key | Does |
 |---|---|
 | `e` | edit the focused file in `$EDITOR` |
 | `c` | comment on the line |
 | `y` | copy the review to the clipboard |
 | `;o` | open the PR on GitHub |
+| `;L` / `;H` | widen / narrow the file tree, then bare `L` / `H` to keep going |
 | `x` | filter files out of the tree |
 | `?` | every key |
+
+`;L` and `;H` need the fork build, which `tuicr.build_from_fork` in the config installs.
 
 ### LazyVim
 
