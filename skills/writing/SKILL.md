@@ -67,6 +67,16 @@ A compound sentence is two clauses joined by a comma, by `and`, `so`, `but`, `wh
 - Write: Claude writes the code, then writes tests that pass against that code.
 - Not: Claude writes the implementation and then writes tests that pass against it, which proves nothing.
 
+**When the trailing clause is the point, lead with it instead of cutting it.** Cutting loses the point. Inverting the sentence puts the answer where the reader looks first.
+
+- Write: Don't cache the token – it expires in five minutes.
+- Not: The token expires in five minutes, so don't cache it.
+
+- Write: Roll back the deploy – it broke the checkout page.
+- Not: The deploy broke the checkout page, so roll it back.
+
+Spot it by the joining word. `so`, `therefore` and `which means` all announce that the point comes second.
+
 **Never bolt a cross-reference onto a sentence with a comma.** Put it in parentheses.
 
 - Write: You get three commands (see section 1).
@@ -77,10 +87,10 @@ A compound sentence is two clauses joined by a comma, by `and`, `so`, `but`, `wh
 
 - Write: The hook raises a `nudge_warn` below 1 to 1, because a rung of 0 would block every turn.
 
-### 4. Break a paragraph at six sentences (ASD-STE100)
+### 4. Break a paragraph at three sentences
 
-- Write: Six sentences, then a new paragraph, even mid-argument.
-- Not: A ninth sentence of setup inside the same block.
+- Write: Three sentences, then a new paragraph, even mid-argument.
+- Not: A sixth sentence of setup inside the same block.
 
 ### 5. Open a paragraph with its point
 
@@ -202,12 +212,18 @@ Most of these words have no entry in `vocabulary.md`, and they should not. `comp
 - Write: Use the files backend. It needs no network.
 - Not: There is a files backend and an issues backend. Both carry trade-offs.
 
-### 20. State what a thing is
+### 20. State what a thing is, then stop
+
+Never say what it is not. The one exception is showing the wrong version so the
+reader can spot it, as every `Not:` line below does.
 
 - Write: The skill holds the rules. The CLI checks them.
 - Not: The skill is not just a style guide but a contract.
+- Not: The hook writes the symlink rather than copying it.
 
 ### 21. List as many items as there are
+
+"Etc." is fine when you are trying to convey that your list is non-exhaustive.
 
 - Write: The lint warns and never blocks.
 - Not: The lint is fast, focused, and forgiving.
@@ -254,8 +270,10 @@ A term this project invented gets its plain meaning on the same line, every time
 - Not: `## Before You Finish.`, and a table cell that reads `make sure.`
 
 A bullet never ends in a period, however long it runs. A cell follows the same rule. Section 3 of
-the `visual-docs` skill owns bullet shape. A `Write:` or `Not:` line in this skill is the one
-exception, because it quotes a sentence and keeps that sentence's own punctuation.
+the `visual-docs` skill owns bullet shape.
+
+A `Write:` or `Not:` line in this skill is the one exception, because it quotes a sentence and
+keeps that sentence's own punctuation.
 
 ### 27. Give a heading content that its paragraph does not repeat
 
@@ -279,7 +297,9 @@ exception, because it quotes a sentence and keeps that sentence's own punctuatio
 
 ## What this skill leaves to others
 
-This skill owns words, sentences, paragraphs, and heading style. Document shape belongs to the `visual-docs` skill. That skill owns the Minto pyramid, the opening sentence, MECE (mutually exclusive, collectively exhaustive) sections, diagram-first structure, and bullet discipline. Chat replies and commit subject lines sit outside the standard.
+This skill owns words, sentences, paragraphs, and heading style. Document shape belongs to the `visual-docs` skill. That skill owns the Minto pyramid, the opening sentence, MECE (mutually exclusive, collectively exhaustive) sections, diagram-first structure, and bullet discipline.
+
+Chat replies and commit subject lines sit outside the standard.
 
 Straight quotes are the only quotes. The two tables in `vocabulary.md` hold every replaced word and every replaced mark.
 

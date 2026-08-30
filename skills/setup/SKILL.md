@@ -33,20 +33,25 @@ Three terms, before they get used:
 
 - A **health check** is one run of `spechub config check`. It audits the machine
   and the project. It changes nothing.
+
 - A **row** is one line of that report. It carries an `id`, a `status` and a
   `message`.
+
 - An **axis** is one setting of the machine, recorded as one `host.*` key in the
   global config.
 
 The command line tool audits. This skill interviews and writes. Neither one does
-the other's job. See `docs/adr/0008-cli-audits-skill-interviews.md`.
+the other's job.
+
+See `docs/adr/0008-cli-audits-skill-interviews.md`.
 
 ## Step 1: Declare this machine
 
 The dev setup of the machine is per machine, not per project. It covers which
 orchestrator hosts terminal panes and git worktrees. It also covers which
-browser-verification modes work here. Those answers live in the global config
-under the `host.*` keys.
+browser-verification modes work here.
+
+Those answers live in the global config under the `host.*` keys.
 
 Read what this machine declares:
 
@@ -58,9 +63,11 @@ On exit 0 the command prints the declared axes, and Step 2 follows. Exit code 2
 means this machine declares nothing yet.
 
 On exit 2, invoke the `host` skill and run its whole interview here. Do not tell
-the user to go and run it later. Host setup is per machine and safe to re-run,
-and a half-finished machine leaves axes unset. The health check in Step 7 then
-fails on those axes and blocks everything after it.
+the user to go and run it later.
+
+Host setup is per machine and safe to re-run, and a half-finished machine leaves
+axes unset. The health check in Step 7 then fails on those axes and blocks
+everything after it.
 
 Do not restate the host skill's questions. It owns them, and it writes its own
 answers. Come back to Step 2 when it finishes.
@@ -135,16 +142,22 @@ user did not select.
 
 - **Profile & paths** – ask the language or framework, then the source and test
   directories.
+
 - **Commands** – show the proposed commands and ask what to adjust.
 - **Frontend** – show the proposed frontend settings and ask what to adjust.
 - **Grilling** – ask `tool`, the host's question tool, against `inline` prose.
   Recommend `tool`. It writes `workflow.grilling.questions`.
+
 - **TDD strictness** – ask strict against relaxed, and write
-  `workflow.tdd.strict`. Strict runs the test-writer first, so the tests exist
-  before the code. Relaxed runs the task-executor first and the test-writer
-  after it. Relaxed drops no phase, and all three agents run under both.
-  Recommend strict, because the relaxed test-writer works beside an
-  implementation it must not read.
+  `workflow.tdd.strict`.
+
+    Strict runs the test-writer first, so the tests exist before the code.
+    Relaxed runs the task-executor first and the test-writer after it. Relaxed
+    drops no phase, and all three agents run under both.
+
+    Recommend strict, because the relaxed test-writer works beside an
+    implementation it must not read.
+
 - **Orchestrator** – ask strict against relaxed.
 - **Spec sync** – ask enabled against disabled.
 - **Python venv** – ask the activation command. Ask it only for a Python profile.
@@ -158,6 +171,7 @@ paths reach Step 10 through the health check.
 2. Write `spechub/project.yaml` from the profile and the answers.
 3. Leave the project CLAUDE.md alone. The SessionStart hook loads the
    orchestrator instructions.
+
 4. Remove a legacy `@import` line from the project CLAUDE.md, if one is there.
    It points at `.../plugins/cache/ac8318740-plugins/spechub/<version>/CLAUDE.md`.
 
@@ -213,9 +227,11 @@ Offer a row when any of these holds:
 - Its `id` is `preferred-browser-mode`, its `status` is `info`, and
   `spechub/project.yaml` configures a `frontend` block. The project has a
   frontend and has named no browser mode for it.
+
 - Its `id` is `output-style` and its `status` is `info`. The row passes when the
   settings files select `spechub:ac-writing-style`, so `info` means they select
   some other style, or select none.
+
 - Its `id` is `frontend-verification` and its `status` is `info`. The project
   configures a frontend and `workflow.frontend_verification` is not `true`.
 
@@ -226,9 +242,11 @@ reworded.
 Add three options at the end of the list, whatever the check reported:
 
 - **Re-declare this machine** – invoke the `host` skill. It re-asks every axis,
-  required and optional, and starts from the current answers. The check reports
-  an `optional-axis:<key>` row as `info`, never as `fail`. So this option is the
-  only way one of them reaches a question.
+  required and optional, and starts from the current answers.
+
+    The check reports an `optional-axis:<key>` row as `info`, never as `fail`.
+    So this option is the only way one of them reaches a question.
+
 - **Change one setting** – for a key the check has no opinion about, such as
   `workflow.tdd.strict`. Point the user at `docs/config-reference.md`, which
   lists every key, its values and its default. Then write the key:
@@ -238,13 +256,16 @@ Add three options at the end of the list, whatever the check reported:
   ```
 
   Do not restate the reference here.
+
 - **Skip** – leave everything as it is.
 
 On a first run the menu carries several rows, and only one of them failed. A
 fresh project has no domain map, so `domain-map` fails. It selects no output
-style, so `output-style` reports `info`. A fresh project that configures a
-frontend adds `preferred-browser-mode` and `frontend-verification`, both `info`
-as well, because it has named no browser mode and turned no verification on.
+style, so `output-style` reports `info`.
+
+A fresh project that configures a frontend adds `preferred-browser-mode` and
+`frontend-verification`, both `info` as well, because it has named no browser
+mode and turned no verification on.
 
 ## Step 9: Fix one row at a time
 
@@ -284,7 +305,9 @@ A `browser-mode:headless` or `browser-mode:local` failure says one thing and
 nothing else: the machine declares the mode and no Chromium or Chrome binary sits
 on PATH. The axis is right and the machine is short a browser. Re-running the
 host interview changes nothing here, and answering the axis false records a lie
-about what this machine can do. Offer to install the browser instead:
+about what this machine can do.
+
+Offer to install the browser instead:
 
 ```bash
 sudo apt install chromium-browser   # Ubuntu/Debian
@@ -318,9 +341,11 @@ Guidance for the subagent:
 
 - Group by responsibility, not by layer. Use `auth`, `billing` and `search`,
   never `models`, `controllers` and `utils`.
+
 - Prefer a directory prefix over a file list. Consumers match a path as a prefix.
 - Aim for 3 to 10 domains. Fewer, and spec sync cannot tell two changes apart.
   More, and every commit touches several.
+
 - Leave tests, config, build files and docs unmapped. Consumers skip a path that
   no domain covers.
 
@@ -402,8 +427,9 @@ Evolving reference for browser-based verification. Updated by the frontend-verif
 ### 9e. Offer the writing output style
 
 The plugin ships an output style. Claude Code names it `spechub:ac-writing-style`.
-It applies the `writing` skill's plain-language rules to every chat reply. Offer
-it. Never set it without asking.
+It applies the `writing` skill's plain-language rules to every chat reply.
+
+Offer it. Never set it without asking.
 
 The row's message names which of the three settings files selects a style, and
 which style it selects. `.claude/settings.local.json` wins over
@@ -424,7 +450,9 @@ Ask once:
 
 Load the chosen file as JSON, set the one key, then write it back. Use `python3`
 or `jq`. Never edit the file with a regular expression, because that corrupts the
-other keys. Stop and report a file holding malformed JSON. Do not overwrite it.
+other keys.
+
+Stop and report a file holding malformed JSON. Do not overwrite it.
 
 ```bash
 python3 - <<'PY'
@@ -457,9 +485,10 @@ project states no preference. A re-run reaches it because the user picked that
 row from the menu.
 
 The machine says what it can do, in the `host.browser.*` axes. This question asks
-a different thing: which of those modes this project would like to use. Offer
-only the modes the machine declares available. When the machine declares none,
-offer all three and run the `host` skill first.
+a different thing: which of those modes this project would like to use.
+
+Offer only the modes the machine declares available. When the machine declares
+none, offer all three and run the `host` skill first.
 
 The block below is the full menu, not the question to ask word for word. Drop the
 entry for any mode the machine declares unavailable, then ask the rest.
@@ -510,7 +539,9 @@ On **Remote browser**, ask what the verifier does when the browser answers nothi
 
 Write `frontend.browser.fallback` as `headless` for the first answer, and as
 `none` for the second. Only `none` acts. It forbids another mode from standing
-in. Then go to Step 11.
+in.
+
+Then go to Step 11.
 
 ## Step 11: Connect the Playwriter bridge
 
@@ -548,8 +579,10 @@ Show these gotchas after the steps:
 - Playwriter hardcodes port `19988`. Nobody can change it.
 - The relay runs on the same host as Chrome. The extension rejects any
   `/extension` client that is not `127.0.0.1`.
+
 - Each tab needs the extension icon clicked once. Playwriter cannot attach to a
   `chrome://` or `about:` page.
+
 - A stale relay holds port 19988 on the browser machine. Run
   `playwriter serve --host 127.0.0.1 --replace` to kick the previous one.
 
@@ -560,8 +593,10 @@ ships `relay.ps1`, `tunnel.ps1` and `register-tasks.ps1` under
 `plugins/spechub/assets/playwriter-bridge/`.
 
 Then re-run the health check from Step 7 and read the `browser-mode:remote` row.
-It passes once something answers on the port. Do not curl the port yourself. The
-check is the one place that probes the machine.
+It passes once something answers on the port.
+
+Do not curl the port yourself. The check is the one place that probes the
+machine.
 
 ## Step 12: Report
 
@@ -590,11 +625,13 @@ Next: describe what you want to build, or run /spechub:bootstrap for existing co
 ```
 
 Fill the `Host:` line and the `Orchestrator:` line from two different sources.
-`Orchestrator:` is this project's delegation policy, read
-from `workflow.tdd.orchestrator_strict` in `spechub/project.yaml`. It says
-whether the coordinator may write code itself. `Host:` is about the machine. It
-names which tool owns terminal panes and git worktrees, and which browser modes
-work here. The `host` skill declares both, and the global config holds them.
+`Orchestrator:` is this project's delegation policy, read from
+`workflow.tdd.orchestrator_strict` in `spechub/project.yaml`. It says whether
+the coordinator may write code itself. `Host:` is about the machine. It names
+which tool owns terminal panes and git worktrees, and which browser modes work
+here.
+
+The `host` skill declares both, and the global config holds them.
 
 List every row still failing under the summary. Name the row and what it needs.
 
@@ -602,15 +639,21 @@ List every row still failing under the summary. Name the row and what it needs.
 
 - `spechub config check` owns every audit rule. Do not re-probe the machine with
   shell commands of your own.
+
 - `spechub config show` owns printing the current setup. It reports the profile,
   the commands, the directories and what the project says about its browser. This
   skill never re-prints those itself.
+
 - `docs/config-reference.md` owns the key reference. It lists each key, its
   values, its default, and what changes when you change it.
+
 - `spechub config set <key> <value>` owns the single-key change, in both files.
-  It reads the key to decide which one. A `host.*` key goes to the global config
-  at `~/.config/spechub/config.json`. Every other key it knows goes to
-  `spechub/project.yaml`, and the write keeps the comments and the key order.
-  It refuses a key neither schema knows, so never fall back to editing the file.
+  It reads the key to decide which one.
+
+    A `host.*` key goes to the global config at `~/.config/spechub/config.json`.
+    Every other key it knows goes to `spechub/project.yaml`, and the write keeps
+    the comments and the key order. It refuses a key neither schema knows, so
+    never fall back to editing the file.
+
 - The `host` skill owns the machine interview and every `host.*` question.
 - `docs/dev-setups.md` documents the eight `host.*` axes.

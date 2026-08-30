@@ -30,6 +30,13 @@ herdr:
   # those chords go silently dead.
   # Set "none" to keep herdr's default prefix-only keymap.
   chord_modifier: alt
+  # A pane's scrollbar costs it a column. herdr counts that column inside the
+  # pane rect but tells the program in the pane it has the full width, so a
+  # full-screen app wraps one column early and every row drifts one column
+  # left of the row above it. Set true to take the scrollbar back; scrolling
+  # itself is unaffected either way, because the mouse wheel and copy mode do
+  # not use it.
+  pane_scrollbars: false
   worktrees_directory: "~/.herdr/worktrees"
   # Agent state hook, so herdr reads state from the agent instead of the
   # screen. One of: claude, codex, opencode, copilot, none.
@@ -116,6 +123,22 @@ lazygit:
   popup_key: "alt+g"
   # Same tool, a new tab instead of a popup.
   tab_key: "alt+shift+g"
+
+neovim:
+  # The one component that is off by default, because it writes into a neovim
+  # config you built yourself. Every other one owns its files outright.
+  enabled: false
+  # LazyVim marks an unsaved buffer by recolouring the filename and nothing
+  # else, so a glance at the statusline cannot tell you a buffer is modified.
+  # Turning this on writes ~/.config/nvim/lua/plugins/spechub.lua, a whole
+  # file of spechub's own, which appends a dot to the statusline for a
+  # modified buffer. It never edits a file you wrote, and
+  # `setup.sh disable neovim` deletes it again.
+  # Skipped on a machine with no LazyVim config, because the dot is appended
+  # to LazyVim's own lualine section.
+  #
+  # The colour of the dot. The default is the catppuccin red.
+  unsaved_dot_color: "#f38ba8"
 
 yazi:
   enabled: true

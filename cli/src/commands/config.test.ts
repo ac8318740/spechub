@@ -4332,7 +4332,7 @@ describe('spechub config check', () => {
       expect(checkSection(result.stdout, 2)).toContain('Declared orchestrators respond');
     });
 
-    it('exits 0 when herdr is declared true and the herdr binary answers `herdr api` successfully', () => {
+    it('exits 0 when herdr is declared true and the herdr binary answers `herdr api snapshot` successfully', () => {
       declareOrchestrators(true, false);
 
       const cwd = noProjectDir();

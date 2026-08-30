@@ -8,10 +8,13 @@
 
 - An SSH service that accepts a reverse forward from the laptop and
   binds `127.0.0.1:19988` on this host.
+
 - `agent-browser` (installed per the `browser-verify` skill) pointed at
   that endpoint via `agent-browser.json`.
+
 - `vm-free-port.sh` for clearing a stuck port 19988 after a dropped
   session.
+
 - An optional `sshd_config` tweak that reaps dead client sessions
   naturally.
 
@@ -70,13 +73,17 @@ seconds. Until then the laptop's reconnect hits
 
 The Windows `tunnel.ps1` retries a stuck port forever. It waits 30 s, then
 doubles the wait to a 120 s cap. The bridge therefore self-heals whenever
-the reap happens. What keepalive changes is how long that takes:
+the reap happens.
 
-- **Keepalive disabled** (`ClientAliveInterval 0`) – the orphan never
-  reaps and the port stays wedged until someone frees it by hand. The
-  tunnel keeps retrying, and writes `tunnel-<host>[-<port>].stuck` after
-  8 consecutive stuck attempts (~11 min) so `doctor.ps1` reports it in red.
-  Run `vm-free-port.sh` and the next attempt binds. You restart nothing.
+What keepalive changes is how long that takes:
+
+- **Keepalive disabled** (`ClientAliveInterval 0`) – the orphan never reaps
+  and the port stays wedged until someone frees it by hand. The tunnel
+  keeps retrying, and writes `tunnel-<host>[-<port>].stuck` after 8
+  consecutive stuck attempts (~11 min) so `doctor.ps1` reports it in red.
+
+    Run `vm-free-port.sh` and the next attempt binds. You restart nothing.
+
 - **Keepalive very loose** – recovery is slow. A default Azure / cloud
   image ships `ClientAliveInterval 120` (≈360 s reap); the runbook value
   of 30 (≈90 s) recovers about 4× faster.
@@ -101,7 +108,9 @@ in a drop-in (e.g. `/etc/ssh/sshd_config.d/50-cloudimg-settings.conf`),
 and sshd uses the *first* value it reads. The
 `Include /etc/ssh/sshd_config.d/*.conf` line sits near the top of the
 main config and globs in lexical order, so a later append loses to the
-existing `50-` drop-in. Win by adding a drop-in that sorts *before* it:
+existing `50-` drop-in.
+
+Win by adding a drop-in that sorts *before* it:
 
 ```bash
 printf 'ClientAliveInterval 30\nClientAliveCountMax 3\n' | \
@@ -110,6 +119,7 @@ sudo systemctl reload ssh || sudo systemctl reload sshd
 ```
 
 Re-run the `sudo sshd -T` check. Confirm it now reports 30 / 3.
+
 If it still shows the loose value, this distro orders `Include`
 differently. Edit the drop-in that set it instead of adding a new one.
 
@@ -180,7 +190,9 @@ unreachable.
 The Windows agent sees this first. `doctor.ps1` turns its `Tunnel logs` row
 amber as soon as `tunnel-*.log` carries a `stuck-retry` line under 5 minutes
 old. The row names the host and the port. It goes red later, once the `.stuck`
-marker file lands. Either colour gives you the same instruction below.
+marker file lands.
+
+Either colour gives you the same instruction below.
 
 Run:
 
@@ -193,25 +205,34 @@ with a clear reason. Common outcomes:
 
 - **"port 19988 is already free"** – nothing to do. The Windows tunnel
   should reconnect within the backoff window.
+
 - **"port is held by your own interactive session"** – you have an SSH
   session alive that is carrying the forward. Exit that session (from
   another terminal) and re-run.
+
 - **Holder is a non-`sshd` process** – the script refuses. Something
   else (local test server, stray `nc`) is on 19988. Stop it manually.
+
 - **Holder is an `sshd` forward channel, now orphaned** – the script
   kills it. `ClientAliveInterval` would have prevented this; consider
   adding the config from step 4.
-- **"port 19988 is carrying a live tunnel"** – the script refuses and
-  exits non-zero without killing anything. Before it looks at the holder
-  at all it asks the port for an HTTP response, bounded at 3 seconds. Any
-  answer counts as alive. It asks the port rather than the process because
-  a non-root `ss` cannot name who owns someone else's socket. A 401 or a 404
-  still means something is serving. Only silence means a half-open forward.
+
+- **"port 19988 is carrying a live tunnel"** – the script refuses and exits
+  non-zero without killing anything. Before it looks at the holder at all it
+  asks the port for an HTTP response, bounded at 3 seconds.
+
+    Any answer counts as alive. It asks the port rather than the process
+    because a non-root `ss` cannot name who owns someone else's socket.
+
+    A 401 or a 404 still means something is serving. Only silence means a
+    half-open forward.
 
 That last refusal matters because the amber `Tunnel logs` row trails five
-minutes behind the log line that raised it. A tunnel often wedges and then
-heals itself while the row stays amber. So you usually reach this script
-after the forward has already healed. Running it then costs nothing.
+minutes behind the log line that raised it.
+
+A tunnel often wedges and then heals itself while the row stays amber. So
+you usually reach this script after the forward has already healed.
+Running it then costs nothing.
 
 No flag overrides the refusal. To free a port that a live forward holds,
 close the session holding it. On the laptop, run `stop.ps1`.
@@ -228,6 +249,7 @@ Should be empty.
 
 - **Rearm the extension on a tab.** That is a click in the user's Chrome,
   inside a third-party extension. Nothing on either machine can press it.
+
 - **Restart the relay or a tunnel task.** Both are Windows-side scheduled
   tasks. The VM reaches them only when the opener is up, which the next
   section covers.
@@ -238,11 +260,13 @@ user to paste it into PowerShell themselves.
 
 ## Restarting the laptop's tasks from here
 
-When the **opener** is up, the restart above is no longer a handoff. The opener
-is a small service on the laptop. It takes a page from the VM and puts it in the
-default browser there. Because it runs on the laptop, it can also restart the
-scheduled tasks the VM cannot reach. See section 9.5, "The opener", of
-`docs/terminal-workspace.md`.
+When the **opener** is up, the restart above is no longer a handoff.
+
+The opener is a small service on the laptop. It takes a page from the VM and
+puts it in the default browser there. Because it runs on the laptop, it can also
+restart the scheduled tasks the VM cannot reach.
+
+See section 9.5, "The opener", of `docs/terminal-workspace.md`.
 
 ```bash
 spechub-bridge status            # both machines' view, including the tasks
@@ -251,9 +275,10 @@ spechub-bridge fix [relay|tunnel|both]
 
 `fix` reports success only once the relay answers on the VM again. The opener
 can accept a restart request while the bridge is still down. That is why `fix`
-waits for the relay itself, rather than trusting the opener's reply. When the
-opener is unreachable too, `spechub-bridge` prints the `VM-SIDE HANDOFF` block
-for you rather than leaving you to write one.
+waits for the relay itself, rather than trusting the opener's reply.
+
+When the opener is unreachable too, `spechub-bridge` prints the
+`VM-SIDE HANDOFF` block for you rather than leaving you to write one.
 
 The opener still does not cover arming. Nothing changes that.
 
@@ -262,5 +287,6 @@ The opener still does not cover arming. Nothing changes that.
 - **No relay on the VM.** The Playwriter extension hard-rejects any
   `/extension` client that is not `127.0.0.1`, so the relay must run
   next to Chrome.
+
 - **No unprompted port scan.** `vm-free-port.sh` scopes itself strictly
   to 19988 and refuses anything ambiguous. Do not generalise it.

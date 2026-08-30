@@ -17,7 +17,7 @@ export const NODE_STATUSES = ['fog', 'open', 'claimed', 'resolved', 'out-of-scop
 export const NODE_MODES = ['hitl', 'afk'] as const;
 // kind is a closed set: a diagram renderer will switch on it to pick a shape,
 // so an unknown value would have no drawing and the legend could not enumerate
-// itself. See docs/adr/0011-node-kind-is-a-closed-set-of-five.md.
+// itself. See docs/adr/0012-node-kind-is-a-closed-set-of-five.md.
 export const NODE_KINDS = ['destination', 'notes', 'decision', 'research', 'work'] as const;
 
 export type NodeStatus = (typeof NODE_STATUSES)[number];

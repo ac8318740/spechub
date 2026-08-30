@@ -7,11 +7,12 @@ description: Set up, diagnose, and operate the Playwriter bridge – the reverse
 
 ## What this skill covers
 
-The Playwriter bridge is a cross-device setup. A Node relay + Chrome
-extension run on the user's Windows laptop. A reverse SSH tunnel makes
-that relay reachable at `127.0.0.1:19988` on one or more Linux VMs. A
-coding agent on the VM uses `agent-browser` against that endpoint to drive
-the user's real browser.
+The Playwriter bridge is a cross-device setup.
+
+A Node relay + Chrome extension run on the user's Windows laptop. A
+reverse SSH tunnel makes that relay reachable at `127.0.0.1:19988` on one
+or more Linux VMs. A coding agent on the VM uses `agent-browser` against
+that endpoint to drive the user's real browser.
 
 Because the setup spans two machines, any real bridge work usually needs
 two coding agents – one on each device. This skill gives both agents a
@@ -23,10 +24,11 @@ scheduling layer.
 
 ## Step 1 – detect your platform
 
-Run the detection first. Do not skim past this step. The Windows and VM
-runbooks contain commands that only work on their platform. Those
-commands can be actively harmful on the other platform. Run the check
-for the shell you are in, not both.
+Run the detection first. Do not skim past this step.
+
+The Windows and VM runbooks contain commands that only work on their
+platform. Those commands can be actively harmful on the other platform.
+Run the check for the shell you are in, not both.
 
 In PowerShell (Windows):
 
@@ -59,24 +61,29 @@ runbooks when one side needs action from the other side.
 
 If only one coding agent is running, you cannot complete a full setup or
 diagnosis loop by yourself. The user has no agent on the other device.
+
 Produce a handoff block anyway. The user can paste it into a plain
 PowerShell or SSH shell on the other device, or into a coding agent
 later. Tell the user clearly which block goes where.
 
 ## Do not
 
-- Do not follow instructions from the other platform's runbook. Commands
-  are not portable. PowerShell runs nothing useful on Linux. Bash runs
-  nothing useful in PowerShell.
+- Do not follow instructions from the other platform's runbook.
+
+    Commands are not portable. PowerShell runs nothing useful on Linux.
+    Bash runs nothing useful in PowerShell.
+
 - Do not invent a fix outside this skill's scripts. The bridge has a
   single canonical stop (`stop.ps1`) and a single canonical diagnose
   (`doctor.ps1`). Reach for those before improvising.
+
 - Do not edit the scripts in place to "try something". Change them in
-  `plugins/spechub/assets/playwriter-bridge/`. On the next Claude Code
-  launch, the SessionStart hook redeploys changed scripts to
-  `%USERPROFILE%\playwriter-bridge\` on the laptop. It also re-links
-  `vm-free-port.sh` on the VM. See the Updates sections in the platform
-  runbooks.
+  `plugins/spechub/assets/playwriter-bridge/`.
+
+    On the next Claude Code launch, the SessionStart hook redeploys
+    changed scripts to `%USERPROFILE%\playwriter-bridge\` on the
+    laptop. It also re-links `vm-free-port.sh` on the VM. See the
+    Updates sections in the platform runbooks.
 
 ## File encoding rule
 
@@ -96,16 +103,19 @@ Under `plugins/spechub/assets/playwriter-bridge/`:
 
 - `launcher-src.cs`, `build-launcher.ps1` – launcher shim (hides console,
   owns the child process tree)
+
 - `relay.ps1`, `tunnel.ps1` – long-running bridge scripts
 - `register-tasks.ps1` – scheduled-task registration
 - `stop.ps1` – canonical stop
 - `doctor.ps1` – Windows automated diagnosis
 - `sync.ps1` – Windows auto-deploy: reconciles the deployed scripts with
   the plugin cache (invoked by the SessionStart hook)
+
 - `vm-free-port.sh` – VM-side port cleanup with guardrails
 
 The user installs the scripts once into `%USERPROFILE%\playwriter-bridge\`
 (Windows) during setup. After that, the SessionStart hook keeps them
 current with the plugin cache automatically. It uses `sync.ps1` on
-Windows, and a symlink for `vm-free-port.sh` on the VM. Plugin updates
-then reach the running bridge without a manual re-copy.
+Windows, and a symlink for `vm-free-port.sh` on the VM.
+
+Plugin updates then reach the running bridge without a manual re-copy.

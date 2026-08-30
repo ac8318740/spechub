@@ -19,11 +19,16 @@
 # appended to a file that already had content, and a file that ended without a
 # newline gains one.
 #
-# It refuses, and writes nothing, in two cases: when the file already holds more
-# than one such block, and when it defines [worktrees] outside the block. Either
-# way there is no edit that leaves a file herdr can still read - TOML rejects a
-# table defined twice - and guessing which copy the user meant to keep would be
-# the wrong kind of helpful.
+# It refuses, and writes nothing, in three cases. Two of them are files that no
+# edit leaves readable: a file holding more than one such block, and a file
+# defining [worktrees] outside the block. TOML rejects a table defined twice,
+# and guessing which copy the user meant to keep would be the wrong kind of
+# helpful. The third is a block this script did not write.
+# assets/terminal-workspace/setup.sh fences a far wider block between these same
+# two markers, holding the keymap and the popup key bindings as well as
+# [worktrees], and replacing that with these four lines would delete all of it.
+# A wider block that already names the wanted directory is left alone and
+# reported as nothing to do.
 #
 # There are two modes and no default. --plan prints what would happen and writes
 # nothing at all; --apply does it. Plan mode cannot write by accident, because
@@ -213,6 +218,44 @@ is_worktrees_table() {
   [ "$s" = "$BLOCK_TABLE" ]
 }
 
+# The block's own lines, markers stripped off.
+block_body() {
+  printf '%s\n' "$BLOCK_FOUND" | sed '1d;$d'
+}
+
+# TOML tables the block defines besides [worktrees], space separated, and empty
+# when it defines none.
+#
+# This script owns the [worktrees] table and nothing else, so a block holding a
+# second table was written by somebody else. That somebody is
+# assets/terminal-workspace/setup.sh, which fences a far wider block - [keys], a
+# [[keys.command]] per binding, and [worktrees] - between these same two
+# markers. Replacing that block with these four lines deletes a keymap, so the
+# shape of the block is what tells the two writers apart.
+foreign_tables() {
+  local line s out=""
+  while IFS= read -r line; do
+    s="${line#"${line%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    case "$s" in
+      \[*\]) ;;
+      *) continue ;;
+    esac
+    is_worktrees_table "$s" && continue
+    case " $out " in *" $s "*) continue ;; esac
+    out="${out:+$out }$s"
+  done <<BODY
+$(block_body)
+BODY
+  printf '%s' "$out"
+}
+
+# Whether the block already carries the exact directory line this script would
+# write. A wider block that already says the right thing needs no edit at all.
+block_sets_wanted_dir() {
+  printf '%s\n' "$BLOCK_FOUND" | grep -qxF -- "$DIR_LINE"
+}
+
 # Line numbers of every whole line equal to $1 in $2, space separated.
 marker_lines() {
   grep -nxF -- "$1" "$2" 2>/dev/null | cut -d: -f1 | tr '\n' ' '
@@ -293,9 +336,21 @@ if [ -f "$CONFIG" ]; then
   fi
 
   if [ "$N_START" -eq 1 ]; then
+    FOREIGN_TABLES="$(foreign_tables)"
     if [ "$BLOCK_FOUND" = "$BLOCK_WANTED" ]; then
       ACTION="none"
       SKIP_REASON="the block is already exactly right"
+    elif [ -n "$FOREIGN_TABLES" ]; then
+      if block_sets_wanted_dir; then
+        ACTION="none"
+        SKIP_REASON="the terminal-workspace block already sets this directory"
+      else
+        err "$CONFIG holds a block between these markers that this script did not write."
+        err "Besides $BLOCK_TABLE that block defines: $FOREIGN_TABLES"
+        err "terminal-workspace setup.sh writes that block, and it carries the keymap and the popup key bindings. Replacing it with the four lines this script writes would delete all of it."
+        err "setup.sh writes $BLOCK_TABLE itself, from herdr.worktrees_directory in ~/.config/spechub/terminal-workspace.yaml."
+        refuse "set the directory there and run terminal-workspace setup.sh apply instead. Nothing has been changed."
+      fi
     else
       ACTION="replace"
     fi

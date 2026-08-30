@@ -41,9 +41,9 @@ For each affected domain:
 
 1. Read `spechub/specs/[domain]/spec.md` (if it exists)
 2. Analyze changes:
-   - New functions/endpoints/components -> ADDED requirements
-   - Modified signatures or behavior -> MODIFIED requirements
-   - Deleted functions/endpoints -> REMOVED requirements
+    - New functions/endpoints/components -> ADDED requirements
+    - Modified signatures or behavior -> MODIFIED requirements
+    - Deleted functions/endpoints -> REMOVED requirements
 
 Write each functional requirement (FR) entry per the `writing` skill.
 
@@ -83,10 +83,13 @@ so, surface it in the report:
 Glossary: 'ticket' may be stale – the diff renames Ticket to WorkItem
 ```
 
-Never edit the glossary. Never block the commit. For specs, the code wins.
-For the glossary, the human wins. The glossary records vocabulary that
-humans agreed on, so only a human decision changes it. This check only
-surfaces the drift.
+Never edit the glossary. Never block the commit.
+
+For specs, the code wins. For the glossary, the human wins. The glossary
+records vocabulary that humans agreed on, so only a human decision changes
+it.
+
+This check only surfaces the drift.
 
 ## Step 6: report
 

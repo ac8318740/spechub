@@ -18,8 +18,9 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 Nodes live behind a pluggable tracker. A backend declares four operations –
 create, read, update, list. SpecHub builds everything else from those four:
-frontier, claim, resolve and walk. Two backends ship, each declared in this
-skill's directory:
+frontier, claim, resolve and walk.
+
+Two backends ship, each declared in this skill's directory:
 
 | Backend | Doc | When |
 | ------- | --- | ---- |
@@ -29,30 +30,36 @@ skill's directory:
 `workflow.maps.tracker` in `spechub/project.yaml` (`github` or `files`) records
 the project's choice. If the key names a backend, read the matching doc and use
 its operations. If the key is absent, pick at materialisation time – the moment
-you first write the map's nodes down. Recommend `github` when the repo
-qualifies, `files` otherwise. Confirm the choice with the user. Then write the
-key, so later sessions need not re-decide.
+you first write the map's nodes down.
+
+Recommend `github` when the repo qualifies, `files` otherwise. Confirm the
+choice with the user. Then write the key, so later sessions need not re-decide.
 
 ## Which mode
 
 One command runs two modes, and what already exists picks between them. Check
 the configured tracker for existing maps – `ls spechub/maps/` on the files
-backend, `gh label list --search "map:" --json name` on GitHub. If `$ARGUMENTS`
-names a map, or exactly one exists, work its frontier – the nodes ready to work
-now. If none exists, chart. If several exist
-and `$ARGUMENTS` does not pick one, ask.
+backend, `gh label list --search "map:" --json name` on GitHub.
 
-There are no tiers and no complexity judgement. One question is a small map or
-no map at all. Fifty questions is a long effort. Nothing declares which.
+If `$ARGUMENTS` names a map, or exactly one exists, work its frontier – the
+nodes ready to work now. If none exists, chart. If several exist and
+`$ARGUMENTS` does not pick one, ask.
+
+There are no tiers and no complexity judgement.
+
+One question is a small map or no map at all. Fifty questions is a long
+effort. Nothing declares which.
 
 ## Charting
 
 1. **Fix the destination first.** Grill for what done looks like (invoke the
    `grilling` skill). The destination is the root of everything that follows –
    settle it before any other question.
+
 2. **Open with a breadth-first grill.** Work the conversation frontier in
    rounds per the grilling skill. Explore the codebase for facts as you go –
    facts are your job, never the user's.
+
 3. **Apply the fog test to what surfaced.** A question you can state precisely
    now is `open`. One you cannot state is `fog` – record it without forcing it
    sharp. The test is whether you can *state* the question precisely, not
@@ -64,8 +71,10 @@ The machinery appears only when it has to persist. After the opening grill:
 
 - **No fog surfaced** – the way was already clear. No map. Say so and proceed
   to the work.
+
 - **At most one session's worth** – settle it in conversation. Invoke
   `record-context` on each decision. No map – there is nothing to resume.
+
 - **More than one session's worth** – materialise the map and work the
   frontier across sessions.
 
@@ -88,32 +97,42 @@ operation. First the root:
   session, so every session orients to the root. On GitHub it also carries
   the `root-node` label, which is how a query finds the entry point without
   walking parent links.
+
 - On GitHub, every node body opens with a header line declaring its map, its
   root, its `answers` parent, its `blocked-by` ids, and its short `label`.
   `trackers/github.md` holds the format. It is the authoritative edge
   encoding there, so one `list` call returns the whole graph. The files
   backend writes no header, because frontmatter already holds `answers` and
   `blocked-by`, and the directory name is the map.
+
 - Every node carries a `kind` and a `label`, both required. `kind` is one of
   `destination`, `notes`, `decision`, `research`, or `work`. A `label` is the
   node's short name for a diagram. `trackers/files.md` holds the caps and the
   contract the CLI enforces.
+
 - Standing preferences for the effort become one resolved node. Style rules
   and constraints the grill surfaced go there. Create it with
   `--answers <root id> --kind notes --label "<at most four words>" --pinned`.
+
 - Every other surfaced question becomes a node. Give it `open` or `fog` per
-  the fog test. Pass `--answers <id>` to name the node whose resolution
-  surfaced it. That link is the node's provenance, the trail back to the root.
-  Pass `--blocked-by` only where you genuinely cannot settle one node before
-  another.
+  the fog test.
+
+    Pass `--answers <id>` to name the node whose resolution surfaced it. That
+    link is the node's provenance, the trail back to the root. Pass
+    `--blocked-by` only where you genuinely cannot settle one node before
+    another.
+
 - `mode` defaults to `hitl` – human in the loop, meaning a person answers it.
-  A node earns `afk` – away from keyboard, meaning an agent settles it alone –
-  only by containing no decision. Research earns it, and so does work whose
-  questions are all settled. Get this wrong and an agent quietly decides
-  something that was the human's.
+
+    A node earns `afk` – away from keyboard, meaning an agent settles it alone
+    – only by containing no decision. Research earns it, and so does work
+    whose questions are all settled. Get this wrong and an agent quietly
+    decides something that was the human's.
+
 - Write every title and body per the `writing` skill.
 - Nodes describe behaviour, not file paths. A node can sit on the frontier for
   weeks while the codebase moves – you resolve the paths at claim time.
+
 - On the files backend, suggest adding `spechub/maps/` to `.gitignore`. Nodes
   are transient working state – scratch you throw away once the map clears,
   like `spechub/HANDOFF.md`. The durable output is specs, architecture decision
@@ -124,28 +143,33 @@ operation. First the root:
 All commands below are the files backend's shape – on GitHub, compose the
 same queries per `trackers/github.md`.
 
-1. **Orient.** The packaging walk (`spechub node walk --map <name>`) – the
-   root and pinned nodes in full, everything else gisted, meaning title and
-   status only. Zoom in with `node read <id>` – read the whole body – when a
-   gist turns out to be relevant. Do not load every body. Also check
-   `node list --map <name> --status claimed`. A claim marks a node someone is
-   working, so a dead session's claim hides it from the frontier forever. If a
-   claim exists and you know of no session working it, ask the user and release
-   it (`--status open`).
+1. **Orient.** The packaging walk (`spechub node walk --map <name>`) – the root
+   and pinned nodes in full, everything else gisted, meaning title and status
+   only. Zoom in with `node read <id>` – read the whole body – when a gist
+   turns out to be relevant. Do not load every body.
+
+    Also check `node list --map <name> --status claimed`. A claim marks a node
+    someone is working, so a dead session's claim hides it from the frontier
+    forever. If a claim exists and you know of no session working it, ask the
+    user and release it (`--status open`).
+
 2. **Query the frontier.** `spechub node frontier --map <name>` – open nodes
    with no unresolved blockers, shallowest provenance depth first, number
    only as a tiebreak. Provenance depth is how many `answers` links separate
    a node from the root, so the broadest questions come first.
+
 3. **Route by `mode` – the only field the machine routes on** (`kind` picks
    the node's diagram shape, never its route):
-   - `hitl` nodes: run grilling rounds over them. A round is the whole hitl
+    - `hitl` nodes: run grilling rounds over them. A round is the whole hitl
      frontier.
-   - `afk` nodes: claim and run without the user. Unlimited, and in parallel
+    - `afk` nodes: claim and run without the user. Unlimited, and in parallel
      when independent. Research goes to `Explore` subagents, with the findings
-     written into the resolution. Implementation work follows
-     `/spechub:implement`'s procedure – it owns the claim-execute-resolve
-     flow, the explorer dispatch, and the TDD pipeline. Do not restate that
-     flow here. Invoke it.
+     written into the resolution.
+
+     Implementation work follows `/spechub:implement`'s procedure – it owns
+     the claim-execute-resolve flow, the explorer dispatch, and the TDD
+     pipeline. Do not restate that flow here. Invoke it.
+
 4. **Claim, then resolve** – `afk` nodes only. A `hitl` resolution happens
    inside the grilling round, with no claim step. Both are compositions over
    `update`:
@@ -161,10 +185,12 @@ same queries per `trackers/github.md`.
    The pipeline's state lives inside the claim, not on the node – there is no
    phase field to maintain. If the work stalls or fails, release the claim
    (`--status open`) and the node is plainly open again.
+
 5. **After every resolution**: invoke `record-context`, create nodes for
    anything the resolution surfaced, then recompute the frontier. A shallow
    node arriving late jumps the queue – that is correct, something big just
    opened up.
+
 6. **Graduate fog as it sharpens.** When you can state a fog node precisely,
    run `update <id> --status open` – one field, one write. Rewrite the title
    and body to the sharp statement if they drifted.
@@ -178,8 +204,9 @@ no question above it.
 The map clears when the frontier is empty and no fog remains. The durable
 residue is what the map leaves behind – the living specs through commit-time
 sync, the ADRs and glossary entries through `record-context`. You have already
-extracted it along the way. Report what the map settled. Point at anything the
-map left `out-of-scope`.
+extracted it along the way.
+
+Report what the map settled. Point at anything the map left `out-of-scope`.
 
 Then invoke `archive` to close the map out. It re-checks the gate itself and
 refuses if anything is still open, verifies the residue actually landed, and

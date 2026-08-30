@@ -33,9 +33,11 @@ operations – files backend shown below).
 
 These are the workable nodes: open, unblocked, and containing no decision.
 Pull them regardless of depth – work can hang anywhere, including straight
-off the root. If the frontier holds only `hitl` nodes – human in the loop,
-meaning a person must answer them – stop and point the user at
-`/spechub:map`. Those need a human, not a pipeline.
+off the root.
+
+If the frontier holds only `hitl` nodes – human in the loop, meaning a
+person must answer them – stop and point the user at `/spechub:map`. Those
+need a human, not a pipeline.
 
 **No map**: the request in `$ARGUMENTS` is the work item. Same discipline,
 no tracker writes. This is the whole quick path – a small change is just a
@@ -60,16 +62,21 @@ With a map, orient once per session before claiming:
 ```
 
 The walk prints the map in one pass: the root and pinned nodes in full,
-everything else as a one-line gist. The root holds the destination. Pinned
-nodes hold standing preferences – style rules and constraints that apply to
-the whole effort. The resolved chain above a work node – the already-answered
-questions it hangs off, followed up to the root – carries its why. Read that
-chain before touching code.
+everything else as a one-line gist.
+
+The root holds the destination. Pinned nodes hold standing preferences –
+style rules and constraints that apply to the whole effort.
+
+The resolved chain above a work node – the already-answered questions it
+hangs off, followed up to the root – carries its why. Read that chain before
+touching code.
 
 Also check `node list --map <name> --status claimed`. A claim marks a node
 as work in progress. One left behind by a dead session hides its node from
-the frontier forever. If a claim exists and you know of no other session
-working it, ask the user and release it (`--status open`).
+the frontier forever.
+
+If a claim exists and you know of no other session working it, ask the
+user and release it (`--status open`).
 
 Claim each node as you start it:
 
@@ -77,10 +84,11 @@ Claim each node as you start it:
 ~/.claude/spechub/bin/spechub node update <id> --map <name> --status claimed
 ```
 
-Nodes describe behaviour, not paths. **Resolve paths at claim time**. Before
-any code change, dispatch parallel explorer subagents over the relevant code.
-Use as many as there are distinct places to look, not a fixed count. Act on
-what they find.
+Nodes describe behaviour, not paths. **Resolve paths at claim time**.
+
+Before any code change, dispatch parallel explorer subagents over the
+relevant code. Use as many as there are distinct places to look, not a fixed
+count. Act on what they find.
 
 ### 5. Execute within the claim
 
@@ -91,31 +99,40 @@ completion:
 1. **test-writer subagent** – tests from the node's behaviour description.
    Under strict they must all fail before step 2 runs. Skip step 1 for pure
    config or setup work with no testable behaviour.
+
 2. **task-executor subagent** – make the tests pass. Executor CANNOT modify
    test files.
+
 3. **Format** – run `commands.format` over the files the work touched. A
-   `null` value means this project has no format step. Report a non-zero
-   exit. It never counts as a failed implementation.
+   `null` value means this project has no format step.
+
+    Report a non-zero exit. It never counts as a failed implementation.
+
 4. **task-checker subagent** – verify tests pass, full suite passes, and
    test count >= baseline. Also check the mock audit, TDD isolation,
    integration wired, and frontend visual verification (if applicable).
 
 `workflow.tdd.strict: false`, relaxed TDD, runs step 2 before step 1. It
 skips nothing. Relaxed TDD means nobody writes the tests first, and all
-three subagents still run. The format step stays immediately before the
-checker, so under relaxed it formats the new tests as well.
+three subagents still run.
+
+The format step stays immediately before the checker, so under relaxed
+it formats the new tests as well.
 
 Relaxed costs the test-writer some of its independence, and you state that
 cost rather than hide it. The implementation already sits in the working
 tree when the test-writer runs. Tell it to write the tests from the node's
-requirements, and to leave the implementation unread. Under strict there is
-no implementation for it to read, which is the stronger guarantee.
+requirements, and to leave the implementation unread.
+
+Under strict there is no implementation for it to read, which is the
+stronger guarantee.
 
 The checker's gate moves with the setting. Under `true` the new tests failed
-before the executor and pass after it. Under `false` nothing can show them
-failing without the implementation. The checker then holds the new tests to
-existing and passing. It holds the full suite to passing, and the test count
-to not dropping.
+before the executor and pass after it.
+
+Under `false` nothing can show them failing without the implementation. The
+checker then holds the new tests to existing and passing. It holds the full
+suite to passing, and the test count to not dropping.
 
 If the checker fails, route back to the executor with the feedback. If the
 work stalls or the session must stop mid-node, release the claim
@@ -145,6 +162,7 @@ decision landed. With a map, then:
 - Invoke `record-context` – implementation decisions can earn ADRs too.
 - Create nodes for anything the work surfaced (a question found mid-build is
   `hitl`, `--answers <this node>`).
+
 - Recompute the frontier – resolutions unblock nodes.
 
 ### 7. Build verification
@@ -155,24 +173,30 @@ pass before claiming the next node.
 
 ### 8. Completion
 
-Stop when the afk frontier is empty, or when only `hitl` nodes remain
-(hand those to `/spechub:map`). With no map, stop when the checker passes and
-Step 7 verification is green. Report: nodes resolved, tests passing, lines
-added/removed. Remind the user: `/spechub:commit` to commit – spec sync
-extracts the durable record from the diff.
+Stop when the afk frontier is empty, or when only `hitl` nodes remain (hand
+those to `/spechub:map`). With no map, stop when the checker passes and Step
+7 verification is green.
+
+Report: nodes resolved, tests passing, lines added/removed. Remind the user:
+`/spechub:commit` to commit – spec sync extracts the durable record from the
+diff.
 
 ## Key rules
 
 - **TDD pipeline is mandatory** – test-writer -> task-executor ->
   task-checker. Only pure config work skips the test-writer.
   `workflow.tdd.strict: false` reorders the first two and skips neither.
+
 - **Executors CANNOT modify test files** – if tests are wrong, report it.
 - **The tracker is the progress record** – claim on start, resolve on pass,
   release on stall. No checkbox files, no phase fields.
+
 - **Explore before writing** – parallel explorer subagents over the relevant
   code, sized to the node, before any edit.
+
 - **Resume is a query** – picking up where you left off means asking the
   tracker what is workable now, not reconstructing history. A fresh session
   runs the frontier query and continues. Never re-read an effort end to end
   to find where it stopped.
+
 - **Do NOT commit or push** – the user manages git via `/spechub:commit`.

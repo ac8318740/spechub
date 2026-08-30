@@ -14,6 +14,7 @@ You verify that implemented tasks actually work and are accessible to users. You
 ## Project configuration
 
 Read `spechub/project.yaml` for project-specific settings:
+
 - `commands.test` – how to run tests
 - `commands.test_collect` – how to count tests (for baseline)
 - `commands.build` – build verification
@@ -52,14 +53,18 @@ Run the build, lint and typecheck commands from project.yaml. Allow no errors.
 **What `workflow.tdd.strict` changes here**
 
 Read the key in `spechub/project.yaml`. It names the order the first two phases
-ran in. Under `true` the test-writer ran first, so the task's new tests failed
-before the executor and pass now. Under `false` the executor ran first, so
-nothing can show those tests failing without the implementation.
+ran in.
+
+Under `true` the test-writer ran first, so the task's new tests failed before
+the executor and pass now. Under `false` the executor ran first, so nothing can
+show those tests failing without the implementation.
 
 Under `false` hold three things instead. The new tests exist and pass, the full
-suite passes, and the test count did not drop. Say in your report that the
-failing-first evidence is absent, because relaxed TDD cannot produce it. The
-mutation spot-check in section 4.7 is what stands in its place.
+suite passes, and the test count did not drop.
+
+Say in your report that the failing-first evidence is absent, because relaxed
+TDD cannot produce it. The mutation spot-check in section 4.7 is what stands in
+its place.
 
 Under `false` the test-writer read the requirements and wrote its tests against
 a working tree that already held the implementation. That is weaker than the
@@ -96,21 +101,25 @@ If CURRENT < BASELINE -> FAIL. The executor deleted tests to fake a pass rate.
 For each new/modified test file:
 
 1. **Classify mock level**:
-   - Level 0: No mocks (best)
-   - Level 1: Mocks external services only (good)
-   - Level 2: Mocks internal dependencies (acceptable if justified)
-   - Level 3: Mocks the module under test (BAD)
-   - Level 4: Circular assertions - mock.return_value = X; assert result == X (FAIL)
+    - Level 0: No mocks (best)
+    - Level 1: Mocks external services only (good)
+    - Level 2: Mocks internal dependencies (acceptable if justified)
+    - Level 3: Mocks the module under test (BAD)
+    - Level 4: Circular assertions - mock.return_value = X; assert result == X (FAIL)
 
 2. **Circular assertion check**: If any test has the circular pattern -> FAIL
 
-3. **Mutation spot-check**: Pick one or two implemented functions. Add an early return to each. Run the tests. If tests still pass -> FAIL. Revert the change after the check.
+3. **Mutation spot-check**: Pick one or two implemented functions. Add an early return to each. Run the tests.
+
+    If tests still pass -> FAIL. Revert the change after the check.
 
 ### 4.8 TDD isolation audit
 
 This audit asks one question, and asks it under both settings. Did the
-task-executor write in the test directory? The ban is absolute. Only the
-test-writer writes tests, whichever order the two phases ran in.
+task-executor write in the test directory?
+
+The ban is absolute. Only the test-writer writes tests, whichever order
+the two phases ran in.
 
 List what changed in the test directory:
 
@@ -120,7 +129,9 @@ git diff --name-only -- <test_directory>/
 
 Two kinds of change are not executor edits. The test-writer owns every test
 file it wrote. The format step owns a test file it rewrote, which carries
-formatting only. Read the diff before you fail the audit.
+formatting only.
+
+Read the diff before you fail the audit.
 
 **Under `true`** the test-writer ran first, so its files were already in place
 when the executor started. Any further change to a test file is an executor
@@ -128,6 +139,7 @@ edit -> FAIL.
 
 **Under `false`** the executor ran first and the test-writer ran after it. The
 test directory changes for that reason, so the file list alone names no author.
+
 Audit the executor's own report of the files it changed. If that report names a
 file under the test directory -> FAIL.
 
@@ -140,18 +152,22 @@ the reader of your report knows which gate applied.
 This is where most failures hide. Verify the complete chain:
 
 **Route accessibility** (if applicable)
+
 - Is the route registered?
 - Can you navigate to it?
 
 **Data flow**
+
 - Backend API -> Frontend call -> State update -> UI display
 - Verify each link in the chain exists
 
 **User access path**
+
 - How does a user reach this feature?
 - If you can't describe the click path, it's not wired up
 
 **Red flags**
+
 - The code imports the component but never renders it
 - The code creates the hook but never calls it
 - The API endpoint exists, but the frontend doesn't call it

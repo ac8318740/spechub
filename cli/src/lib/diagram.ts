@@ -3,7 +3,7 @@
 // and the github backend hands it `gh issue list --json ...` through the adapter
 // in github-issues.ts, which this module deliberately does not import. The
 // renderer stays a pure function of its input, so its tests are fixtures with no
-// subprocess and no auth. See docs/adr/0012-the-diagram-renderer-is-pure.md.
+// subprocess and no auth. See docs/adr/0013-the-diagram-renderer-is-pure.md.
 //
 // Four channels carry the four fields a reader wants at a glance: shape is
 // kind, fill is status, a dark dashed border is an unresolved hitl node, and a

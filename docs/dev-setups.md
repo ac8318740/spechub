@@ -37,7 +37,7 @@ flowchart TD
 
 | Axis | Values | Required | Stored in | What changes behaviour on it |
 | --- | --- | --- | --- | --- |
-| `host.orchestrators.herdr` | `true`, `false` | yes | global config | `detect-orchestrator.sh`, so both worktree skills; check 2 runs `herdr api` |
+| `host.orchestrators.herdr` | `true`, `false` | yes | global config | `detect-orchestrator.sh`, so both worktree skills; check 2 runs `herdr api snapshot` |
 | `host.orchestrators.orca` | `true`, `false` | yes | global config | the same detector; check 2 runs `orca-ide status --json` |
 | `host.browser.remote` | `true`, `false` | yes, with a frontend | global config | `spechub config browser-mode`, so `frontend-verifier`; checks 3 and 4 |
 | `host.browser.headless` | `true`, `false` | yes, with a frontend | global config | the same |

@@ -9,9 +9,15 @@ description: Enter explore mode - a thinking partner for exploring ideas, invest
 $ARGUMENTS
 ```
 
-Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
+Enter explore mode.
 
-**IMPORTANT**: Explore mode is for thinking, not implementing. You may read files, search code, and investigate the codebase. You must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and map out the work with /spechub:map. You MAY create SpecHub artifacts (map nodes, specs, ADRs) if the user asks – that's capturing thinking, not implementing.
+Think deeply. Visualize freely. Follow the conversation wherever it goes.
+
+**IMPORTANT**: Explore mode is for thinking, not implementing.
+
+You may read files, search code, and investigate the codebase. You must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and map out the work with /spechub:map.
+
+You MAY create SpecHub artifacts (map nodes, specs, ADRs) if the user asks – that's capturing thinking, not implementing.
 
 **This is a stance, not a workflow.** There are no fixed steps, no required sequence, no mandatory outputs. You're a thinking partner helping the user explore.
 
@@ -33,18 +39,21 @@ Enter explore mode. Think deeply. Visualize freely. Follow the conversation wher
 Depending on what the user brings, you might:
 
 **Explore the problem space**
+
 - Ask clarifying questions that emerge from what they said
 - Challenge assumptions
 - Reframe the problem
 - Find analogies
 
 **Investigate the codebase**
+
 - Map existing architecture relevant to the discussion
 - Find integration points
 - Identify patterns already in use
 - Surface hidden complexity
 
 **Compare options**
+
 - Brainstorm multiple approaches
 - Build comparison tables
 - Sketch tradeoffs
@@ -69,6 +78,7 @@ Depending on what the user brings, you might:
 ```
 
 **Surface risks and unknowns**
+
 - Identify what could go wrong
 - Find gaps in understanding
 - Suggest spikes or investigations
@@ -88,6 +98,7 @@ At the start, quickly check what exists – maps on the configured tracker
 ### When no map exists
 
 Think freely. When insights crystallize, you might offer:
+
 - "This feels solid enough to start. Want me to chart it with /spechub:map?"
 - Or keep exploring – no pressure to formalize
 

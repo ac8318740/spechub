@@ -2,7 +2,7 @@
 # SpecHub terminal workspace setup.
 #   setup.sh status     what is installed and enabled
 #   setup.sh apply      install and configure everything enabled in the config
-#   setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|tuicr>
+#   setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|neovim|tuicr>
 #   setup.sh uninstall  remove every managed block, keep the binaries
 #
 # Idempotent. Only ever edits between managed markers, so hand-written config
@@ -19,6 +19,10 @@ BIN="${SPECHUB_TW_BIN:-$HOME/.local/bin}"
 PATH="$BIN:$HOME/.local/bin:$PATH"
 HERDR_CFG="$HOME/.config/herdr/config.toml"
 GHDASH_CFG="$HOME/.config/gh-dash/config.yml"
+# LazyVim loads every file under lua/plugins, so a file of our own is a
+# complete plugin spec. Nothing of the user's is edited to install it.
+NVIM_PLUGIN="$HOME/.config/nvim/lua/plugins/spechub.lua"
+NVIM_MARK="Written by spechub terminal-workspace"
 BEGIN="# >>> spechub terminal-workspace >>>"
 END="# <<< spechub terminal-workspace <<<"
 ACTION="${1:-status}"
@@ -1766,7 +1770,7 @@ apply_herdr() {
   have herdr || { say "herdr not installed, skipping keymap"; return 0; }
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
   local mod wt diffkey dashkey filekey filetabkey difftabkey dashtabkey
-  local pickkey picktabkey gitkey gittabkey
+  local pickkey picktabkey gitkey gittabkey scrollbars
   mod=$(cfg_get herdr.chord_modifier alt)
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
   # f, not d: Windows Terminal keeps alt+shift+d for "duplicate pane", so the
@@ -1781,17 +1785,23 @@ apply_herdr() {
   picktabkey=$(cfg_get diffnav.pick_tab_key "alt+shift+x")
   gitkey=$(cfg_get lazygit.popup_key "alt+g")
   gittabkey=$(cfg_get lazygit.tab_key "alt+shift+g")
+  # herdr counts the scrollbar column inside the pane rect but reports the
+  # full rect width to the program running in the pane. A full-screen app then
+  # writes one column more than it has, so every wrapped row starts a column
+  # left of the row above it. Turning the scrollbar off gives the column back.
+  scrollbars=$(cfg_get herdr.pane_scrollbars false)
   [ "$(cfg_get diffnav.enabled true)" = "true" ] \
     || { diffkey=""; difftabkey=""; pickkey=""; picktabkey=""; }
   [ "$(cfg_get gh_dash.enabled true)" = "true" ] || { dashkey=""; dashtabkey=""; }
   [ "$(cfg_get yazi.enabled true)"    = "true" ] || { filekey=""; filetabkey=""; }
   [ "$(cfg_get lazygit.enabled true)" = "true" ] || { gitkey=""; gittabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$scrollbars|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
 (mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey,
- pickkey, picktabkey, gitkey, gittabkey, begin, end) = os.environ["SPECHUB_ARGS"].split("|")
+ pickkey, picktabkey, gitkey, gittabkey, scrollbars,
+ begin, end) = os.environ["SPECHUB_ARGS"].split("|")
 
 # key, command, description, herdr custom-command type, popup size.
 # type "shell" takes no size: herdr rejects width/height on a non-popup.
@@ -1865,13 +1875,39 @@ if mod != "none":
 # workspace numbers.
 keys.append('switch_workspace = "prefix+1..9"')
 
+# The first and only [ui] setting this script manages. See the comment on
+# `scrollbars` above for what the scrollbar column costs.
+ui = ["pane_scrollbars = " + ("true" if scrollbars == "true" else "false")]
+
 # TOML forbids a duplicate key, so a hand-written keymap that already sets
 # something this script manages would make the merged file unparseable and
 # herdr would reject the lot. Drop our own keys from the user's [keys] table,
 # and any [[keys.command]] bound to a key we are about to claim, before
 # inserting. Anything we do not manage is left exactly as it was.
 managed = {k.split("=", 1)[0].strip() for k in keys if "=" in k}
+managed_ui = {k.split("=", 1)[0].strip() for k in ui if "=" in k}
 claimed = {key for key, *_ in CUSTOM if key}
+
+
+def strip_managed(table, names):
+    # Drop the settings this script manages, and the comment block that
+    # introduced each one. Removing the setting alone strands its comment: the
+    # user is left with a run of bare headings describing settings that are no
+    # longer there, which reads as a broken config.
+    out, pending = [], []
+    for ln in table:
+        stripped = ln.strip()
+        if stripped.startswith("#") or not stripped:
+            pending.append(ln)
+            continue
+        if "=" in ln and ln.split("=", 1)[0].strip() in names:
+            pending = []
+            continue
+        out.extend(pending)
+        pending = []
+        out.append(ln)
+    out.extend(pending)
+    return out
 
 
 def tables(lines):
@@ -1897,47 +1933,39 @@ for table in tables(text.splitlines()):
         if bound and bound.group(1) in claimed:
             continue
     if header == "[keys]":
-        # Drop the bindings this script manages, and the comment block that
-        # introduced each one. Removing the binding alone strands its comment:
-        # the user is left with a run of bare headings describing keys that are
-        # no longer there, which reads as a broken config.
-        out, pending = [], []
-        for ln in table:
-            stripped = ln.strip()
-            if stripped.startswith("#") or not stripped:
-                pending.append(ln)
-                continue
-            if "=" in ln and ln.split("=", 1)[0].strip() in managed:
-                pending = []
-                continue
-            out.extend(pending)
-            pending = []
-            out.append(ln)
-        out.extend(pending)
-        table = out
+        table = strip_managed(table, managed)
+    if header == "[ui]":
+        table = strip_managed(table, managed_ui)
     kept.extend(table)
 text = "\n".join(kept)
 if text and not text.endswith("\n"):
     text += "\n"
 
-block = [begin]
-if keys:
-    # Merge into an existing [keys] table rather than declaring a second one.
-    if re.search(r"^\[keys\]", text, flags=re.M):
-        insert = "\n".join(keys)
-        text = re.sub(r"^\[keys\]\n", "[keys]\n" + begin + "\n" + insert + "\n" + end + "\n",
-                      text, count=1, flags=re.M)
-        block = None
-    else:
-        block.append("[keys]")
-        block.extend(keys)
+def merge(text, header, lines):
+    # Merge into a table the user already declared rather than declaring a
+    # second one, because TOML forbids declaring the same table twice. Returns
+    # the text and whether the merge happened.
+    head = r"^\[" + header + r"\][ \t]*\n"
+    if not re.search(head, text, flags=re.M):
+        return text, False
+    region = begin + "\n" + "\n".join(lines) + "\n" + end
+    return re.sub(head, f"[{header}]\n" + region + "\n",
+                  text, count=1, flags=re.M), True
 
-if block is not None:
-    block += custom_blocks() + ["", "[worktrees]", f'directory = "{wt}"', end]
-    text = text.rstrip("\n") + "\n\n" + "\n".join(block) + "\n"
-else:
-    tail = [begin] + custom_blocks() + ["", "[worktrees]", f'directory = "{wt}"', end]
-    text = text.rstrip("\n") + "\n\n" + "\n".join(tail) + "\n"
+
+block = []
+for header, lines in (("keys", keys), ("ui", ui)):
+    text, merged = merge(text, header, lines)
+    if merged:
+        continue
+    if block:
+        block.append("")
+    block += [f"[{header}]"] + lines
+
+# [[keys.command]] and [worktrees] are top-level, so they can never sit inside
+# a merged region and always land in a block of their own at the end.
+block += custom_blocks() + ["", "[worktrees]", f'directory = "{wt}"']
+text = text.rstrip("\n") + "\n\n" + "\n".join([begin] + block + [end]) + "\n"
 
 open(path, "w").write(text)
 PY
@@ -2422,6 +2450,57 @@ apply_markdown() {
   have chafa || say "optional: apt install chafa, to draw images as text"
 }
 
+# The plugin file's name is ours by convention alone, and the directory around
+# it is the user's. A file of that name this script did not write is theirs,
+# so apply must not overwrite it and disable must not delete it. It says so
+# where it refuses, so both paths report it the same way.
+nvim_ours() {
+  [ ! -e "$NVIM_PLUGIN" ] && return 0
+  grep -q "$NVIM_MARK" "$NVIM_PLUGIN" 2>/dev/null && return 0
+  say "neovim: $NVIM_PLUGIN was written by hand, left alone"
+  return 1
+}
+
+apply_neovim() {
+  # The one component that is off unless asked for. Every other one writes
+  # files this setup owns end to end, or a marked region inside a config that
+  # invites one. A neovim config is neither: the user built it, so this waits.
+  [ "$(cfg_get neovim.enabled false)" = "true" ] || return 0
+  # The override appends to LazyVim's own lualine section, so it means nothing
+  # on a neovim config that is not LazyVim. Two markers, because a LazyVim
+  # config that has never been opened has downloaded no plugins yet.
+  if ! grep -q LazyVim "$HOME/.config/nvim/lua/config/lazy.lua" 2>/dev/null \
+     && [ ! -d "$HOME/.local/share/nvim/lazy/LazyVim" ]; then
+    say "neovim: no LazyVim config on this machine, unsaved dot not written"
+    return 0
+  fi
+  nvim_ours || return 0
+  local dot; dot="$(cfg_get neovim.unsaved_dot_color '#f38ba8')"
+  mkdir -p "$(dirname "$NVIM_PLUGIN")"
+  cat > "$NVIM_PLUGIN" <<H
+-- $NVIM_MARK. Remove it with: setup.sh disable neovim
+--
+-- LazyVim marks an unsaved buffer by recolouring the filename and nothing
+-- else, because its pretty_path component sets modified_sign = "". A glance
+-- at the statusline then cannot tell a saved buffer from an unsaved one.
+-- This appends a dot to the same section, which can.
+return {
+  {
+    "nvim-lualine/lualine.nvim",
+    opts = function(_, opts)
+      table.insert(opts.sections.lualine_c, {
+        function()
+          return vim.bo.modified and "●" or ""
+        end,
+        color = { fg = "$dot" },
+      })
+    end,
+  },
+}
+H
+  say "neovim: unsaved-changes dot written to $NVIM_PLUGIN"
+}
+
 apply_delta() {
   have delta || { say "delta not installed, skipping git pager"; return 0; }
   [ "$(cfg_get delta.set_git_pager true)" = "true" ] || { say "delta: git pager left alone"; return 0; }
@@ -2557,12 +2636,18 @@ PY
 case "$ACTION" in
   status)
     echo "config: $CFG $([ -f "$CFG" ] && echo '(found)' || echo '(missing, using defaults)')"
-    for t in herdr delta diffnav fzf lazygit tuicr yazi glow mermaid-ascii gh; do
+    for t in herdr delta diffnav fzf lazygit tuicr yazi glow mermaid-ascii gh nvim; do
+      d=true
       case "$t" in
-        gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; fzf) k=diffnav ;; *) k="$t" ;;
+        gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; fzf) k=diffnav ;;
+        # neovim is the one component that defaults to off, so reading it with
+        # the default every other one takes would report it enabled when the
+        # config says nothing.
+        nvim) k=neovim; d=false ;;
+        *) k="$t" ;;
       esac
       printf '  %-13s %-14s enabled=%s\n' "$t" "$(have "$t" && echo installed || echo 'not installed')" \
-        "$(cfg_get "$k.enabled" true)"
+        "$(cfg_get "$k.enabled" "$d")"
     done
     grep -q "$BEGIN" "$HERDR_CFG" 2>/dev/null && say "herdr managed block: present" || say "herdr managed block: absent"
     echo
@@ -2629,6 +2714,7 @@ case "$ACTION" in
     [ "$(cfg_get tuicr.enabled true)"   = "true" ] && apply_tuicr
     apply_yazi
     apply_markdown
+    apply_neovim
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr
     [ "$(cfg_get herdr.enabled true)"   = "true" ] && apply_herdr_numbers
     [ "$(cfg_get delta.enabled true)"   = "true" ] && apply_delta
@@ -2637,7 +2723,7 @@ case "$ACTION" in
     echo "done. open a herdr session and press prefix+? to see the keymap"
     ;;
   disable)
-    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|tuicr>"
+    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|neovim|tuicr>"
     comp="${2:?$DISABLE_USAGE}"
     case "$comp" in
       delta) for k in core.pager interactive.diffFilter delta.navigate delta.line-numbers; do
@@ -2655,6 +2741,14 @@ if os.path.isfile(p):
 PY
         say "managed block removed from herdr config"
         say "now set herdr.enabled: false in $CFG so apply does not restore it" ;;
+      neovim)
+        # A whole file of ours, so turning it off is a deletion. Anything the
+        # user wrote by hand under that name is theirs and stays.
+        if nvim_ours; then
+          rm -f "$NVIM_PLUGIN"
+          say "neovim plugin file removed"
+        fi
+        say "now set neovim.enabled: false in $CFG so apply does not restore it" ;;
       diffnav|gh_dash|lazygit|tuicr)
         # Only this component's popup goes away. Rebuild the managed block so
         # the rest of the keymap survives.
@@ -2679,7 +2773,7 @@ PY
     esac
     ;;
   uninstall)
-    "$0" disable herdr; "$0" disable delta
+    "$0" disable herdr; "$0" disable delta; "$0" disable neovim
     # By prefix, which is why helpers are named spechub-*: anything this
     # script ever wrote goes, including helpers retired in an older version.
     herdr plugin unlink spechub.herdr-numbers >/dev/null 2>&1 || true

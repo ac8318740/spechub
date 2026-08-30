@@ -1,6 +1,8 @@
 # Handoff acknowledgement is a CLI command, not a reply
 
-/spechub:handoff hands work to another agent and asks it to reply ACCEPT or DECLINE. The sender's watcher, `spechub handoff watch` (`cli/src/lib/ackwatch.ts`), grepped the receiver's transcript for that keyword, a convention an agent can drift from. The receiver now acknowledges by running `spechub handoff ack accept|decline --file <handoff-file> "<reason>"`. That command writes a sidecar `<handoff-file>.ack` file, which the watcher polls instead of the transcript.
+/spechub:handoff hands work to another agent and asks it to reply ACCEPT or DECLINE. The sender's watcher, `spechub handoff watch` (`cli/src/lib/ackwatch.ts`), grepped the receiver's transcript for that keyword, a convention an agent can drift from.
+
+The receiver now acknowledges by running `spechub handoff ack accept|decline --file <handoff-file> "<reason>"`. That command writes a sidecar `<handoff-file>.ack` file, which the watcher polls instead of the transcript.
 
 ## Considered options
 

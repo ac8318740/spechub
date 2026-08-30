@@ -17326,9 +17326,12 @@ var init_host_status = __esm({
       orca: "host.orchestrators.orca"
     };
     ORCHESTRATOR_PROBES = {
-      // `herdr api` fails outright when no server is behind it, so its exit status
-      // is the whole answer and there is nothing to read in what it printed.
-      herdr: { binaries: ["herdr"], args: ["api"], answered: () => true },
+      // `herdr api snapshot` reads live state off the server's socket, so it fails
+      // outright when no server is behind it and its exit status is the whole
+      // answer. The subcommand is the probe: bare `herdr api` is a command group
+      // that prints its subcommands and exits 2 whether or not a server is running,
+      // so it fails a host that is working fine.
+      herdr: { binaries: ["herdr"], args: ["api", "snapshot"], answered: () => true },
       orca: {
         binaries: ["orca-ide", "orca"],
         args: ["status", "--json"],
@@ -18869,17 +18872,33 @@ function findTranscriptAck(record2, options) {
 function sidecarIsAuthoritative(options) {
   return options.file !== void 0;
 }
-function findSidecarAck(file, ackAfter) {
+function readSidecar(file, ackAfter) {
   const record2 = readAck(file);
   if (record2 === null) return void 0;
-  if (ackAfter !== void 0 && !(Date.parse(record2.at) >= ackAfter)) return void 0;
   return {
-    to: null,
-    message: record2.reason,
-    via: "cli",
-    decision: record2.decision,
-    reason: record2.reason.length > 0 ? record2.reason : null
+    at: record2.at,
+    counts: ackAfter === void 0 || Date.parse(record2.at) >= ackAfter,
+    ack: {
+      to: null,
+      message: record2.reason,
+      via: "cli",
+      decision: record2.decision,
+      reason: record2.reason.length > 0 ? record2.reason : null
+    }
   };
+}
+function transcriptStart(records) {
+  for (const record2 of records) {
+    if (typeof record2.timestamp !== "string") continue;
+    const at = Date.parse(record2.timestamp);
+    if (!Number.isNaN(at)) return at;
+  }
+  return void 0;
+}
+function resolveAckAfter(records, options) {
+  if (options.ackAfter !== void 0) return options.ackAfter;
+  if (options.fresh !== true) return void 0;
+  return transcriptStart(records) ?? Number.POSITIVE_INFINITY;
 }
 function mentionsFile(input, file) {
   if (file === void 0 || file.length === 0 || input === void 0) return false;
@@ -18918,10 +18937,13 @@ function scanFromAnchor(records, anchor, options) {
   }
   return scan;
 }
-function withSidecar(result, options) {
-  const sidecarAck = options.file === void 0 ? void 0 : findSidecarAck(options.file, options.ackAfter);
-  if (sidecarAck === void 0) return result;
-  return { ...result, outcome: "acknowledged", ack: sidecarAck };
+function withSidecar(result, options, ackAfter) {
+  const sidecar = options.file === void 0 ? void 0 : readSidecar(options.file, ackAfter);
+  if (sidecar === void 0) return { ...result, staleAck: void 0 };
+  if (sidecar.counts) {
+    return { ...result, staleAck: void 0, outcome: "acknowledged", ack: sidecar.ack };
+  }
+  return { ...result, staleAck: { ...sidecar.ack, at: sidecar.at } };
 }
 function resolveAnchor(records, options) {
   if (options.fresh) return records.length > 0 ? 0 : -1;
@@ -18942,6 +18964,7 @@ function analyze(lines, options) {
   requireOneMode(options);
   const turns = options.turns ?? DEFAULT_TURNS;
   const records = parseLines(lines);
+  const ackAfter = resolveAckAfter(records, options);
   const anchor = resolveAnchor(records, options);
   const scan = scanFromAnchor(records, anchor, options);
   const turnsElapsed = Math.min(scan.boundaries, turns);
@@ -18949,11 +18972,12 @@ function analyze(lines, options) {
     anchored: anchor >= 0,
     turnsElapsed,
     engaged: scan.engaged,
-    nudged: options.nudged === true
+    nudged: options.nudged === true,
+    ackAfter
   };
   const quiet = scan.engaged ? "engaged" : "silence";
   const verdict = anchor < 0 ? { ...base, outcome: "pending" } : scan.ack !== void 0 ? { ...base, outcome: "acknowledged", ack: scan.ack } : { ...base, outcome: turnsElapsed >= turns ? quiet : "pending" };
-  return withSidecar(verdict, options);
+  return withSidecar(verdict, options, ackAfter);
 }
 function readLines(path) {
   try {
@@ -18982,7 +19006,7 @@ async function watch(path, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const started = Date.now();
   const deadline = started + timeoutMs;
-  const watched = { ...options, ackAfter: options.ackAfter ?? started };
+  const watched = options.fresh === true ? options : { ...options, ackAfter: options.ackAfter ?? started };
   let cached = null;
   let cachedStamp = null;
   for (; ; ) {
@@ -18993,7 +19017,7 @@ async function watch(path, options = {}) {
       cachedStamp = stamp;
       result = cached;
     } else {
-      result = withSidecar(cached, watched);
+      result = withSidecar(cached, watched, cached.ackAfter);
     }
     if (result.outcome !== "pending") {
       return { ...result, outcome: result.outcome, startedAt: started };
@@ -19068,7 +19092,7 @@ function register7(program3) {
     "path to the handoff file; its .ack sidecar counts as an acknowledgement, and tool calls naming it count as engagement"
   ).option("--nudged", "this target has already been nudged once; echoed back on the result").option(
     "--ack-after <ms>",
-    "epoch milliseconds before which a sidecar ack does not count; pass the previous watch's startedAt to cover a nudge gap, or 0 to accept any ack. Defaults to the moment this watch begins",
+    "epoch milliseconds before which a sidecar ack does not count; pass the previous watch's startedAt to cover a nudge gap, or 0 to accept any ack. Defaults to the moment this watch begins with --token, and to the target launch read off its own transcript with --fresh",
     parseIntAtLeast("ack-after", 0)
   ).option(
     "--turns <n>",
@@ -25141,7 +25165,7 @@ var init_prose = __esm({
     ];
     SENTENCE_LIMIT_PROSE = 25;
     SENTENCE_LIMIT_INSTRUCTION = 20;
-    PARAGRAPH_LIMIT = 6;
+    PARAGRAPH_LIMIT = 3;
     VOCABULARY_COLUMNS = 3;
     DELETE_SENTINEL = "-";
     BLOCKQUOTE_PREFIX = /^(?:\s*>\s?)+/;

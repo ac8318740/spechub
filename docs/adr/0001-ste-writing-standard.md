@@ -1,6 +1,8 @@
 # One plain-language writing standard based on ASD-STE100
 
-Every durable artifact an agent writes follows one standard. The standard lives in the `writing` skill and follows ASD-STE100 – Simplified Technical English, an aerospace standard for controlled technical writing. We adopt its rules: short sentences with a numeric cap, active voice, one instruction per sentence, one term for one meaning. We reject the "add voice" advice common in anti-AI-writing guides. Someone with no context reads the artifacts weeks later. Uniformity serves that reader better than personality.
+Every durable artifact an agent writes follows one standard. The standard lives in the `writing` skill and follows ASD-STE100 – Simplified Technical English, an aerospace standard for controlled technical writing. We adopt its rules: short sentences with a numeric cap, active voice, one instruction per sentence, one term for one meaning.
+
+We reject the "add voice" advice common in anti-AI-writing guides. Someone with no context reads the artifacts weeks later. Uniformity serves that reader better than personality.
 
 ## Considered options
 

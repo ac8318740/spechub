@@ -2,7 +2,7 @@
 // in, the nodes the renderer draws out.
 //
 // This lives apart from the renderer on purpose. Renderer purity is the
-// load-bearing property – see docs/adr/0012-the-diagram-renderer-is-pure.md –
+// load-bearing property – see docs/adr/0013-the-diagram-renderer-is-pure.md –
 // and a module boundary states it structurally, where a comment inside one file
 // only asks. diagram.ts imports nothing from here.
 //
@@ -24,7 +24,7 @@ const HEADER_SEPARATOR = '·';
 const KIND_LABEL_PREFIX = 'kind:';
 
 // The five fields the header grammar names – see
-// docs/adr/0010-node-header-is-the-edge-encoding.md.
+// docs/adr/0011-node-header-is-the-edge-encoding.md.
 const HEADER_FIELDS = ['map', 'root', 'answers', 'blocked-by', 'label'] as const;
 
 // `label:` runs on past a middle dot, to the next field the grammar names or to

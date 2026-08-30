@@ -256,6 +256,16 @@ How to turn it on:
 - The style applies after `/clear`, or in a new session
 - The plugin never forces it on
 
+The style also ships a per-turn reminder:
+
+- `hooks/ac-writing-style-reminder.sh` runs on every prompt and re-injects the style's own words
+- A built-in style carries a `turnReminder` field, and a file-based style cannot, so the hook supplies the equivalent
+- It emits two sections lifted straight out of `output-styles/ac-writing-style.md`
+    - "Who you are", top-level lines only, which is the persona
+    - "Before you send", in full, which is the nine-item checklist
+- It reads those sections at run time, so the reminder can never drift from the style
+- It stays silent under any other output style, and it writes nothing to the transcript
+
 ## 8. Terminal workspace for driving several agents
 
 *An optional keyboard-only setup for running several agents on a remote machine. SpecHub works fine without it.*
@@ -317,4 +327,6 @@ The optional terminal workspace installs, but does not bundle, the four tools yo
 - [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by AlexanderGrooff
 - [glow](https://github.com/charmbracelet/glow) by charmbracelet
 
-The optional fork build of tuicr compiles [agavra/tuicr#607](https://github.com/agavra/tuicr/pull/607) by [antonio2368](https://github.com/antonio2368). It also compiles [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633) and one counts fix not yet submitted upstream, both written for this fork. That build is off by default and temporary. See [docs/terminal-workspace.md](docs/terminal-workspace.md).
+The optional fork build of tuicr compiles [agavra/tuicr#607](https://github.com/agavra/tuicr/pull/607) by [antonio2368](https://github.com/antonio2368). It also compiles [agavra/tuicr#633](https://github.com/agavra/tuicr/pull/633) and one counts fix not yet submitted upstream, both written for this fork. That build is off by default and temporary.
+
+See [docs/terminal-workspace.md](docs/terminal-workspace.md).

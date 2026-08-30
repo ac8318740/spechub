@@ -548,34 +548,31 @@ describe('lintProse: sentence-length rule', () => {
 });
 
 describe('lintProse: paragraph-length rule', () => {
-  it('does not flag a paragraph of exactly 6 sentences', () => {
-    const findings = lintProse(paragraphOf(6), []).filter((f) => f.rule === 'paragraph-length');
+  it('does not flag a paragraph of exactly 3 sentences', () => {
+    const findings = lintProse(paragraphOf(3), []).filter((f) => f.rule === 'paragraph-length');
     expect(findings).toHaveLength(0);
   });
 
-  it('flags a paragraph of more than 6 sentences once, at the paragraph\'s first line', () => {
-    const findings = lintProse(paragraphOf(7), []).filter((f) => f.rule === 'paragraph-length');
+  it('flags a paragraph of more than 3 sentences once, at the paragraph\'s first line', () => {
+    const findings = lintProse(paragraphOf(4), []).filter((f) => f.rule === 'paragraph-length');
     expect(findings).toHaveLength(1);
     expect(findings[0].line).toBe(1);
   });
 
   it('flags only the offending paragraph, at that paragraph\'s own first line', () => {
-    const text = `${paragraphOf(6)}\n${paragraphOf(7)}`;
+    const text = `${paragraphOf(3)}\n${paragraphOf(4)}`;
     const findings = lintProse(text, []).filter((f) => f.rule === 'paragraph-length');
     expect(findings).toHaveLength(1);
-    // paragraphOf(6) occupies lines 1-6, line 7 is the blank separator,
-    // so the second paragraph's first line is line 8.
-    expect(findings[0].line).toBe(8);
+    // paragraphOf(3) occupies lines 1-3, line 4 is the blank separator,
+    // so the second paragraph's first line is line 5.
+    expect(findings[0].line).toBe(5);
   });
 
-  it('keeps a paragraph at six sentences when three of them contain abbreviations', () => {
+  it('keeps a paragraph at three sentences when all three contain abbreviations', () => {
     const text = [
-      'Sentence number 1 is short.',
-      'Sentence number 2 mentions Dr. Smith briefly.',
-      'Sentence number 3 is short.',
-      'Sentence number 4 compares this vs. that directly.',
-      'Sentence number 5 is short.',
-      'Sentence number 6 gives an example, e.g. this one.',
+      'Sentence number 1 mentions Dr. Smith briefly.',
+      'Sentence number 2 compares this vs. that directly.',
+      'Sentence number 3 gives an example, e.g. this one.',
     ].join('\n') + '\n';
     const findings = lintProse(text, []).filter((f) => f.rule === 'paragraph-length');
     expect(findings).toHaveLength(0);

@@ -7,6 +7,7 @@
 - [0007](0007-lead-check-reads-the-transcript.md) – A session's own transcript decides lead or child, not the environment
 - [0008](0008-cli-audits-skill-interviews.md) – The CLI audits, the skill interviews
 - [0009](0009-verify-the-write-not-the-writer.md) – The config writer verifies its result instead of predicting it
-- [0010](0010-node-header-is-the-edge-encoding.md) – The node body header is the authoritative edge encoding on GitHub
-- [0011](0011-node-kind-is-a-closed-set-of-five.md) – A map node's kind is a closed set of five
-- [0012](0012-the-diagram-renderer-is-pure.md) – The diagram renderer takes nodes in and never calls gh
+- [0010](0010-promote-dev-to-main-by-fast-forward.md) – A labelled workflow fast-forwards main to dev, and nobody merges
+- [0011](0011-node-header-is-the-edge-encoding.md) – The node body header is the authoritative edge encoding on GitHub
+- [0012](0012-node-kind-is-a-closed-set-of-five.md) – A map node's kind is a closed set of five
+- [0013](0013-the-diagram-renderer-is-pure.md) – The diagram renderer takes nodes in and never calls gh

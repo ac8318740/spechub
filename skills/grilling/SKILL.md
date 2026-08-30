@@ -9,10 +9,13 @@ Grilling settles open decisions by asking the user a whole round of questions
 at once. One technique at two scales.
 
 The frontier is the set of questions ready to ask – every open question with
-settled prerequisites. In conversation you work it out as you go. On a
-map – a stored graph of question and work nodes – you ask the tracker for it.
-You limit it to `hitl` nodes, meaning the ones a human must answer rather
-than an agent. On the files backend:
+settled prerequisites.
+
+In conversation you work it out as you go. On a map – a stored graph of
+question and work nodes – you ask the tracker for it. You limit it to `hitl`
+nodes, meaning the ones a human must answer rather than an agent.
+
+On the files backend:
 
 `~/.claude/spechub/bin/spechub node frontier --map <name> --mode hitl`
 
@@ -24,17 +27,22 @@ session.
 
 1. **Compute the frontier.** Every question with settled prerequisites,
    nothing else. Never ask a question whose answer depends on one still open.
+
 2. **Facts are your job, never the user's.** Skip a question that an
    environment fact would answer. Dispatch parallel `Explore` subagents, one
    per distinct place to look, not a fixed count. Fold what they find into
    the round.
+
 3. **Number the questions.** Attach a recommended answer to each, with one
    line of reasoning. A question you cannot recommend an answer for is usually
    two questions.
+
 4. **Present the whole round at once** (see Presentation). One round, one
    message. Never trickle questions one at a time.
+
 5. **Record each answer.** If no option matches, the reply itself is the
    answer, never the nearest option.
+
 6. **Recompute the frontier.** Answers surface new questions and unblock old
    ones. Derive the next round fresh. Never continue down a list planned in
    advance.
@@ -63,10 +71,14 @@ option covers, that text is the answer.
 ## Stop condition
 
 Stop when the frontier is empty, or the user signals stop ("stop", "done",
-"proceed"). There is no question cap. Settled prerequisites already bound
-the frontier, and provenance keeps it narrow. Every question hangs off the
-answer that surfaced it, so nothing unrelated can join the round. A cap
-would be a blunt proxy for a guarantee the frontier definition provides.
+"proceed").
+
+There is no question cap. Settled prerequisites already bound the
+frontier, and provenance keeps it narrow. Every question hangs off the
+answer that surfaced it, so nothing unrelated can join the round.
+
+A cap would be a blunt proxy for a guarantee the frontier definition
+provides.
 
 ## On a map
 
@@ -75,12 +87,16 @@ the tracker's `update` and `create` operations:
 
 1. Append the answer to the node body under `## Answer`. Mark the node
    resolved. On the files backend, one `spechub node update` call does both.
-   Write the answer per the `writing` skill.
+
+    Write the answer per the `writing` skill.
+
 2. Create a node for each new question the answer surfaced, with `answers`
    naming the node that surfaced it. Questions that can be stated precisely
    are `open`; the rest are `fog`.
+
 3. Invoke the `record-context` skill for each resolution – it decides whether
    the decision earns an ADR, a glossary term, both, or neither.
+
 4. Recompute the frontier with the tracker's query and present the next
    round.
 

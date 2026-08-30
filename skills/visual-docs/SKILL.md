@@ -49,6 +49,7 @@ Every numbered section maps to an element of the lead diagram, and a section hea
 - A box showing something **happening**, with no section, means the doc is incomplete
 - A section covering no part of the diagram either belongs in another doc, or the
   diagram is missing something
+
 - Renaming a box renames its section, and the reverse
 
 Three exemptions, and only these three.
@@ -114,8 +115,6 @@ Two rules keep the opening honest.
 - Put one italic line under every H2 and H3, stating the section's point
 - Test it by deleting the section body
 - It was a label rather than a summary, if the takeaway no longer tells the reader what they need
-- A heading like "Overview" or "Details" always fails this
-    - It describes the section's position instead of its content
 
 ### 2.3. The horizontal rule
 
@@ -248,7 +247,6 @@ flowchart LR
 | ------------------------------------ | -------------------------------------------------------- |
 | Conclusion at the end                | the reader carries unresolved detail until the last line  |
 | A diagram after the prose            | the reader has already built a mental model, possibly wrong |
-| "Overview" or "Details" as a heading | describes position, not content, so it cannot be a takeaway |
 | One diagram per section, none overall | no single artefact carries the shape                     |
 | Diagram nodes labelled `AuthSvc`     | only legible to someone who already knows the system      |
 | Sections mirroring the directory tree | directory layout is rarely the reader's question order    |

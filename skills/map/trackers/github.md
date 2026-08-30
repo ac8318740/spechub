@@ -1,8 +1,10 @@
 # GitHub tracker
 
-First-class backend. A node is an issue. The map is visible to the whole
-team, survives every device, and needs no sync. It requires `gh` authenticated
-against the repo's GitHub remote.
+First-class backend.
+
+A node is an issue. The map is visible to the whole team, survives every
+device, and needs no sync. It requires `gh` authenticated against the repo's
+GitHub remote.
 
 ## Mapping
 
@@ -103,6 +105,7 @@ the dependencies API nor a GraphQL parent query.
 - Graduate fog: `gh issue edit <n> --remove-label fog`
 - Change an edge: rewrite the header line **and** change the matching native
   link in the same step. Editing one copy alone leaves the two out of step.
+
 - Remove a blocker: drop it from the header, then
   `gh api -X DELETE repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by/<blocker_id>`
 
@@ -132,10 +135,12 @@ REST call for the blockers, per issue, on every round.
   labels. Drop any whose header `blocked-by` names an open issue.
   Order by provenance depth (follow header `answers` up to the root), issue
   number as the final tiebreak.
+
 - **Walk**: start at the issue labelled `root-node`, then recurse over the
   nodes whose header `answers` names it, in number order. Read the root and
   every `pinned` node in full, and take the title alone as the gist for the
   rest.
+
 - The tracker derives depth from the header chain and never stores it.
 
 ## Degraded remotes

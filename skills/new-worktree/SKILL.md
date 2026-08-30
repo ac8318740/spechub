@@ -6,7 +6,9 @@ argument-hint: "[slug or branch name] [then <task>]"
 
 # New worktree
 
-Set up an isolated git worktree. Move into it. Then carry on with the task the user attached to the request, as in "create a worktree, then <do X>". The worktree setup is the skill. The follow-on task runs normally once cwd is inside it.
+Set up an isolated git worktree. Move into it. Then carry on with the task the user attached to the request, as in "create a worktree, then <do X>".
+
+The worktree setup is the skill. The follow-on task runs normally once cwd is inside it.
 
 ## When to use
 
@@ -16,14 +18,16 @@ Trigger on "create a worktree", "new worktree", "spin up a worktree", "make me a
 
 - Confirm the task actually needs a worktree. If the cwd is already in a worktree, or uncommitted changes belong to this task, ask before branching. Do not silently start a second one.
 - Resolve the MAIN repo root, never a nested worktree path. From anywhere in the repo:
-  - `dirname "$(git rev-parse --git-common-dir)"` gives the main repo root.
-  - Never create a worktree inside another worktree. Nested worktree paths have caused real breakage.
+    - `dirname "$(git rev-parse --git-common-dir)"` gives the main repo root.
+    - Never create a worktree inside another worktree. Nested worktree paths have caused real breakage.
 
 ## Pick the inputs
 
 - **Slug**: short kebab-case name for the directory, derived from the task (e.g. `roadmap-gantt`, `feedback-inbox`). If the user named it, use that.
 - **Branch**: `<type>/<slug>` where type is `feat`, `fix`, `chore`, or `docs` to match the work. A bare slug is acceptable if the user gives one. Confirm with the user only if the type is genuinely ambiguous.
-- **Base**: default `origin/dev`. Local `dev` is often behind. Fetch first, then branch off the remote ref. Use `origin/main` for a hotfix, a dev to main promotion, when the user says so, or when the repo has no `origin/dev`. Branch off whichever integration branch the repo actually has. If unsure which, check the repo's CLAUDE.md / recent PRs before asking.
+- **Base**: default `origin/dev`. Local `dev` is often behind. Fetch first, then branch off the remote ref.
+
+    Use `origin/main` for a hotfix, a dev to main promotion, when the user says so, or when the repo has no `origin/dev`. Branch off whichever integration branch the repo actually has. If unsure which, check the repo's CLAUDE.md / recent PRs before asking.
 
 ## Create it
 
@@ -57,10 +61,15 @@ The script takes one optional argument: the checkout to examine. A checkout is o
 - `declared_orca` – the same yes-or-no answer for Orca, recorded under `host.orchestrators.orca`. The two are independent: a host can have both installed, one, or neither, so one answer says nothing about the other. Both `false` is how a host says it has no orchestrator at all.
 - `detected` – which orchestrator is actually hosting this session, read from the environment markers an orchestrator injects into the terminals it opens.
 - `active` – the branch to run.
-- `owner` – which orchestrator owns the checkout the script examined. The path settles it. A checkout under `~/orca/workspaces/` belongs to Orca. A checkout under herdr's worktree root belongs to herdr, and herdr's config names that root. Anything else is plain git, reported as `none`.
+- `owner` – which orchestrator owns the checkout the script examined. The path settles it.
+
+    A checkout under `~/orca/workspaces/` belongs to Orca. A checkout under herdr's worktree root belongs to herdr, and herdr's config names that root. Anything else is plain git, reported as `none`.
+
 - `warning` – one line written for a human, empty when there is nothing to say.
 
-Declared means installed. Detected means hosting. Detected wins, so `active` always equals `detected`. So this skill never drives an orchestrator that the host declared but that does not host this session. A marker for an orchestrator the host never declared earns a warning, not a refusal.
+Declared means installed. Detected means hosting.
+
+Detected wins, so `active` always equals `detected`. So this skill never drives an orchestrator that the host declared but that does not host this session. A marker for an orchestrator the host never declared earns a warning, not a refusal.
 
 Owning is not hosting. The session's host creates a worktree, so this skill branches on `active`. The owner decides who removes a checkout later, and the `teardown-worktree` skill acts on that.
 
@@ -68,7 +77,9 @@ Three rules follow:
 
 - If `warning` is non-empty, repeat it to the user verbatim before going any further. It addresses a human reader.
 - Branch on `active`. That is the section to run, and the only thing that decides it.
-- Sometimes the script does not run at all – no output, and a non-zero exit from the invocation rather than from the script. Do not guess. There is no `active` to branch on. Say so to the user, treat it as no orchestrator, and go no further than the plain git branch in `Orchestrator: none`. An installed plugin that predates the script looks like this. The file is missing or not executable, so the invocation fails before the script can report anything.
+- Sometimes the script does not run at all – no output, and a non-zero exit from the invocation rather than from the script. Do not guess. There is no `active` to branch on.
+
+    Say so to the user, treat it as no orchestrator, and go no further than the plain git branch in `Orchestrator: none`. An installed plugin that predates the script looks like this. The file is missing or not executable, so the invocation fails before the script can report anything.
 
 ### Orchestrator: herdr
 
@@ -194,7 +205,9 @@ Read three values from the JSON rather than assuming any of them:
 - `.result.worktree.branch` – the branch Orca made, as a full ref such as `refs/heads/<github-user>/<name>`
 - `.result.worktree.baseRef` – the ref Orca branched from
 
-Never compute the path or the branch. Orca places the checkout under `~/orca/workspaces/<repo>/<name>`, and it names the branch `<github-user>/<name>`. So the `<type>/<slug>` branch rule above does not survive here. Pass the slug as `--name`, then report the branch Orca actually returned.
+Never compute the path or the branch.
+
+Orca places the checkout under `~/orca/workspaces/<repo>/<name>`, and it names the branch `<github-user>/<name>`. So the `<type>/<slug>` branch rule above does not survive here. Pass the slug as `--name`, then report the branch Orca actually returned.
 
 Strip the `refs/heads/` prefix before you report that branch. `git branch --show-current` in the checkout prints the same short name, so the two agree.
 
@@ -206,7 +219,9 @@ Strip the `refs/heads/` prefix before you report that branch. `git branch --show
 "$ORCA_BIN" repo add --path <main-root> --json
 ```
 
-On any other failure, show the user the exact command and Orca's `error`, then stop. Never fall through to plain git. Orca cannot see a checkout made behind its back, cannot track it, and cannot later remove it. That leaves the user holding a worktree their orchestrator will never account for.
+On any other failure, show the user the exact command and Orca's `error`, then stop. Never fall through to plain git.
+
+Orca cannot see a checkout made behind its back, cannot track it, and cannot later remove it. That leaves the user holding a worktree their orchestrator will never account for.
 
 #### 3. Move this session in
 
@@ -219,7 +234,9 @@ Offer the fresh-session variant too. It opens a new Orca terminal in the checkou
 "$ORCA_BIN" terminal create --worktree path:<path> --title <slug> --command "claude" --json
 ```
 
-Take that route only when the user asks for it. This session then stays where it is. Otherwise two agents share one checkout. That ordering also settles step 4, so skip it.
+Take that route only when the user asks for it.
+
+This session then stays where it is. Otherwise two agents share one checkout. That ordering also settles step 4, so skip it.
 
 #### 4. Stop the spare shell
 
@@ -249,7 +266,9 @@ Match only a path under `~/orca/workspaces/`. Orca's listing also reports herdr 
 
 ### Orchestrator: none
 
-No orchestrator is driving this branch, so there is no pane to move and nothing above applies. The checkout goes under `.claude/worktrees` in the main repo. If the detector reported a warning, you already told the user why. Use plain git, with `<base>` per the base rule above:
+No orchestrator is driving this branch, so there is no pane to move and nothing above applies. The checkout goes under `.claude/worktrees` in the main repo. If the detector reported a warning, you already told the user why.
+
+Use plain git, with `<base>` per the base rule above:
 
 ```bash
 cd <main-root> \
@@ -276,7 +295,10 @@ Confirm out loud which worktree, branch, and base commit you are now on.
 Continue with whatever followed the worktree request:
 
 - "...then enter plan mode" -> enter plan mode now, from inside the worktree.
-- "...then give me a command to start the dev server" -> hand back a copy-paste one-liner. Do not start it yourself unless the user asks. Use the project's own dev script. Do not hand-set env vars. Confirm the right launch command from the repo's CLAUDE.md, package scripts, or `scripts/` rather than guessing.
+- "...then give me a command to start the dev server" -> hand back a copy-paste one-liner. Do not start it yourself unless the user asks.
+
+    Use the project's own dev script. Do not hand-set env vars. Confirm the right launch command from the repo's CLAUDE.md, package scripts, or `scripts/` rather than guessing.
+
 - Otherwise just proceed with the task in the new worktree.
 
 ## Cleanup (later, not now)
