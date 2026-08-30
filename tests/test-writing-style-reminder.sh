@@ -159,11 +159,14 @@ check "names the UserPromptSubmit event" \
 
 # The style quotes double quotes and backslashes at it, so the escaping has to
 # survive a round trip through JSON rather than merely produce parseable output.
-# Checklist item 4 is the line in the style with the most double quotes in it,
-# so it is the one that proves the JSON escaping survives a round trip.
-quoted='4. Search your own reply for ", and ", ", so ", ", which ", and ", because "'
+# The "Search your own reply" checklist item holds the most double quotes in the
+# style, so it is the one that proves the escaping survives a round trip.
+#
+# The pattern leaves the item number open. The checklist gets items inserted
+# above this one, and the round trip is what the check is about, not the number.
+quoted='^[0-9]+\. Search your own reply for ", and ", ", so ", ", which ", and ", because "$'
 check "round-trips a line the style fills with double quotes" \
-  'echo "$ctx" | grep -Fxq -- "$quoted"'
+  'echo "$ctx" | grep -Eq -- "$quoted"'
 
 echo ""
 
