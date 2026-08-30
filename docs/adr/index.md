@@ -9,3 +9,4 @@
 - [0009](0009-verify-the-write-not-the-writer.md) – The config writer verifies its result instead of predicting it
 - [0010](0010-node-header-is-the-edge-encoding.md) – The node body header is the authoritative edge encoding on GitHub
 - [0011](0011-node-kind-is-a-closed-set-of-five.md) – A map node's kind is a closed set of five
+- [0012](0012-the-diagram-renderer-is-pure.md) – The diagram renderer takes nodes in and never calls gh

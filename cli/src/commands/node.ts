@@ -1,15 +1,17 @@
 // The four tracker operations on the files backend: create, read, update,
 // list. Frontier, claim and resolve are compositions performed by skills.
 import { Command } from 'commander';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { findProjectRoot } from '../lib/project.js';
-import { fail, requireProject } from '../lib/utils.js';
+import { fail, readStdin, requireProject } from '../lib/utils.js';
+import { renderDiagram } from '../lib/diagram.js';
+import { nodesFromIssues } from '../lib/github-issues.js';
 import {
   NODE_STATUSES,
   NODE_MODES,
-  NODE_KINDS,
+  ALLOWED_KINDS_SENTENCE,
   LABEL_CAP_SENTENCE,
   type MapNode,
   type NodeStatus,
@@ -109,7 +111,7 @@ export function register(program: Command): void {
     .requiredOption('--title <title>', 'node title')
     .option('--status <status>', `one of: ${NODE_STATUSES.join(', ')}`, parseStatus)
     .option('--mode <mode>', 'hitl (a human settles it) or afk (an agent settles it alone)', parseMode)
-    .requiredOption('--kind <kind>', `one of: ${NODE_KINDS.join(', ')}`)
+    .requiredOption('--kind <kind>', ALLOWED_KINDS_SENTENCE)
     .requiredOption('--label <label>', `short name for diagrams: ${LABEL_CAP_SENTENCE}`)
     .option('--answers <id>', 'the node whose resolution raised this one (its provenance parent) – required except on the root')
     .option('--blocked-by <ids>', 'comma-separated ids of nodes that must settle before this one can be worked', parseIdList)
@@ -186,7 +188,7 @@ export function register(program: Command): void {
     .option('--title <title>', 'new title (the filename keeps its original slug)')
     .option('--status <status>', `one of: ${NODE_STATUSES.join(', ')}`, parseStatus)
     .option('--mode <mode>', `one of: ${NODE_MODES.join(', ')}`, parseMode)
-    .option('--kind <kind>', `one of: ${NODE_KINDS.join(', ')}`)
+    .option('--kind <kind>', ALLOWED_KINDS_SENTENCE)
     .option('--label <label>', `new short name for diagrams: ${LABEL_CAP_SENTENCE}`)
     .option('--answers <id>', 'new provenance parent')
     .option('--blocked-by <ids>', 'comma-separated blocking ids; empty string clears', parseIdList)
@@ -331,6 +333,48 @@ export function register(program: Command): void {
           sections.push(`${heading} ${node.id} – ${node.title}\n(${meta})${body ? `\n\n${body}` : ''}`);
         }
         console.log(sections.join('\n\n'));
+      } catch (err) {
+        fail((err as Error).message);
+      }
+    });
+
+  nodeCmd
+    .command('diagram')
+    .description(
+      'Render the map as mermaid, wrapped in the replaceable diagram markers.\n' +
+        'Reads the files backend with --map, or a `gh issue list --json ' +
+        'number,title,body,state,stateReason,labels,url` pipe with --stdin.'
+    )
+    .option('--map <name>', 'map name (files backend)')
+    .option('--stdin', 'read the github issue list as JSON from stdin')
+    .option('--from <id>', 'draw this node and its descendants only, rather than the whole map')
+    .action((opts: { map?: string; stdin?: boolean; from?: string }) => {
+      const root = findProjectRoot();
+      requireProject(root);
+      // The two backends are exclusive, and passing neither is a different
+      // mistake from passing both. One message for each, so neither reader is
+      // told about a flag they did not use.
+      if (opts.map && opts.stdin) {
+        fail('Use --map <name> for the files backend or --stdin for the github one, not both.');
+      }
+      if (!opts.map && !opts.stdin) {
+        fail('Name a backend: --map <name> for the files backend, or --stdin for the github one.');
+      }
+      try {
+        let nodes;
+        if (opts.stdin) {
+          nodes = nodesFromIssues(readStdin());
+        } else {
+          const map = opts.map as string;
+          // A map that does not exist reads as an empty one, and an empty one
+          // is what "the map has no nodes" reports - so a typo in the name came
+          // back as a claim about the map the reader meant.
+          if (!existsSync(mapDir(root, map))) {
+            fail(`Map '${map}' does not exist - there is no ${mapDir(root, map)} directory.`);
+          }
+          nodes = loadNodes(root, map);
+        }
+        console.log(renderDiagram(nodes, { from: opts.from }));
       } catch (err) {
         fail((err as Error).message);
       }

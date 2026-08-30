@@ -33,6 +33,27 @@ export const LABEL_MAX_CHARS = 30;
 // "label is required" message reads it, so the numbers and the wording both
 // have a single home.
 export const LABEL_CAP_SENTENCE = `at most ${LABEL_MAX_WORDS} words and ${LABEL_MAX_CHARS} characters`;
+// The one sentence that names the five kinds. Every help string and every "kind
+// is not allowed" message reads it, on both backends, so the wording and the
+// separator before it cannot drift apart.
+export const ALLOWED_KINDS_SENTENCE = `one of: ${NODE_KINDS.join(', ')}`;
+
+/**
+ * A node the map is done with. Mode says who will settle a node, and nobody
+ * will settle a settled one, so the frontier and the diagram's mode cue both
+ * ask this rather than each listing the two settled statuses.
+ */
+export function isSettled(status: NodeStatus): boolean {
+  return status === 'resolved' || status === 'out-of-scope';
+}
+
+/**
+ * The one sentence both `walkTree` and the diagram refuse a rootless or
+ * many-rooted map with.
+ */
+export function rootCountError(roots: number): string {
+  return `map has ${roots} roots – expected exactly one`;
+}
 
 export interface MapNode {
   id: string; // zero-padded number, identity only – never order
@@ -106,6 +127,14 @@ export function normalizeId(id: string): string {
   return trimmed.padStart(3, '0');
 }
 
+/**
+ * An id as a reader may have copied it out of a diagram or an issue title –
+ * `#12` – as the bare id. Padding is `normalizeId`'s job, not this one's.
+ */
+export function bareId(reference: string): string {
+  return reference.trim().replace(/^#/, '');
+}
+
 export function mapDir(root: string, map: string): string {
   return join(root, SPECHUB_DIR, MAPS_DIR, map);
 }
@@ -139,7 +168,7 @@ function validateTitle(title: string): string {
 function validateKind(kind: unknown): NodeKind {
   if (typeof kind !== 'string' || !(NODE_KINDS as readonly string[]).includes(kind)) {
     const shown = kind === undefined ? 'is missing' : `${JSON.stringify(kind)} is not allowed`;
-    throw new Error(`kind ${shown} – one of: ${NODE_KINDS.join(', ')}`);
+    throw new Error(`kind ${shown} – ${ALLOWED_KINDS_SENTENCE}`);
   }
   return kind as NodeKind;
 }
@@ -159,11 +188,11 @@ function countCharacters(text: string): number {
   return [...graphemes.segment(text)].length;
 }
 
-// The one place every label rule is applied. Both the frontmatter schema and
-// validateLabel below run a trimmed label through this, so neither restates a
-// number, neither holds a rule the other misses, and a stored file fails the
-// same way a rejected flag does.
-function labelCapProblem(trimmed: string): string | undefined {
+// The one place every label rule is applied. The frontmatter schema,
+// validateLabel below and the github adapter all run a trimmed label through
+// this, so none restates a number, none holds a rule the others miss, and a
+// stored file fails the same way a rejected flag or a bad issue header does.
+export function labelCapProblem(trimmed: string): string | undefined {
   if (!trimmed) return 'must not be empty';
   if (/[\r\n]/.test(trimmed)) return 'must be a single line';
   const words = trimmed.split(/\s+/);
@@ -194,9 +223,21 @@ function validateLabel(label: unknown): string {
   return trimmed;
 }
 
-// Ids are compared numerically – zero-padding stops helping past 999.
-function compareIds(a: string, b: string): number {
-  return parseInt(a, 10) - parseInt(b, 10);
+/**
+ * Ids compared as a reader writes them.
+ *
+ * Two all-digit ids compare numerically, so `2`, `002` and `0002` are one id
+ * and zero-padding stops mattering past 999. That is what lets `--from` take an
+ * id copied out of either backend. Anything else falls back to text order,
+ * which is the only order a non-numeric id has.
+ */
+export function compareIds(a: string, b: string): number {
+  const left = a.trim();
+  const right = b.trim();
+  if (/^\d+$/.test(left) && /^\d+$/.test(right)) {
+    return parseInt(left, 10) - parseInt(right, 10);
+  }
+  return left.localeCompare(right);
 }
 
 // kind and label were added after the first maps were written, so a file
@@ -481,15 +522,15 @@ export function deriveDepths(nodes: MapNode[]): Map<string, number> {
 export function frontier(nodes: MapNode[]): MapNode[] {
   const depths = deriveDepths(nodes);
   const byId = new Map(nodes.map(n => [n.id, n]));
-  const settled = (id: string): boolean => {
+  const blockerSettled = (id: string): boolean => {
     const blocker = byId.get(id);
     if (!blocker) {
       throw new Error(`blocking node ${id} is referenced but does not exist`);
     }
-    return blocker.status === 'resolved' || blocker.status === 'out-of-scope';
+    return isSettled(blocker.status);
   };
   return nodes
-    .filter(n => n.status === 'open' && n.blockedBy.every(settled))
+    .filter(n => n.status === 'open' && n.blockedBy.every(blockerSettled))
     .sort((a, b) => {
       const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
       return byDepth !== 0 ? byDepth : compareIds(a.id, b.id);
@@ -504,7 +545,7 @@ export function walkTree(nodes: MapNode[]): Array<{ node: MapNode; depth: number
   const roots = nodes.filter(n => !n.answers);
   if (nodes.length === 0) return [];
   if (roots.length !== 1) {
-    throw new Error(`map has ${roots.length} roots – expected exactly one`);
+    throw new Error(rootCountError(roots.length));
   }
   const children = new Map<string, MapNode[]>();
   for (const node of nodes) {
