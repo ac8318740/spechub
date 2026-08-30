@@ -105,10 +105,9 @@ operation. First the root:
   backend writes no header, because frontmatter already holds `answers` and
   `blocked-by`, and the directory name is the map.
 
-- Every node carries a `kind` and a `label`, both required. `kind` is one of
-  `destination`, `notes`, `decision`, `research`, or `work`. A `label` is the
-  node's short name for a diagram. `trackers/files.md` holds the caps and the
-  contract the CLI enforces.
+- Every node carries a `kind` and a `label`, both required. A `label` is the
+  node's short name for a diagram. `trackers/files.md` holds the kinds, the
+  caps, and the contract the CLI enforces.
 
 - Every node body carries a diagram, two at most. A childless `notes` node is
   the one exception.
@@ -155,8 +154,9 @@ same queries per `trackers/github.md`.
 
 1. **Orient.** The packaging walk (`spechub node walk --map <name>`) – the root
    and pinned nodes in full, everything else gisted, meaning title and status
-   only. Zoom in with `node read <id>` – read the whole body – when a gist
-   turns out to be relevant. Do not load every body.
+   only. Zoom in with `node read <id>` when a gist matters – it drops the
+   generated diagram blocks, and `--visuals` puts them back. Do not load
+   every body.
 
     Also check `node list --map <name> --status claimed`. A claim marks a node
     someone is working, so a dead session's claim hides it from the frontier

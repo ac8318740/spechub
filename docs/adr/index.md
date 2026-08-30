@@ -11,3 +11,4 @@
 - [0011](0011-node-header-is-the-edge-encoding.md) – The node body header is the authoritative edge encoding on GitHub
 - [0012](0012-node-kind-is-a-closed-set-of-five.md) – A map node's kind is a closed set of five
 - [0013](0013-the-diagram-renderer-is-pure.md) – The diagram renderer takes nodes in and never calls gh
+- [0014](0014-reading-a-node-hides-its-generated-diagram.md) – Reading a node hides its generated diagram

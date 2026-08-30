@@ -17,7 +17,7 @@ To enumerate a project's maps: `ls spechub/maps/`.
 | Operation | Command |
 | --------- | ------- |
 | create    | `spechub node create --map <name> --title <t> --kind <k> --label <l> [--status] [--mode] [--answers <id>] [--blocked-by <ids>] [--pinned] [--body <md>] [--body-file <path>]` |
-| read      | `spechub node read <id> --map <name> [--json]` |
+| read      | `spechub node read <id> --map <name> [--json] [--visuals]` |
 | update    | `spechub node update <id> --map <name> [--title] [--status] [--mode] [--kind] [--label] [--answers] [--blocked-by] [--pinned true\|false] [--body] [--body-file] [--append-body]` |
 | list      | `spechub node list --map <name> [--status <s>] [--json]` |
 
@@ -49,9 +49,9 @@ session:
   nodes with no unresolved blockers, shallowest provenance depth first.
   Provenance depth is how many `answers` links separate a node from the root.
 
-- `spechub node walk --map <name> [--full] [--json]` – the packaging walk:
-  the root first, then each node that hangs off it, depth first. The walk
-  prints the root and pinned nodes in full.
+- `spechub node walk --map <name> [--full] [--json] [--visuals]` – the
+  packaging walk: the root first, then each node that hangs off it, depth
+  first. The walk prints the root and pinned nodes in full.
 
 Claim and resolve are `update` calls:
 
@@ -60,3 +60,12 @@ spechub node update <id> --map <name> --status claimed
 spechub node update <id> --map <name> --status resolved --append-body "## Answer
 ..."
 ```
+
+## What `read` and `walk` strip
+
+Both commands drop every diagram block a node body holds. A diagram block is
+the rendered map that sits between the `<!-- spechub:diagram -->` markers
+`node diagram` writes. `--visuals` prints the blocks. `--json` always carries
+the whole body.
+
+See `docs/adr/0014-reading-a-node-hides-its-generated-diagram.md` for why.
