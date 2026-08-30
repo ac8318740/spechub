@@ -37,6 +37,34 @@ herdr:
   # itself is unaffected either way, because the mouse wheel and copy mode do
   # not use it.
   pane_scrollbars: false
+  # A pane border carries the name of the agent running in it. Several agents
+  # in several panes is what this workspace is for, and an unlabelled pane does
+  # not say which agent it holds. Set false to take the labels off.
+  agent_labels_on_pane_borders: true
+  # How the agent panel orders its rows: "priority" puts the agents waiting on
+  # you at the top. Empty leaves herdr's own order alone.
+  agent_panel_sort: ""
+  # Where herdr draws a toast, its own short status message. "herdr" draws it
+  # in the terminal itself, which is the only route that survives SSH. Empty
+  # leaves herdr's own choice alone.
+  toast_delivery: ""
+  theme:
+    # The colour theme herdr paints. Empty writes no theme at all, so herdr
+    # keeps whatever it already uses.
+    name: ""
+    # One herdr server, two devices, two backgrounds. auto_switch asks the
+    # attached client for its background colour over OSC 11 - an escape
+    # sequence a terminal answers with the colour it is painting - and picks
+    # the dark or the light theme from the answer. So a dark terminal on one
+    # device and a light one on another, such as an e-ink panel, each get the
+    # right theme without either changing the other.
+    #
+    # Both keys below are read only when `light` names a theme. Without one
+    # there is nothing to switch to, so `name` is written on its own.
+    auto_switch: true
+    # The theme a light client gets. `name` is what a dark one gets, and what
+    # a client that answers nothing at all falls back to.
+    light: ""
   worktrees_directory: "~/.herdr/worktrees"
   # Agent state hook, so herdr reads state from the agent instead of the
   # screen. One of: claude, codex, opencode, copilot, none.
@@ -103,6 +131,14 @@ tuicr:
   file_list_width: 30
   # Per-file +added -removed counts in the tree.
   show_file_line_stats: true
+  # "dark", "light", or empty to let tuicr work it out for itself.
+  #
+  # Detection asks the terminal for its background colour over OSC 11 - an
+  # escape sequence a terminal answers with the colour it is painting. Under
+  # `herdr --remote` nothing answers, so tuicr falls back to a desktop setting
+  # that a headless machine reports as light, then paints dark text on a black
+  # terminal. Pin the value on any machine you reach over the network.
+  appearance: ""
   #
   # TEMPORARY. Two upstream pull requests are still open, plus one local fix
   # with none yet:

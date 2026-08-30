@@ -145,7 +145,7 @@ What the config holds:
     - You turn a part off there and run `apply` again
 - Seven components name a tool this setup installs: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, `lazygit`, and `yazi`
 - `neovim` names an editor you installed yourself, and writes one file into its config
-    - It is the only component that starts off, and section 3.4 says why
+    - It is the only component that starts off, and section 3.5 says why
 - The other two name a feature
     - `markdown` covers `spechub-md` with mermaid-ascii and glow
     - `remote` covers the clipboard and browser helpers
@@ -257,6 +257,8 @@ The fork carries a third change of its own, with no upstream pull request yet.
 - Setting `build_from_fork: true` clones the fork and builds `local/daily` with cargo
     - It also writes the two keys plus `no_update_check = true`
         - `tuicr update` cannot replace the build
+    - `apply` replaces a value you set by hand on any of those keys rather than joining it
+        - TOML forbids two of one key, and tuicr ignores a config it cannot parse
 
 On a machine where you did set it true:
 
@@ -269,7 +271,18 @@ On a machine where you did set it true:
 - Check the merged key names first
     - The review can rename them
 
-### 3.4. A dot for unsaved changes in LazyVim
+### 3.4. Pin tuicr's light or dark theme
+
+*tuicr works out its own theme by asking the terminal what colour it paints. Nothing answers under `herdr --remote`, so set `tuicr.appearance` on any machine you reach over the network.*
+
+- tuicr's own default asks the terminal for its background colour over OSC 11, an escape sequence a terminal answers with the colour it is painting
+- Under `herdr --remote` nothing answers, and tuicr falls back to `gsettings get org.gnome.desktop.interface color-scheme`
+- A headless machine answers that with `default`, which tuicr reads as light
+    - It then paints a light theme with a transparent background, leaving dark text on a black terminal
+- Set `tuicr.appearance` to `dark` or `light`, and tuicr skips the whole detection path
+- Leave it empty on a machine you sit at, where the terminal answers for itself
+
+### 3.5. A dot for unsaved changes in LazyVim
 
 *LazyVim marks a modified buffer by recolouring the filename and nothing else. Set `neovim.enabled: true` to append a dot to the statusline instead.*
 
@@ -286,7 +299,11 @@ On a machine where you did set it true:
     - Neither one touches a `spechub.lua` you wrote by hand
 - `apply` skips a machine with no LazyVim config, because the dot goes into LazyVim's own lualine section
     - `apply` says so rather than writing a file that does nothing
-- Delete your own copy of this override first, or the statusline draws two dots
+- `apply` also skips a config where a lualine override you wrote already marks a modified buffer, and names that file
+    - LazyVim loads every file under `lua/plugins`, so yours does exactly what this component does
+    - The statusline would then carry two dots side by side
+    - Neither file looks wrong on its own, and the only place the collision shows is the statusline
+    - Delete your own file to hand the dot to this component
 
 ## 4. How you attach
 
@@ -607,10 +624,33 @@ directory = "~/.herdr/worktrees"
 [ui]
 # A pane's scrollbar costs the pane a column that herdr does not subtract.
 pane_scrollbars = false
+show_agent_labels_on_pane_borders = true
 ```
 
 - A `shell` command carries no `width` or `height`
     - herdr rejects both on anything that is not a popup
+
+Four settings that are not keys sit alongside the block above. Each one is
+written only when the config names it, so a machine that says nothing about a
+setting keeps whatever herdr already does.
+
+| Config key | Writes | Default |
+| --- | --- | --- |
+| `herdr.agent_labels_on_pane_borders` | `show_agent_labels_on_pane_borders` in `[ui]` | `true`, and written either way |
+| `herdr.agent_panel_sort` | `agent_panel_sort` in `[ui]` | empty, so nothing is written |
+| `herdr.toast_delivery` | `delivery` in `[ui.toast]` | empty, so nothing is written |
+| `herdr.theme.name` and `herdr.theme.light` | `[theme]` | empty, so nothing is written |
+
+**One server, two devices, two backgrounds.**
+
+- `auto_switch` asks each attached client for its background colour over OSC 11, an escape sequence a terminal answers with the colour it is painting
+- herdr then picks `dark_name` or `light_name` from the answer, per client
+- A dark terminal on one device and a light one on another each get the right theme
+    - An e-ink panel is the case that makes this worth having
+- A client that answers nothing falls back to `dark_name`
+    - So `apply` writes `herdr.theme.name` into both `name` and `dark_name`
+- `herdr.theme.name` on its own writes the name and nothing else
+    - With no light theme, nothing has anything to switch to
 
 Three choices worth explaining.
 

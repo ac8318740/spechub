@@ -11789,6 +11789,11 @@ var init_global_config = __esm({
       { key: "host.browser.headless", kind: "boolean", required: true },
       { key: "host.browser.local", kind: "boolean", required: true },
       { key: "host.preview.tailscale_serve", kind: "boolean", required: false },
+      // Whether this machine runs the optional terminal workspace. SpecHub works
+      // without it, so it is never required. It is recorded all the same, because
+      // an unset axis and a declined one look identical otherwise, and setup would
+      // ask again on every project.
+      { key: "host.terminal_workspace", kind: "boolean", required: false },
       {
         key: "host.element_picker",
         kind: "enum",

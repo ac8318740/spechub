@@ -1771,6 +1771,7 @@ apply_herdr() {
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
   local mod wt diffkey dashkey filekey filetabkey difftabkey dashtabkey
   local pickkey picktabkey gitkey gittabkey scrollbars
+  local theme themeauto themelight toast labels panelsort
   mod=$(cfg_get herdr.chord_modifier alt)
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
   # f, not d: Windows Terminal keeps alt+shift+d for "duplicate pane", so the
@@ -1790,17 +1791,29 @@ apply_herdr() {
   # writes one column more than it has, so every wrapped row starts a column
   # left of the row above it. Turning the scrollbar off gives the column back.
   scrollbars=$(cfg_get herdr.pane_scrollbars false)
+  # Four settings that are not keys. Each one is empty by default and then
+  # written only when the config names it, so a machine that says nothing
+  # keeps whatever herdr already paints. The exception is the pane label,
+  # which is written either way: several agents in several panes is what this
+  # workspace is for, and an unlabelled pane does not say which agent it holds.
+  theme=$(cfg_get herdr.theme.name "")
+  themeauto=$(cfg_get herdr.theme.auto_switch true)
+  themelight=$(cfg_get herdr.theme.light "")
+  toast=$(cfg_get herdr.toast_delivery "")
+  labels=$(cfg_get herdr.agent_labels_on_pane_borders true)
+  panelsort=$(cfg_get herdr.agent_panel_sort "")
   [ "$(cfg_get diffnav.enabled true)" = "true" ] \
     || { diffkey=""; difftabkey=""; pickkey=""; picktabkey=""; }
   [ "$(cfg_get gh_dash.enabled true)" = "true" ] || { dashkey=""; dashtabkey=""; }
   [ "$(cfg_get yazi.enabled true)"    = "true" ] || { filekey=""; filetabkey=""; }
   [ "$(cfg_get lazygit.enabled true)" = "true" ] || { gitkey=""; gittabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$scrollbars|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$scrollbars|$theme|$themeauto|$themelight|$toast|$labels|$panelsort|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
 (mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey,
  pickkey, picktabkey, gitkey, gittabkey, scrollbars,
+ theme, themeauto, themelight, toast, labels, panelsort,
  begin, end) = os.environ["SPECHUB_ARGS"].split("|")
 
 # key, command, description, herdr custom-command type, popup size.
@@ -1875,17 +1888,58 @@ if mod != "none":
 # workspace numbers.
 keys.append('switch_workspace = "prefix+1..9"')
 
-# The first and only [ui] setting this script manages. See the comment on
-# `scrollbars` above for what the scrollbar column costs.
-ui = ["pane_scrollbars = " + ("true" if scrollbars == "true" else "false")]
+# See the comment on `scrollbars` above for what the scrollbar column costs.
+# The label is written either way; the sort order only when the config names
+# one, because herdr's own default is a reasonable answer and this script has
+# no better one.
+ui = [
+    "pane_scrollbars = " + ("true" if scrollbars == "true" else "false"),
+    "show_agent_labels_on_pane_borders = " + ("true" if labels == "true" else "false"),
+]
+if panelsort:
+    ui.append(f'agent_panel_sort = "{panelsort}"')
+
+# A theme, and a toast. Both tables stay empty unless the config names a value,
+# so a machine that says nothing about either keeps what herdr already does.
+#
+# auto_switch asks the attached client for its background colour over OSC 11
+# and picks dark_name or light_name from the answer. That is the setting that
+# lets one herdr server serve a dark terminal on one device and a light one on
+# another - an e-ink panel among them - without either client changing the
+# other. dark_name repeats `name` because a client that answers nothing at all
+# falls back to dark.
+themelines = []
+if theme:
+    themelines = [f'name = "{theme}"']
+    if themelight:
+        themelines += [
+            "auto_switch = " + ("true" if themeauto == "true" else "false"),
+            f'dark_name = "{theme}"',
+            f'light_name = "{themelight}"',
+        ]
+
+toastlines = [f'delivery = "{toast}"'] if toast else []
 
 # TOML forbids a duplicate key, so a hand-written keymap that already sets
 # something this script manages would make the merged file unparseable and
 # herdr would reject the lot. Drop our own keys from the user's [keys] table,
 # and any [[keys.command]] bound to a key we are about to claim, before
 # inserting. Anything we do not manage is left exactly as it was.
-managed = {k.split("=", 1)[0].strip() for k in keys if "=" in k}
-managed_ui = {k.split("=", 1)[0].strip() for k in ui if "=" in k}
+def names(lines):
+    return {k.split("=", 1)[0].strip() for k in lines if "=" in k}
+
+
+managed = names(keys)
+# One set per table. An empty set strips nothing, so a table this run writes
+# no value into leaves whatever the user wrote in it exactly as it was.
+MANAGED_BY_TABLE = {"[keys]": managed, "[ui]": names(ui),
+                    "[theme]": names(themelines), "[ui.toast]": names(toastlines)}
+# A theme is one setting spelled across four keys, so it is claimed whole or
+# not at all. Claiming only what gets written leaves a hand-written
+# `auto_switch` and `light_name` beside the new `name`, and a light client then
+# keeps the theme the user is replacing.
+if themelines:
+    MANAGED_BY_TABLE["[theme]"] = {"name", "auto_switch", "dark_name", "light_name"}
 claimed = {key for key, *_ in CUSTOM if key}
 
 
@@ -1894,14 +1948,25 @@ def strip_managed(table, names):
     # introduced each one. Removing the setting alone strands its comment: the
     # user is left with a run of bare headings describing settings that are no
     # longer there, which reads as a broken config.
-    out, pending = [], []
+    #
+    # A value can run over several lines, because every key here holds an array
+    # and TOML lets one span as many lines as it likes. Dropping the first line
+    # alone strands the rest as bare list items, which is invalid TOML - and
+    # herdr answers that by rejecting the whole file, so one hand-written
+    # binding written that way would cost the user every binding.
+    out, pending, depth = [], [], 0
     for ln in table:
+        if depth > 0:
+            depth += ln.count("[") - ln.count("]")
+            continue
         stripped = ln.strip()
         if stripped.startswith("#") or not stripped:
             pending.append(ln)
             continue
         if "=" in ln and ln.split("=", 1)[0].strip() in names:
             pending = []
+            value = ln.split("=", 1)[1]
+            depth = value.count("[") - value.count("]")
             continue
         out.extend(pending)
         pending = []
@@ -1910,12 +1975,22 @@ def strip_managed(table, names):
     return out
 
 
+# A table header on its own line, and nothing else. `line.startswith("[")` is
+# not enough: a value spanning several lines puts its own list items at the
+# start of a line, and `  [1, 2],` would then read as a new table.
+HEADER = re.compile(r"^\s*\[\[?[^\[\]]*\]\]?\s*(?:#.*)?$")
+
+
 def tables(lines):
-    current = []
+    current, depth = [], 0
     for line in lines:
-        if line.strip().startswith("[") and current:
+        if depth <= 0 and HEADER.match(line) and current:
             yield current
             current = []
+        # Only outside a multi-line value, for the same reason.
+        if not HEADER.match(line):
+            depth += line.count("[") - line.count("]")
+            depth = max(depth, 0)
         current.append(line)
     if current:
         yield current
@@ -1932,10 +2007,8 @@ for table in tables(text.splitlines()):
         bound = re.search(r'(?m)^\s*key\s*=\s*"([^"]+)"', "\n".join(table))
         if bound and bound.group(1) in claimed:
             continue
-    if header == "[keys]":
-        table = strip_managed(table, managed)
-    if header == "[ui]":
-        table = strip_managed(table, managed_ui)
+    if header in MANAGED_BY_TABLE:
+        table = strip_managed(table, MANAGED_BY_TABLE[header])
     kept.extend(table)
 text = "\n".join(kept)
 if text and not text.endswith("\n"):
@@ -1945,7 +2018,9 @@ def merge(text, header, lines):
     # Merge into a table the user already declared rather than declaring a
     # second one, because TOML forbids declaring the same table twice. Returns
     # the text and whether the merge happened.
-    head = r"^\[" + header + r"\][ \t]*\n"
+    # re.escape, because a sub-table header carries a dot: an unescaped
+    # "ui.toast" matches "[ui-toast]" too.
+    head = r"^\[" + re.escape(header) + r"\][ \t]*\n"
     if not re.search(head, text, flags=re.M):
         return text, False
     region = begin + "\n" + "\n".join(lines) + "\n" + end
@@ -1954,7 +2029,10 @@ def merge(text, header, lines):
 
 
 block = []
-for header, lines in (("keys", keys), ("ui", ui)):
+for header, lines in (("keys", keys), ("ui", ui),
+                      ("theme", themelines), ("ui.toast", toastlines)):
+    if not lines:
+        continue
     text, merged = merge(text, header, lines)
     if merged:
         continue
@@ -2037,15 +2115,16 @@ apply_tuicr() {
   mkdir -p "$HOME/.config/tuicr"
   # show_file_line_stats and file_list_width only exist in the fork build.
   # Writing them against a stock release makes tuicr warn on every start.
-  SPECHUB_ARGS="$from_fork|$(cfg_get tuicr.file_list_width 30)|$(cfg_get tuicr.show_file_line_stats true)|$BEGIN|$END" \
+  SPECHUB_ARGS="$from_fork|$(cfg_get tuicr.file_list_width 30)|$(cfg_get tuicr.show_file_line_stats true)|$(cfg_get tuicr.appearance "")|$BEGIN|$END" \
     py "$HOME/.config/tuicr/config.toml" <<'PY'
 import os, re, sys
 path = sys.argv[1]
-from_fork, width, stats, begin, end = os.environ["SPECHUB_ARGS"].split("|")
+from_fork, width, stats, appearance, begin, end = os.environ["SPECHUB_ARGS"].split("|")
 text = open(path).read() if os.path.isfile(path) else ""
 text = re.sub(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", text, flags=re.S)
 
 block = [begin]
+managed = set()
 if from_fork == "true":
     block += [
         "# These two keys exist only in the fork build. See the tuicr section",
@@ -2055,12 +2134,56 @@ if from_fork == "true":
         "# A local build must not be replaced by a stock release.",
         "no_update_check = true",
     ]
+    managed |= {"show_file_line_stats", "file_list_width", "no_update_check"}
 else:
     block += ["# Stock release: the fork-only keys are omitted so tuicr does not",
               "# warn about unknown config keys at startup."]
+# `system` asks the terminal for its background colour over OSC 11. Under
+# `herdr --remote` nothing answers, so tuicr falls back to a desktop setting
+# that a headless machine reports as light, and paints dark text on a black
+# terminal. Pinning the value sidesteps the whole detection path.
+if appearance:
+    block += ["# Pinned rather than detected. See the tuicr section of",
+              "# ~/.config/spechub/terminal-workspace.yaml.",
+              f'appearance = "{appearance}"']
+    managed.add("appearance")
 block.append(end)
-text = text.rstrip("\n")
-text = (text + "\n\n" if text else "") + "\n".join(block) + "\n"
+
+# TOML forbids a duplicate key, so a value the user set by hand before this
+# script managed it would make the merged file unparseable and tuicr would
+# reject the lot. Drop only the keys this run writes, and the comment block
+# that introduced each one: the setting alone leaves a heading over nothing.
+kept, pending, cut = [], [], None
+for ln in text.splitlines():
+    stripped = ln.strip()
+    if stripped.startswith("#") or not stripped:
+        pending.append(ln)
+        continue
+    # Every key this script writes is top level, so the first table header ends
+    # the search. A key of the same name inside a table is a different key.
+    if cut is None and stripped.startswith("["):
+        # Before the comments introducing that header, not after them.
+        cut = len(kept)
+    if cut is None and "=" in ln and ln.split("=", 1)[0].strip().strip('"') in managed:
+        pending = []
+        continue
+    kept.extend(pending)
+    pending = []
+    kept.append(ln)
+kept.extend(pending)
+
+# The block holds top-level keys, so it goes above the first table header
+# rather than at the end of the file. Appended after a `[export]` or
+# `[forge]` section, every key in it would belong to that section instead:
+# tuicr would warn about an unknown key there and never see the setting, and
+# a name the section already uses makes the file invalid outright.
+if cut is None:
+    text = "\n".join(kept).rstrip("\n")
+    text = (text + "\n\n" if text else "") + "\n".join(block) + "\n"
+else:
+    head = "\n".join(kept[:cut]).rstrip("\n")
+    text = ((head + "\n\n" if head else "") + "\n".join(block) + "\n\n"
+            + "\n".join(kept[cut:]).strip("\n") + "\n")
 open(path, "w").write(text)
 PY
   say "tuicr config written"
@@ -2337,8 +2460,85 @@ def claimed(t):
         return True
 
 
+CLAIMED = {k for k in (key, numkey, editkey) if k}
+if dltarget and dlkey:
+    CLAIMED.add(dlkey)
+
+
+def drop_claimed(t):
+    """Remove any prepend_keymap block the user wrote on a key this script is
+    about to bind.
+
+    yazi accepts both, lists both in its help, and runs one of them. So a
+    binding written by hand before this script managed the key leaves two
+    entries saying different things and no way to tell which one fires. Both
+    table spellings, because `manager` is what yazi called `mgr` before the
+    rename and an older keymap still says it.
+    """
+    out, block = [], None
+
+    def bound_key(lines):
+        """The single key this block binds, or None.
+
+        yazi spells `on` four ways: a double-quoted scalar, a single-quoted
+        one, a one-element array, and any of those with a trailing comment.
+        Reading only the first spelling leaves the other three in place, which
+        is the state this function exists to prevent. A longer array is a
+        multi-key sequence and never collides with a single key.
+        """
+        body = "\n".join(lines[1:])
+        if tomllib is not None:
+            try:
+                on = tomllib.loads(body).get("on")
+            except Exception:
+                on = ...  # unparseable, so fall through to the regex
+            if on is not ...:
+                if isinstance(on, str):
+                    return on
+                if isinstance(on, list) and len(on) == 1 and isinstance(on[0], str):
+                    return on[0]
+                return None
+        m = re.search(r"""(?m)^\s*on\s*=\s*\[?\s*(?:"([^"]*)"|'([^']*)')""", body)
+        return (m.group(1) if m.group(1) is not None else m.group(2)) if m else None
+
+    def close():
+        nonlocal block
+        if block is None:
+            return
+        # Trailing blank lines belong to whatever comes next, not to the
+        # binding, so they stay even when the binding goes.
+        tail = []
+        while block and not block[-1].strip():
+            tail.insert(0, block.pop())
+        if bound_key(block) not in CLAIMED:
+            out.extend(block)
+        out.extend(tail)
+        block = None
+
+    for ln in t.splitlines():
+        if re.match(r"^\s*\[\[\s*(?:mgr|manager)\.prepend_keymap\s*\]\]\s*$", ln):
+            close()
+            block = [ln]
+            continue
+        if block is not None:
+            # Any other table header ends this binding and belongs to what
+            # follows, so it is never dropped with the block.
+            if ln.lstrip().startswith("["):
+                close()
+                out.append(ln)
+                continue
+            block.append(ln)
+            continue
+        out.append(ln)
+    close()
+    return "\n".join(out)
+
+
 parts = []
 if not claimed(text):
+    # A binding conceded below is one this script never writes, so the user's
+    # own must survive. Only strip when the bindings are actually going in.
+    text = drop_claimed(text)
     # %h is the hovered file. $0 and $@ are not: yazi runs the template through
     # a shell, where $0 names the shell itself and $@ is empty - both measured,
     # and both would open the browser on nothing at all.
@@ -2461,6 +2661,26 @@ nvim_ours() {
   return 1
 }
 
+# The dot is appended to LazyVim's lualine section, and LazyVim loads every
+# file under lua/plugins. So a lualine override the user wrote in a file of
+# their own does exactly what this component does, and installing on top of it
+# draws two dots side by side. Print the file that already does it, if any.
+nvim_dot_elsewhere() {
+  local dir="$HOME/.config/nvim/lua/plugins" f
+  [ -d "$dir" ] || return 1
+  for f in "$dir"/*.lua; do
+    [ -e "$f" ] || continue
+    [ "$f" = "$NVIM_PLUGIN" ] && continue
+    # Both, not either: a lualine override that says nothing about a modified
+    # buffer is not this dot, and neither is a modified check outside lualine.
+    grep -q 'lualine' "$f" 2>/dev/null || continue
+    grep -q 'vim\.bo\.modified' "$f" 2>/dev/null || continue
+    printf '%s\n' "$f"
+    return 0
+  done
+  return 1
+}
+
 apply_neovim() {
   # The one component that is off unless asked for. Every other one writes
   # files this setup owns end to end, or a marked region inside a config that
@@ -2475,6 +2695,20 @@ apply_neovim() {
     return 0
   fi
   nvim_ours || return 0
+  local mine; mine="$(nvim_dot_elsewhere)" && {
+    say "neovim: $mine already marks a modified buffer in lualine."
+    # nvim_ours has already run, so a file at this path is one we wrote. A user
+    # who installed first and wrote their own override later would otherwise
+    # keep both, which is the pair of dots this guard exists to prevent.
+    if [ -e "$NVIM_PLUGIN" ]; then
+      rm -f "$NVIM_PLUGIN"
+      say "     The dot this component wrote was removed, so only one is drawn."
+    else
+      say "     The dot was not written. Two would be drawn side by side."
+    fi
+    say "     Delete $mine to hand the dot back to this component."
+    return 0
+  }
   local dot; dot="$(cfg_get neovim.unsaved_dot_color '#f38ba8')"
   mkdir -p "$(dirname "$NVIM_PLUGIN")"
   cat > "$NVIM_PLUGIN" <<H
