@@ -19,7 +19,9 @@ flowchart TD
     B --> P["Open the pull request"]
     P --> CI["CI enforces both<br/>(version-gate, regeneration check)"]
     CI -->|"a generated copy differs,<br/>or the version did not rise"| S
-    CI -->|"green, then merged"| T["tag-release tags vX.Y.Z"]
+    CI -->|"green, then merged into dev"| D["dev collects the work"]
+    D --> L["Promote<br/>(PR dev into main,<br/>then label promote-to-main)"]
+    L --> T["main fast-forwards,<br/>tag-release tags vX.Y.Z"]
 ```
 
 | What you want | Where |
@@ -29,7 +31,7 @@ flowchart TD
 | Regenerating `cli/dist` | section 3 |
 | Regenerating `agents/codex` | section 4 |
 | Running the tests | section 5 |
-| Bumping, opening the pull request, and the tag | section 6 |
+| Bumping, opening the pull request, promoting, and the tag | section 6 |
 | Writing standards | section 7 |
 
 ## 1. Plugin layout
@@ -348,14 +350,43 @@ spechub/**
 2. Confirm `cli/dist/` is up to date. The pre-commit hook handles this if installed.
 3. Commit via `/commit` from the marketplace repo. It handles the submodule and parent ordering.
 
-### 6.5. After the merge
+### 6.5. Promoting `dev` to `main`
+
+*A promotion is a fast-forward that a label triggers. Nobody presses Merge.*
+
+- Open a pull request with base `main` and head `dev`
+- Review it, then add the `promote-to-main` label
+- `.github/workflows/promote.yml` checks six preconditions and moves `refs/heads/main`
+- GitHub closes the pull request as merged on its own, because `main` now reaches every commit on `dev`
+
+The Merge button does not work on that pull request, and it does not work for admins either.
+
+- `main` requires a check called `promotion-gate`, and only `promote.yml` ever creates it
+- A pull request into `main` without the label is missing that check, so it cannot merge
+
+- GitHub offers no fast-forward merge
+    - Its merge commit, squash, and rebase each write a commit to `main` that `dev` can never contain
+    - That commit is what used to force a back-merge into `dev` after every promotion
+- A fast-forward strands nothing on `main`, so there is no back-merge
+- `docs/adr/0010-promote-dev-to-main-by-fast-forward.md` records the reasoning
+
+Three things follow as rules:
+
+- No merge commit, squash, or rebase onto `main`
+- No cherry-pick onto `main`, because a new SHA makes the two histories diverge for good
+- No back-merge of `main` into `dev`
+
+The workflow refuses a promotion on three grounds: CI is not green, the move is not a fast-forward, or a non-admin added the label. Each refusal names its own fix.
+
+### 6.6. After the promotion
 
 *Nothing to tag by hand.*
 
-- The `tag-release` workflow watches `main` for a change to `.claude-plugin/plugin.json`
-- It creates an annotated tag `vX.Y.Z` for the new version
+- The `tag-release` workflow creates an annotated tag `vX.Y.Z` for whatever version `main` holds
+- `promote.yml` dispatches it, because a push made with `GITHUB_TOKEN` starts no workflow runs
+- It skips silently when that tag already exists, so a re-run costs nothing
 
-### 6.6. Why the CLI is not on npm
+### 6.7. Why the CLI is not on npm
 
 *The CLI ships only as part of the plugin. That is deliberate.*
 
@@ -393,7 +424,7 @@ Revisit this only if a machine needs the CLI with **no plugin installed at all**
     - The bare `spechub` name on npm belongs to an unrelated project
         - The package would be `spechub-cli` with `spechub` as its binary
 
-### 6.7. Who owns `spechub` on PATH
+### 6.8. Who owns `spechub` on PATH
 
 *The SessionStart hook defers to a `spechub` already on PATH. Agents are outside this entirely.*
 
