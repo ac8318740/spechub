@@ -11,6 +11,18 @@ permissions:
 jobs:
   version-gate:
     name: version-gate
+    # labeled and unlabeled are here for one label only: no-bump changes this gate's
+    # verdict, so adding or removing it has to re-run the gate. Every other label leaves
+    # the verdict alone, and re-running for one costs more than nothing.
+    #
+    # It breaks the promotion. Adding promote-to-main would start a fresh version-gate run
+    # on the same SHA, and .github/workflows/promote.yml needs this check already green
+    # before it moves the ref. main's branch protection needs the same thing for the push
+    # itself. A skipped job reports as passing, so this if: keeps the old green run
+    # standing instead of putting a pending one beside it.
+    if: >-
+      github.event.action != 'labeled' && github.event.action != 'unlabeled'
+      || github.event.label.name == 'no-bump'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

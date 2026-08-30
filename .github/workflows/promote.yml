@@ -1,0 +1,493 @@
+# Promote dev to main by fast-forward, triggered by a label on the promotion PR.
+#
+# A promotion is a release decision, not a code review. Every commit in it was already
+# reviewed on its way into dev. The PR exists for the record, and this workflow moves the
+# ref instead of the Merge button.
+#
+# WHY NOT THE MERGE BUTTON: GitHub offers no fast-forward merge. Its three options are a
+# merge commit, a squash, and a rebase. All three write a commit to main that dev can never
+# contain, and that commit is what forces a back-merge afterwards. Commits ee41411 and
+# 04602c7 are the last two the old flow cost.
+#
+# HOW TO PROMOTE: open a PR with base main and head dev, review it, then add the
+# promote-to-main label. This workflow checks six preconditions, opens the promotion gate,
+# moves the ref, dispatches the tag, and comments. GitHub then closes the PR as merged on
+# its own, because main reaches every commit on dev.
+#
+# WHY GITHUB_TOKEN AND NOT A GITHUB APP: nothing sits in a secret, the token expires when
+# the job ends, and GitHub scopes it to this repository. An App would put a private key at
+# rest here and hand this path manual rotation.
+#
+# WHAT THAT TOKEN COSTS, AND HOW THE GATE PAYS IT: GITHUB_TOKEN cannot bypass branch
+# protection. This repository is owned by a person, and a personal repository cannot grant
+# the bypass anyway. The rulesets API rejects the GitHub Actions integration as a bypass
+# actor, and classic protection rejects a bypass list outright.
+#
+# So main is blocked by a required check that no ordinary pull request ever gets:
+# promotion-gate. Only the step below creates it. A PR into main without the label is
+# missing it and cannot merge, admins included. This workflow posts it green immediately
+# before the push and flips it to failed if the push does not land.
+#
+# THE WINDOW THAT LEAVES: between the gate opening and the ref moving, the Merge button on
+# this PR works. That is about a second, inside a run an admin triggered. Pressing it there
+# writes a merge commit to main, the fast-forward then refuses, and the push step says so.
+# Nothing is silently wrong.
+#
+# WHY pull_request AND NOT pull_request_target: pull_request_target runs the workflow file
+# from the BASE branch, so it would do nothing until this file already exists on main. The
+# first promotion PR would get labelled and nothing at all would happen. No run, nothing
+# red, no message. A promotion is always same-repo, dev into main, so a write-capable
+# GITHUB_TOKEN is available on pull_request too. pull_request takes the workflow from the
+# merge ref, so this fires correctly on the very first label.
+#
+# THE DISPATCH COUPLING, WHICH THAT TOKEN ALSO FORCES: a push made with GITHUB_TOKEN
+# creates no workflow runs. tag-release.yml fires on a push to main, so a promotion would
+# move main and tag nothing. GitHub documents exactly one relevant exception:
+# workflow_dispatch and repository_dispatch events always create workflow runs. So this
+# workflow dispatches tag-release.yml explicitly after moving the ref.
+#
+# CAVEAT: nothing enforces that coupling. If someone adds another workflow that triggers on
+# a push to main, it will not run during a promotion until it is added to the dispatch step
+# below.
+#
+# NO APPROVAL GATE, ON PURPOSE: GitHub refuses to let anyone approve their own pull request.
+# On a single-owner repository, requiring a review would make this path unusable. Reviewing
+# before you label is the convention here. The admin check below is the only authority gate
+# on the whole path.
+#
+# MANUAL FALLBACK: an admin can promote by hand with
+#   gh api -X PATCH repos/ac8318740/spechub/git/refs/heads/main -f sha=<dev sha>
+# That call needs promotion-gate green on the SHA, so it only works while a promotion run
+# holds the gate open. Fixing the cause the failing precondition names and re-labelling is
+# the real path.
+#
+# docs/adr/0010-promote-dev-to-main-by-fast-forward.md records the reasoning.
+
+name: Promote
+
+on:
+  pull_request:
+    types: [labeled]
+    branches: [main]
+
+# A permissions: block sets every scope it does not name to none. So a missing scope is a
+# 403 at the call site, not a default. Add the scope whenever you add an API call here.
+permissions:
+  contents: write # PATCH refs/heads/main, and both compare reads
+  pull-requests: write # gh pr comment, which posts the result
+  checks: write # POST and PATCH the promotion-gate check run
+  actions: write # gh workflow run tag-release.yml
+
+jobs:
+  promote:
+    name: Promote dev to main
+    # Cheap gate first, so an unrelated label costs nothing.
+    if: github.event.label.name == 'promote-to-main'
+    runs-on: ubuntu-latest
+    # The group sits on the job and not on the workflow. This workflow triggers on EVERY
+    # label added to a PR into main, and a workflow-level group is claimed before the if:
+    # above is read. A run skipped by that if: would therefore hold the slot, and with
+    # cancel-in-progress false GitHub keeps one pending run per group. Labelling anything
+    # else during a promotion would cancel the queued promotion. A skipped job takes no
+    # slot, so the group belongs here.
+    concurrency:
+      group: promote-main
+      cancel-in-progress: false
+    steps:
+      # Six preconditions. Each one fails the job with a message naming the fix, because a
+      # promotion that half-happens is worse than one that never starts.
+      - name: Check the preconditions
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ACTOR: ${{ github.event.sender.login }}
+        run: |
+          set -euo pipefail
+
+          # Every API read below is wrapped the same way, for two reasons that bite
+          # separately. Without `|| echo ""`, set -e aborts the step on a failed gh call.
+          # The step then prints gh's stderr and none of the messages here. And on an error
+          # response, `gh --jq` writes the whole error body to stdout, so an unguarded read
+          # lands a blob of JSON inside the message meant to tell you what to do. Each value
+          # is therefore normalised against the set it is allowed to take. Anything else
+          # becomes "unreadable", which always lands on a failing branch.
+
+          # 1. The head must be this repository. A fork can open a PR whose head branch is
+          # also called "dev", which would satisfy the branch test below. Later steps would
+          # refuse anyway, because a fork commit is not in this repo. A promotion should
+          # fail on the first question rather than the last.
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::This PR's head is ${HEAD_REPO}, not ${REPO}. A promotion can only come from this repository."
+            exit 1
+          fi
+
+          # 2. The PR must be dev into main, not some other branch that got labelled.
+          if [ "$HEAD_REF" != "dev" ] || [ "$BASE_REF" != "main" ]; then
+            echo "::error::promote-to-main only applies to a PR from dev into main. This one is ${HEAD_REF} into ${BASE_REF}."
+            exit 1
+          fi
+
+          # 3. The labeller must be an admin. Anyone with write access can add a label, so
+          # the label is not the authority. This repo has one collaborator today, so the
+          # check passes trivially. Keep it anyway. There is no required review here, so
+          # this is the only authority gate on the whole path.
+          perm=$(gh api "repos/${REPO}/collaborators/${ACTOR}/permission" --jq '.permission' 2>/dev/null || echo "")
+          case "$perm" in admin|maintain|write|triage|read|none) ;; *) perm="unreadable" ;; esac
+          if [ "$perm" != "admin" ]; then
+            echo "::error::${ACTOR} resolved to permission '${perm}'. Promoting needs admin. Remove the label, and have an admin add it."
+            exit 1
+          fi
+
+          # A guard, not a precondition. Every read below interpolates this value into an
+          # API path, so reject anything that is not a hex SHA before using it.
+          sha="$HEAD_SHA"
+          case "$sha" in *[!0-9a-f]* | "") sha="" ;; esac
+          if [ -z "$sha" ]; then
+            echo "::error::The PR carried no usable head SHA."
+            exit 1
+          fi
+
+          # 4. dev must still contain the commit being promoted. The payload's SHA was
+          # captured when the label went on. A force-push to dev since then can leave that
+          # commit unreachable from every branch while the object still exists, and
+          # precondition 5 would still read "ahead". Moving main to it would put main
+          # outside dev's history for good.
+          #
+          # Normal forward movement on dev is not a false positive here. It leaves the old
+          # SHA reachable, so dev reads "ahead" of it. A label on an unmoved dev reads
+          # "identical". Every other status means dev no longer contains the commit.
+          reach=$(gh api "repos/${REPO}/compare/${sha}...dev" --jq '.status' 2>/dev/null || echo "")
+          case "$reach" in ahead|behind|diverged|identical) ;; *) reach="unreadable" ;; esac
+          case "$reach" in
+            ahead|identical) ;;
+            *)
+              echo "::error::dev no longer contains ${sha:0:8}, and compare reports '${reach}'. Someone force-pushed dev after the label went on. Remove the label, check what dev points at now, then re-label."
+              exit 1
+              ;;
+          esac
+
+          # 5. main must be an ancestor of the commit being promoted, or this is not a
+          # fast-forward. GitHub's compare status says "ahead" exactly when head contains
+          # base. Compare against the PR's head SHA rather than whatever dev points at by
+          # the time this runs. The PR was reviewed at that commit, and dev can move between
+          # the review and the label. The reviewed commit is still a fast-forward from main,
+          # just a shorter one, so this ships what someone actually looked at.
+          status=$(gh api "repos/${REPO}/compare/main...${sha}" --jq '.status' 2>/dev/null || echo "")
+          case "$status" in ahead|behind|diverged|identical) ;; *) status="unreadable" ;; esac
+          if [ "$status" = "identical" ]; then
+            echo "::error::main already matches dev at ${sha:0:8}. Nothing to promote."
+            exit 1
+          fi
+          if [ "$status" != "ahead" ]; then
+            echo "::error::compare reports '${status}', so main is not an ancestor of ${sha:0:8} and this cannot fast-forward. Something wrote to main directly. Merge main into dev first, then re-label."
+            exit 1
+          fi
+
+          # 6. The commit must be green on SpecHub's five CI checks. These names are the
+          # `name:` values of the jobs in ci.yml, tests.yml, and version-gate.yml. A skipped
+          # or neutral run counts as passing, exactly as branch protection reads it.
+          #
+          # A promotion PR's head SHA carries TWO suites for the three ci.yml checks. One is
+          # the push-side run on dev. The other is the PR-side run on this promotion PR,
+          # because pull_request check runs attach to the head SHA.
+          #
+          # That doubling breaks a naive lookup. The unfiltered endpoint returns one page of
+          # 30 runs, so a check can fall off page one and read as absent. Filtering by name
+          # sidesteps paging entirely.
+          #
+          # The names contain spaces. Pass them with gh's query-param form, which encodes
+          # them for you. Hand-encoding them into the URL is how this breaks silently.
+          #
+          # Both suites test the same tree. Precondition 5 has already proved that dev
+          # fast-forwards onto main, and the merge ref for a fast-forward is byte-identical
+          # to dev. So two runs of one name that disagree mean one of them genuinely failed.
+          # The gate is therefore strict: every run of the check on this SHA has completed,
+          # at least one passed, and none failed.
+          #
+          # This endpoint defaults to filter=latest, which returns the latest run per name
+          # PER CHECK SUITE, not per name overall. Both suites therefore still report, and
+          # the reasoning above holds.
+          #
+          # That default also decides what clears a failure. Only an in-place re-run does,
+          # meaning GitHub's "Re-run failed jobs" button on the workflow run that failed,
+          # which replaces the check run inside the same suite. Anything that starts a NEW
+          # suite leaves the old failure standing and this gate blocked on the SHA. Closing
+          # and reopening the promotion PR is one such path, because ci.yml takes the
+          # default pull_request types and those include reopened.
+          #
+          # Five counts come back for each name. `unknown` covers a completed run that
+          # reached no verdict: cancelled, stale, or a null conclusion. GitHub sets stale on
+          # a check run left incomplete for more than 14 days. None of the three is evidence
+          # of red, and none is evidence of green either, so they block with their own
+          # message rather than being read as a failure.
+          #
+          # version-gate is on this list and it only ever runs on a PR into main. The
+          # promotion PR is such a PR, so the check exists on this SHA. It is the check that
+          # proves dev raised .claude-plugin/plugin.json above main's version, which is what
+          # gives the dispatched tag-release.yml a new version to tag.
+          #
+          # promotion-gate is NOT on this list, and must never be. This workflow creates it.
+          CHECKS=("CLI" "Shell suites" "Plugin wiring" "tests" "version-gate")
+          # gh's stderr goes to a file, not to /dev/null, so the message below can name the
+          # real cause. A 403, an under-scoped token, a rate limit, and a transient 502 all
+          # read identically without it. gh's STDOUT stays out of the message, for the
+          # reason the top of this step gives: on an error response it holds a JSON body.
+          gh_err="${RUNNER_TEMP:-/tmp}/promote-check-runs.err"
+
+          # This waits on CI rather than refusing it. Adding the label starts runs of its
+          # own, so a check that is queued at this moment is normal rather than wrong.
+          # version-gate.yml is the one that bites: it triggers on labeled and unlabeled,
+          # both of which a promotion produces. Refusing on pending would deadlock the whole
+          # path, since the advice to remove and re-add the label fires version-gate twice
+          # more and leaves a fresh pending run every time.
+          #
+          # An absent check waits on the same clock. A run that GitHub has accepted but not
+          # yet materialised reports zero check runs, which is indistinguishable from a
+          # renamed job until the deadline passes.
+          #
+          # A failure never waits. Waiting would only reveal it later and cost a round trip.
+          deadline=$(( SECONDS + 600 ))
+          while :; do
+            waiting=""
+            for ctx in "${CHECKS[@]}"; do
+              counts=$(gh api -X GET "repos/${REPO}/commits/${sha}/check-runs" \
+                -f check_name="$ctx" -f per_page=100 \
+                --jq '"\([.check_runs[] | select(.conclusion == "success" or .conclusion == "skipped" or .conclusion == "neutral")] | length) \([.check_runs[] | select(.status != "completed")] | length) \(.check_runs | length) \([.check_runs[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "action_required")] | length) \([.check_runs[] | select(.status == "completed") | select(.conclusion == "cancelled" or .conclusion == "stale" or .conclusion == null)] | length)"' \
+                2>"$gh_err" || echo "")
+              ok=$(printf '%s' "$counts" | cut -d' ' -f1)
+              pending=$(printf '%s' "$counts" | cut -d' ' -f2)
+              total=$(printf '%s' "$counts" | cut -d' ' -f3)
+              failed=$(printf '%s' "$counts" | cut -d' ' -f4)
+              unknown=$(printf '%s' "$counts" | cut -d' ' -f5)
+              for v in "$ok" "$pending" "$total" "$failed" "$unknown"; do
+                case "$v" in ''|*[!0-9]*) ok="" ;; esac
+              done
+              if [ -z "$ok" ]; then
+                # The `|| echo ""` is load-bearing. $gh_err is absent whenever the
+                # redirection above failed, and under set -e a failed redirection kills the
+                # assignment and the step, so this message would never print.
+                detail=$(tr '\n\r' '  ' < "$gh_err" 2>/dev/null | cut -c1-200 || echo "")
+                echo "::error::Could not read the check runs for '${ctx}' on ${sha:0:8}. gh said: ${detail:-no error output}. A 502 or a rate limit is transient. Then remove and re-add the label."
+                exit 1
+              fi
+
+              # A failure outranks everything, including a run of the same name still going.
+              if [ "$failed" -gt 0 ]; then
+                still=""
+                if [ "$pending" -gt 0 ]; then
+                  still=" Another run of '${ctx}' is still going, so expect CI to keep moving on this SHA."
+                fi
+                echo "::error::'${ctx}' has ${failed} failed run(s) on ${sha:0:8}. This SHA can carry two CI suites and both test the same tree, so one run passing and another failing means a real failure or a flake. Re-run it in place with GitHub's 'Re-run failed jobs' button on the run that failed, because a new suite leaves this failure standing. Then remove and re-add the label.${still}"
+                exit 1
+              fi
+              if [ "$total" -eq 0 ]; then
+                waiting="${waiting} ${ctx}(absent)"
+                continue
+              fi
+              if [ "$pending" -gt 0 ]; then
+                waiting="${waiting} ${ctx}(running)"
+                continue
+              fi
+              if [ "$ok" -eq 0 ] && [ "$unknown" -gt 0 ]; then
+                echo "::error::'${ctx}' on ${sha:0:8} has ${unknown} run(s) that were cancelled or went stale, and no run that passed. Nothing here says whether this check passed, so it will not promote. Re-run it in place with GitHub's 'Re-run failed jobs' button, then remove and re-add the label."
+                exit 1
+              fi
+              # A catch-all, and no conclusion GitHub defines today reaches it. Every
+              # completed run lands in ok, failed, or unknown, so those three sum to
+              # total. Only a conclusion this block does not model would arrive here.
+              if [ "$ok" -eq 0 ]; then
+                echo "::error::Every run of '${ctx}' on ${sha:0:8} finished without passing. dev is not green at the commit this PR carries. Then remove and re-add the label."
+                exit 1
+              fi
+            done
+
+            [ -z "$waiting" ] && break
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Still waiting on${waiting} for ${sha:0:8} after 10 minutes. 'absent' most likely means a renamed job: the CHECKS list in .github/workflows/promote.yml has to match the name: values in ci.yml, tests.yml, and version-gate.yml exactly. 'running' means CI is slower than the deadline. Absence is not evidence of green, so this will not promote. Fix the cause, then remove and re-add the label."
+              exit 1
+            fi
+            echo "Waiting on${waiting}. Checking again in 20s."
+            sleep 20
+          done
+
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "Preconditions pass. Promoting main to ${sha:0:8}, the commit this PR carries."
+
+      # promotion-gate is main's required check that only a promotion can satisfy. It exists
+      # so a person cannot merge into main at all, and it is why the push below is allowed.
+      #
+      # This step sits as late as it can. Everything above it can refuse a promotion, and
+      # every second between here and the push is a second the Merge button works on this
+      # PR. Add new preconditions above this step, never below it.
+      - name: Open the promotion gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.check.outputs.sha }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # jq builds the body, not gh's -f flags. `output` is a nested object, and the
+          # bracket form for a nested field is easy to get subtly wrong in a way that
+          # returns 422 rather than an error anyone can read. A piped JSON body is exact.
+          payload=$(jq -n --arg sha "$SHA" --arg url "$RUN" '{
+            name: "promotion-gate",
+            head_sha: $sha,
+            status: "completed",
+            conclusion: "success",
+            details_url: $url,
+            output: {
+              title: "Promotion in progress",
+              summary: ("Opened by the Promote workflow for " + $sha + ". Only that workflow creates this check, and that is what stops a person merging into main.")
+            }
+          }')
+          id=$(printf '%s' "$payload" | gh api -X POST "repos/${REPO}/check-runs" --input - --jq '.id' 2>/dev/null || echo "")
+          case "$id" in ''|*[!0-9]*) id="" ;; esac
+          if [ -z "$id" ]; then
+            # The POST may still have landed. The close step below looks the gate up by
+            # name rather than by this id, so it cleans up either way.
+            echo "::error::Could not create the promotion-gate check run on ${SHA:0:8}. main's branch protection requires it, so the push would be refused. Nothing was changed."
+            exit 1
+          fi
+          echo "promotion-gate is green on ${SHA:0:8}."
+
+      # No force, so GitHub refuses anything that is not a fast-forward. That server-side
+      # refusal is the real guarantee. The compare check above only buys a clear message.
+      - name: Fast-forward main to dev
+        id: ff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.check.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! gh api -X PATCH "repos/${REPO}/git/refs/heads/main" -f sha="$SHA" >/dev/null 2>&1; then
+            echo "::error::GitHub refused to move main to ${SHA:0:8}. Two causes are realistic. Either the move is not a fast-forward, meaning something wrote to main directly, or a required check on main is not green on this SHA. Compare main's protection settings against the CHECKS list in this workflow. Nothing was changed."
+            exit 1
+          fi
+          echo "main is now at ${SHA:0:8}"
+
+      # A promotion that fails after the gate opened would otherwise leave a green
+      # promotion-gate sitting on dev's tip, and this PR mergeable by hand for as long as it
+      # stays open. Flip it to failed.
+      # This looks the gate up by name rather than trusting the id the step above captured.
+      # A POST can land server-side while gh still exits non-zero on a dropped response
+      # read. The id would be empty, the gate would be green, and a condition keyed to that
+      # id would skip the cleanup and leave this PR mergeable by hand.
+      #
+      # The lookup runs whenever the fast-forward did not succeed, including runs where the
+      # gate step never executed. It finds nothing then, and does nothing.
+      - name: Close the promotion gate
+        if: always() && steps.check.outputs.sha != '' && steps.ff.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.check.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ids=$(gh api -X GET "repos/${REPO}/commits/${SHA}/check-runs" \
+            -f check_name=promotion-gate -f per_page=100 \
+            --jq '.check_runs[] | select(.conclusion == "success") | .id' 2>/dev/null || echo "")
+          if [ -z "$ids" ]; then
+            echo "No green promotion-gate on ${SHA:0:8}. Nothing to close."
+            exit 0
+          fi
+          payload=$(jq -n '{
+            status: "completed",
+            conclusion: "failure",
+            output: {
+              title: "Promotion did not complete",
+              summary: "The fast-forward did not land, so this gate is closed again. Fix the cause the failing step names, then remove and re-add the promote-to-main label."
+            }
+          }')
+          failed_to_close=""
+          for id in $ids; do
+            if printf '%s' "$payload" | gh api -X PATCH "repos/${REPO}/check-runs/${id}" --input - >/dev/null 2>&1; then
+              echo "Closed promotion-gate ${id}."
+            else
+              failed_to_close="${failed_to_close} ${id}"
+            fi
+          done
+          if [ -n "$failed_to_close" ]; then
+            echo "::error::The promotion failed AND promotion-gate could not be closed. It is still green on ${SHA:0:8}, so this PR is mergeable by hand until you close it. Close each of${failed_to_close} with: gh api -X PATCH repos/${REPO}/check-runs/<id> -f status=completed -f conclusion=failure"
+            exit 1
+          fi
+          echo "promotion-gate is closed again."
+
+      # The push above was made with GITHUB_TOKEN, so it created no workflow runs and
+      # tag-release.yml did not fire. Dispatch it by hand. workflow_dispatch always creates
+      # a run, which is the documented exception to that rule.
+      #
+      # This works on the very first promotion too. workflow_dispatch resolves the workflow
+      # file on the DEFAULT branch, which is main here, and the fast-forward has already put
+      # tag-release.yml there by the time this step runs.
+      - name: Dispatch the release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.check.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Retry, because main moved moments ago and GitHub can still be catching up.
+          dispatched=0
+          for attempt in 1 2 3; do
+            if gh workflow run tag-release.yml --repo "$REPO" --ref main >/dev/null 2>&1; then
+              dispatched=1
+              echo "Dispatched tag-release.yml on main (attempt ${attempt})."
+              break
+            fi
+            echo "Dispatch attempt ${attempt} failed."
+            [ "$attempt" -lt 3 ] && sleep 10
+          done
+          if [ "$dispatched" -eq 0 ]; then
+            # This fails the job on purpose. main has already moved, so the promotion
+            # worked, but a missing tag means nothing records what shipped. Re-running the
+            # dispatch by hand is one command, and a red run is what makes someone do it.
+            echo "::error::The promotion SUCCEEDED. main is at ${SHA:0:8}. Only the release tag did not fire. Run it by hand with: gh workflow run tag-release.yml --repo ${REPO} --ref main"
+            exit 1
+          fi
+
+      # GitHub closes the PR as merged on its own once main contains dev's commits. This
+      # comment is the belt-and-braces record, so the outcome is explicit even if that
+      # detection marks the PR closed rather than merged.
+      - name: Comment the result
+        if: always() && steps.ff.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.check.outputs.sha }}
+          TAGGED: ${{ steps.tag.outcome }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # The dispatch step only knows GitHub accepted the request. tag-release runs as a
+          # separate workflow and can still fail, so this comment points at that run rather
+          # than claiming the tag exists.
+          if [ "$TAGGED" = "success" ]; then
+            tag_line="The \`tag-release\` workflow was dispatched. Watch its own run for the \`vX.Y.Z\` tag."
+          else
+            tag_line="The release tag did NOT fire. Run it by hand: \`gh workflow run tag-release.yml --repo ${REPO} --ref main\`."
+          fi
+          # printf, not a heredoc. A heredoc body would have to sit at column 0 to keep
+          # the comment out of a markdown code block, and column 0 ends the YAML block
+          # scalar this step is written in.
+          body=$(printf '%s\n\n%s\n\n%s\n\n%s\n' \
+            "Promoted. \`main\` fast-forwarded to \`dev\` at \`${SHA}\`." \
+            "${tag_line}" \
+            "No merge commit, so \`main\` stays an ancestor of \`dev\` and the next promotion fast-forwards too. No back-merge into \`dev\` is needed." \
+            "[Workflow run](${RUN})")
+          # Best-effort on purpose. main has already moved by the time this runs, so failing
+          # the job here would show a red run for a promotion that worked, and the run's
+          # colour is what people check. GitHub also closes the PR as merged on its own, so
+          # a missing comment loses the record and nothing else.
+          if ! gh pr comment "$PR" --repo "$REPO" --body "$body" >/dev/null 2>&1; then
+            echo "::warning::main moved to ${SHA:0:8} but commenting on PR #${PR} failed. The promotion succeeded. The comment is a record, not a step of the promotion."
+          fi
