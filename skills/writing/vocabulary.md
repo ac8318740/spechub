@@ -67,7 +67,7 @@ Emoji are not listed, because the lint detects them by the Unicode Extended_Pict
 | facilitate | help | |
 | numerous | many | |
 | in the event that | if | |
-| in order to | to | |
+| in order to | to | judgment call: keep it when "to" alone reads wrong |
 | due to the fact that | because | |
 | prior to | before | |
 | subsequent to | after | |

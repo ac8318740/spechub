@@ -548,11 +548,14 @@ function classify(rawLines: string[]): Classified {
 // ---------------------------------------------------------------------------
 
 function vocabularyMessage(entry: VocabularyEntry, matched: string): string {
+  // The note carries whatever the row wants the writer to know, including that
+  // the swap is a judgment call. It reads the same whether or not the row
+  // offers a replacement, so both branches print it.
+  const reason = entry.note ? ` (${entry.note})` : '';
   if (entry.writeInstead === null) {
-    const reason = entry.note ? ` (${entry.note})` : '';
     return `Avoid "${matched}": cut it${reason}.`;
   }
-  return `Avoid "${matched}": write "${entry.writeInstead}" instead.`;
+  return `Avoid "${matched}": write "${entry.writeInstead}" instead${reason}.`;
 }
 
 function markMessage(entry: VocabularyEntry): string {

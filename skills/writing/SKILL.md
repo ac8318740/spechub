@@ -19,6 +19,15 @@ description: One plain-language standard for every durable artifact. A durable a
 - **Everything you say and write flows logically and reads easily**
     - Each point follows from the one before it
     - Nothing needs a second pass to interpret
+- **By default, write for a reader with 150 other things to do today**
+    - They read the artifact once, in seconds, and they never come back to it
+    - Give them what they need in order to make a decision or take action, and nothing else
+    - Default to the highest level possible that still enables them to decide or act
+    - Go deep only where the depth would change what they decide or do
+- **Brevity is never a reason to hide something they need to decide or act**
+    - Weigh every detail against all the others, then keep only those that truly matter
+    - Keep anything the reader would be angry to learn about later
+    - Nobody reading a durable artifact can ask you a follow-up question
 
 > ## **IF YOU CAN'T EXPLAIN IT SIMPLY, YOU DON'T UNDERSTAND IT WELL ENOUGH.**
 >

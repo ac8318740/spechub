@@ -25055,11 +25055,11 @@ function classify(rawLines) {
   return { lines, unterminated: fence };
 }
 function vocabularyMessage(entry, matched) {
+  const reason = entry.note ? ` (${entry.note})` : "";
   if (entry.writeInstead === null) {
-    const reason = entry.note ? ` (${entry.note})` : "";
     return `Avoid "${matched}": cut it${reason}.`;
   }
-  return `Avoid "${matched}": write "${entry.writeInstead}" instead.`;
+  return `Avoid "${matched}": write "${entry.writeInstead}" instead${reason}.`;
 }
 function markMessage(entry) {
   if (entry.writeInstead === null) return `Avoid the mark "${entry.avoid}": cut it.`;
