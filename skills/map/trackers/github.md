@@ -29,17 +29,26 @@ GitHub remote.
 Create every label at materialisation, in one pass:
 
 ```bash
+kinds=$(~/.claude/spechub/bin/spechub node kinds) &&
 for l in "map:<name>" fog claimed afk pinned root-node \
-         kind:destination kind:notes kind:decision kind:research kind:work; do
+         $(echo "$kinds" | sed 's/^/kind:/'); do
   gh label create "$l" 2>/dev/null || true
 done
 ```
 
+The CLI owns the set of kinds. The loop reads that set from `spechub node
+kinds`, so a kind added to the code reaches this loop with no edit here. A
+second copy written out by hand would go stale in silence, since `|| true`
+swallows every failure the loop meets.
+
+The loop captures `kinds` first, and the `&&` holds it back until that read
+succeeds. An installed CLI too old to know the subcommand prints its own error
+and creates no label at all. Reading the kinds inline instead would substitute
+an empty list and create the six fixed labels alone, silently.
+
 The `root-node` label is how a reader and a query find the entry point.
 Without it, finding the root means walking `parent` links until one is
 missing, at one GraphQL call per hop.
-
-`kind` is a closed set of five, so all five labels exist from the start.
 
 To enumerate a repo's maps: `gh label list --search "map:" --json name`.
 

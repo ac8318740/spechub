@@ -33,10 +33,19 @@ export const LABEL_MAX_CHARS = 30;
 // "label is required" message reads it, so the numbers and the wording both
 // have a single home.
 export const LABEL_CAP_SENTENCE = `at most ${LABEL_MAX_WORDS} words and ${LABEL_MAX_CHARS} characters`;
-// The one sentence that names the five kinds. Every help string and every "kind
-// is not allowed" message reads it, on both backends, so the wording and the
-// separator before it cannot drift apart.
-export const ALLOWED_KINDS_SENTENCE = `one of: ${NODE_KINDS.join(', ')}`;
+/**
+ * The one sentence that names a closed set of allowed values.
+ *
+ * Every help string and every refusal that lists a closed set reads it, so no
+ * two of them can word the same list differently.
+ */
+export function oneOf(values: readonly string[]): string {
+  return `one of: ${values.join(', ')}`;
+}
+
+// The sentence that names the five kinds. Both backends read it, so the
+// wording and the separator before it cannot drift apart.
+export const ALLOWED_KINDS_SENTENCE = oneOf(NODE_KINDS);
 
 /**
  * A node the map is done with. Mode says who will settle a node, and nobody
@@ -376,6 +385,53 @@ function requireExisting(nodes: MapNode[], id: string, role: string): void {
   }
 }
 
+/**
+ * The nodes keyed by id, which is what every walk over a chain of them reads.
+ *
+ * The index holds the loaded objects themselves, never copies. A caller that
+ * changes a node it already has changes what the index hands back.
+ */
+function indexById(nodes: MapNode[]): Map<string, MapNode> {
+  return new Map(nodes.map(n => [n.id, n]));
+}
+
+/**
+ * Refuse `parent` for `node` when the provenance tree would close a cycle.
+ * Walking up from the new parent must never arrive back at the node being
+ * moved, since every depth and every walk follows that chain to the root.
+ */
+function assertNoProvenanceCycle(
+  byId: Map<string, MapNode>,
+  node: MapNode,
+  parent: string
+): void {
+  let cursor: string | undefined = parent;
+  while (cursor) {
+    if (cursor === node.id) {
+      throw new Error(`answers: ${parent} would make the provenance tree a cycle`);
+    }
+    cursor = byId.get(cursor)?.answers;
+  }
+}
+
+/**
+ * Refuse the blockers `node` now holds when they close a cycle.
+ *
+ * blocked-by must stay a DAG – a cycle would deadlock every node on it,
+ * silently, since the frontier only ever sees unresolved blockers.
+ */
+function assertNoBlockerCycle(byId: Map<string, MapNode>, node: MapNode): void {
+  const walk = (id: string, trail: Set<string>): void => {
+    if (trail.has(id)) {
+      throw new Error(`blocked-by cycle through node ${id} – these nodes would block each other forever`);
+    }
+    trail.add(id);
+    for (const b of byId.get(id)?.blockedBy ?? []) walk(b, trail);
+    trail.delete(id);
+  };
+  walk(node.id, new Set());
+}
+
 export function createNode(root: string, map: string, input: CreateNodeInput): MapNode {
   const title = validateTitle(input.title);
   const kind = validateKind(input.kind);
@@ -419,8 +475,9 @@ export function updateNode(
   input: UpdateNodeInput
 ): MapNode {
   const nodes = loadNodes(root, map);
+  const byId = indexById(nodes);
   const normalized = normalizeId(id);
-  const node = nodes.find(n => n.id === normalized);
+  const node = byId.get(normalized);
   if (!node) {
     throw new Error(`node ${normalized} not found in map '${map}'`);
   }
@@ -434,15 +491,7 @@ export function updateNode(
       throw new Error(`node ${node.id} cannot answer itself`);
     }
     requireExisting(nodes, parent, 'parent');
-    // Walking up from the new parent must not reach this node.
-    const byId = new Map(nodes.map(n => [n.id, n]));
-    let cursor: string | undefined = parent;
-    while (cursor) {
-      if (cursor === node.id) {
-        throw new Error(`answers: ${parent} would make the provenance tree a cycle`);
-      }
-      cursor = byId.get(cursor)?.answers;
-    }
+    assertNoProvenanceCycle(byId, node, parent);
     node.answers = parent;
   }
 
@@ -452,19 +501,12 @@ export function updateNode(
       if (b === node.id) throw new Error(`node ${node.id} cannot block itself`);
       requireExisting(nodes, b, 'blocking');
     }
-    // blocked-by must stay a DAG – a cycle would deadlock every node on it,
-    // silently, since the frontier only ever sees unresolved blockers.
+    // The assignment has to land first. `byId` holds this same node object, so
+    // the walk below reads the new blockers only because they are already on
+    // it. Nothing reaches disk on a throw, so a refused update leaves the file
+    // exactly as it was.
     node.blockedBy = blockedBy;
-    const byId = new Map(nodes.map(n => [n.id, n]));
-    const walk = (id: string, trail: Set<string>): void => {
-      if (trail.has(id)) {
-        throw new Error(`blocked-by cycle through node ${id} – these nodes would block each other forever`);
-      }
-      trail.add(id);
-      for (const b of byId.get(id)?.blockedBy ?? []) walk(b, trail);
-      trail.delete(id);
-    };
-    walk(node.id, new Set());
+    assertNoBlockerCycle(byId, node);
   }
 
   if (input.title !== undefined) node.title = validateTitle(input.title);
@@ -486,7 +528,7 @@ export function updateNode(
 // Hand-edited maps can hold a missing parent or a cycle, so both throw
 // with the node named rather than looping or guessing.
 export function deriveDepths(nodes: MapNode[]): Map<string, number> {
-  const byId = new Map(nodes.map(n => [n.id, n]));
+  const byId = indexById(nodes);
   const depths = new Map<string, number>();
 
   function depthOf(id: string, trail: Set<string>): number {
@@ -521,7 +563,7 @@ export function deriveDepths(nodes: MapNode[]): Map<string, number> {
 // claimed both still block, since neither is settled.
 export function frontier(nodes: MapNode[]): MapNode[] {
   const depths = deriveDepths(nodes);
-  const byId = new Map(nodes.map(n => [n.id, n]));
+  const byId = indexById(nodes);
   const blockerSettled = (id: string): boolean => {
     const blocker = byId.get(id);
     if (!blocker) {

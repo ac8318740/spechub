@@ -79,12 +79,14 @@ A node body has five parts, in this order:
     - Writing the fields into the body duplicates what every query reads
 - **A node with no generated diagram carries no markers**, since an empty marker
   block is noise
-- **A marker inside a code fence is an example, never a diagram**, so match
-  only a top-level pair
-    - A body that documents the markers carries a second pair inside a fence
-    - A naive search-and-replace corrupts that body
-    - Insert a fresh pair directly below the statement when the body holds no
-      top-level pair
+- **A marker counts only when it passes three tests**, since a naive
+  search-and-replace corrupts any body that talks about markers
+    - It sits alone on its line, so a sentence that mentions one is prose
+    - It sits outside a code fence, so a fenced example is prose
+    - An end marker pairs with the last start marker before it, so an earlier
+      start was prose too
+- **Insert a fresh pair directly below the statement** when no marker in the
+  body passes all three
 
 ## The four channels a diagram draws with
 

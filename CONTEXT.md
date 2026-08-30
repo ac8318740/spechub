@@ -24,6 +24,10 @@ A host declares its dev setup, and a project does not.
 
 **engaged** – A handoff watcher outcome: the receiving agent has not acknowledged, but has read the handoff file or started using work tools. The work is underway. Never relaunch it elsewhere.
 
+**generated block** – The rendered map that `spechub node diagram` writes, bounded by the `<!-- spechub:diagram -->` markers. `node read` and `node walk` strip it from their human-readable output, and `--visuals` puts it back – see ADR 0014. A marker inside a fenced code block is prose about the markers, never a block.
+
+**hand-drawn diagram** – A diagram a person or an agent wrote into a node body by hand, outside the **generated block** markers. It is the explanation the node exists to give, so nothing strips it.
+
 **host** – One developer machine, as distinct from the project it works in. The SpecHub global config declares its dev setup, including which orchestrators the developer installed.
 
 **lead session** – The session a person talks to, at the top of the agent tree. It alone hands work over or compacts, because it alone owns the context-pressure quiet marker and the `spechub/HANDOFF.md` anchor. A **child session** finds out it is not the lead by looking for its own transcript – see ADR 0007.
