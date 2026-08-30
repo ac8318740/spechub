@@ -25,8 +25,9 @@ flowchart TD
     CHECK --> MENU["Step 8<br/>offer the rows that need a fix"]
     MENU --> FIX["Step 9<br/>fix one row at a time"]
     FIX --> BROWSER["Steps 10 and 11<br/>browser mode, Playwriter bridge"]
-    FIX --> REPORT["Step 12<br/>report"]
-    BROWSER --> REPORT
+    FIX --> TW["Step 12<br/>offer the terminal workspace"]
+    TW --> REPORT["Step 13<br/>report"]
+    BROWSER --> TW
 ```
 
 Three terms, before they get used:
@@ -278,6 +279,7 @@ Each `id` maps to one fix. Work the selected rows in this order:
 | `orchestrator:<name>` | invoke the `host` skill |
 | `browser-mode:<mode>` | invoke the `host` skill, or the second fix below for the mode that failed |
 | `preferred-browser-mode` | invoke the `host` skill on a `fail`, Step 10 on an `info` |
+| `optional-axis:host.terminal_workspace` | Step 12 |
 | `optional-axis:<key>` | invoke the `host` skill, through the menu option in Step 8 |
 | `domain-map` | Step 9a |
 | `agent-browser` | Step 9b |
@@ -288,7 +290,8 @@ Each `id` maps to one fix. Work the selected rows in this order:
 
 Five rows describe the machine: `required-axis`, `orchestrator`, `browser-mode`,
 `preferred-browser-mode` and `optional-axis`. Invoke the `host` skill for each of
-them. It is safe to re-run, and it starts from the current answers.
+them, with one exception: `optional-axis:host.terminal_workspace` is Step 12's
+question, and the `host` skill never asks it. It is safe to re-run, and it starts from the current answers.
 
 A `preferred-browser-mode` row is the exception. It goes to the `host` skill only
 on a `fail`, and to Step 10 on an `info`.
@@ -598,7 +601,56 @@ It passes once something answers on the port.
 Do not curl the port yourself. The check is the one place that probes the
 machine.
 
-## Step 12: Report
+## Step 12: Offer the terminal workspace
+
+The terminal workspace runs several coding agents side by side in one terminal,
+on a machine the user reaches over the network. It installs herdr and the tools
+that read diffs, pull requests and files around it.
+
+SpecHub needs none of it, so this step offers and never assumes.
+
+Read what this machine already decided:
+
+```bash
+~/.claude/spechub/bin/spechub config get host.terminal_workspace
+```
+
+On exit 0 the user has already answered. Say nothing and go to Step 13.
+
+On exit 2 nobody has answered yet. Ask once:
+
+```json
+{
+  "question": "Set up the terminal workspace on this machine?",
+  "header": "Workspace",
+  "options": [
+    {"label": "Yes", "description": "Installs herdr and the tools around it: several agents side by side in one terminal, sessions that survive a disconnect, and diffs, pull requests and files on one key each. Ten components, every one reversible."},
+    {"label": "No", "description": "Leave this machine as it is. Nothing in SpecHub needs the workspace, and /spechub:terminal-workspace installs it any time later."}
+  ]
+}
+```
+
+Write the answer, whichever way it went:
+
+```bash
+~/.claude/spechub/bin/spechub config set host.terminal_workspace true   # or false
+```
+
+Write it before doing anything else. An install that fails halfway must not
+bring the question back on the next project.
+
+On **Yes**, invoke the `terminal-workspace` skill and run its whole flow here.
+Do not tell the user to go and run it later. Come back to Step 13 when it
+finishes.
+
+On **No**, go straight to Step 13. Name `/spechub:terminal-workspace` once, and
+do not ask again.
+
+This step is the only place that asks the axis. The `host` skill owns every
+other `host.*` question, and leaves this one here. The workspace installs
+binaries, so the offer belongs after the project works.
+
+## Step 13: Report
 
 Run the health check one last time, then report what stands:
 
@@ -615,6 +667,7 @@ Spec sync:    [enabled/disabled]
 Frontend:     [configured/not configured]
 Browser:      [project's preferred mode / not configured]
 Host:         [orchestrators + browser modes declared / not declared]
+Workspace:    [installed / declined / not asked]
 Config:       spechub/project.yaml
 Domain map:   spechub/domain-map.yaml ([n] domains / starter – fill in)
 Output style: spechub:ac-writing-style (global) | (project) | not set
@@ -632,6 +685,9 @@ which tool owns terminal panes and git worktrees, and which browser modes work
 here.
 
 The `host` skill declares both, and the global config holds them.
+
+Fill `Workspace:` from `host.terminal_workspace`: `installed` on `true`,
+`declined` on `false`, and `not asked` when it is unset.
 
 List every row still failing under the summary. Name the row and what it needs.
 
@@ -655,5 +711,7 @@ List every row still failing under the summary. Name the row and what it needs.
     the comments and the key order. It refuses a key neither schema knows, so
     never fall back to editing the file.
 
-- The `host` skill owns the machine interview and every `host.*` question.
-- `docs/dev-setups.md` documents the eight `host.*` axes.
+- The `host` skill owns the machine interview and every `host.*` question, with
+  one exception. Step 12 of this skill asks `host.terminal_workspace`. The
+  workspace installs binaries, so the offer belongs after the project works.
+- `docs/dev-setups.md` documents the nine `host.*` axes.

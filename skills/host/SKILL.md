@@ -64,6 +64,11 @@ This skill does not install a project, and it does not install herdr itself.
 Logging in to Tailscale, connecting the Playwriter bridge and pairing a client
 to Orca stay with you.
 
+One axis this skill never asks: `host.terminal_workspace`. The `setup` skill
+offers the terminal workspace in its last step, because that workspace installs
+binaries and the offer belongs after the project works. Leave the key alone
+here, and never ask about it.
+
 ## Step 1: Detect what is already here
 
 Run the detection script that ships beside this file:

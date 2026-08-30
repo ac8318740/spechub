@@ -3701,7 +3701,7 @@ describe('spechub config list', () => {
 // -----------------------------------------------------------------------
 
 describe('spechub config show', () => {
-  it('exits 0 and lists all eight host axes when nothing at all is configured', () => {
+  it('exits 0 and lists all nine host axes when nothing at all is configured', () => {
     const cwd = noProjectDir();
     const result = runCli(['config', 'show'], { cwd, path: [emptyPathDir()] });
 
@@ -3713,6 +3713,7 @@ describe('spechub config show', () => {
       'host.browser.headless',
       'host.browser.local',
       'host.preview.tailscale_serve',
+      'host.terminal_workspace',
       'host.element_picker',
       'host.orca.topology',
     ]) {
@@ -3987,6 +3988,7 @@ describe('spechub config show — Project section', () => {
       'host.browser.headless',
       'host.browser.local',
       'host.preview.tailscale_serve',
+      'host.terminal_workspace',
       'host.element_picker',
       'host.orca.topology',
     ]) {

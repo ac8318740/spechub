@@ -522,7 +522,7 @@ Only the literal `none` gives `frontend.browser.fallback` any effect.
     - The same repository opens on several machines with different setups
     - They live in the global config at `~/.config/spechub/config.json`
     - `spechub config set` is what writes them
-    - [dev-setups.md](dev-setups.md) documents all eight axes
+    - [dev-setups.md](dev-setups.md) documents all nine axes
 
 ## 11. Every default in one block
 
