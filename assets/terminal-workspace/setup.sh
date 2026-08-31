@@ -129,7 +129,17 @@ write_helpers() {
 # Every launch prepends a COMPARING block to the diff. diffnav renders whatever
 # precedes the first "diff --git" line, which is how git show's commit header
 # reaches the screen, so the block lands at the top of the content pane.
+#
+# diffnav's "o" key opens the file under the cursor with $EDITOR, in diffnav's
+# own pane. That pane is a herdr popup for alt+f and alt+x, and a popup cannot
+# host a second full-screen app, so the editor never draws there. spechub-edit
+# gives the file its own herdr tab instead, and both diff keys then match.
 set -uo pipefail
+if command -v spechub-edit >/dev/null 2>&1; then
+  case "${EDITOR:-}" in *spechub-edit) EDITOR=nvim ;; esac   # never nest
+  export SPECHUB_EDIT_EDITOR="${EDITOR:-nvim}"
+  export EDITOR=spechub-edit
+fi
 pick_checkout() {
   # herdr groups worktrees as <root>/<repo>/<branch-slug>, so a pane often
   # sits in the parent of several checkouts rather than in one.
@@ -1156,11 +1166,44 @@ pane=$(printf '%s' "$resp" | python3 -c \
 #
 # The settle is because the new tab's shell may not have drawn its prompt yet.
 # The pty buffers input, so it is belt and braces, not a correctness need.
-( sleep 0.3; herdr pane run "$pane" "$*" >/dev/null 2>&1 ) </dev/null >/dev/null 2>&1 &
+#
+# `herdr pane run` hands the string to a shell, so each argument is quoted on
+# the way in. A bare "$*" loses any file path holding a space.
+printf -v cmd '%q ' "$@"
+( sleep 0.3; herdr pane run "$pane" "$cmd" >/dev/null 2>&1 ) </dev/null >/dev/null 2>&1 &
 disown 2>/dev/null || true
 exit 0
 H
   chmod +x "$BIN/spechub-herdr-tab"
+
+  cat > "$BIN/spechub-edit" <<'H'
+#!/usr/bin/env bash
+# Open one file in its own herdr tab, for tools that shell out to $EDITOR.
+#
+#   spechub-edit <file>
+#
+# diffnav's "o" key runs $EDITOR inside diffnav's own pane. For alt+f and alt+x
+# that pane is a herdr popup, and a popup cannot host a second full-screen app,
+# so the editor never draws and the key looks dead. This gives the file its own
+# herdr tab and returns at once, which leaves the diff untouched behind the
+# popup. Close the popup to reach the tab.
+#
+# SPECHUB_EDIT_EDITOR names the real editor: whatever set this script as
+# $EDITOR has already taken that variable.
+#
+# spechub-herdr-tab does the work. It finds the pane behind the popup, creates
+# the tab, and runs the editor in it, and it runs the editor in place when
+# there is no herdr to ask. Installed by spechub.
+set -uo pipefail
+
+ED="${SPECHUB_EDIT_EDITOR:-nvim}"
+case "$ED" in *spechub-edit) ED=nvim ;; esac   # never call itself
+FILE="${1:?usage: spechub-edit <file>}"
+
+command -v spechub-herdr-tab >/dev/null 2>&1 || exec "$ED" "$FILE"
+exec spechub-herdr-tab "$(basename "$FILE")" "$ED" "$FILE"
+H
+  chmod +x "$BIN/spechub-edit"
 
   cat > "$BIN/spechub-herdr-renumber" <<'H'
 #!/usr/bin/env python3
@@ -1763,7 +1806,7 @@ H
 
   say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-view"
   say "remote helpers written: spechub-clip, spechub-open, spechub-bridge"
-  say "herdr helpers written: spechub-herdr-tab, spechub-herdr-renumber"
+  say "herdr helpers written: spechub-herdr-tab, spechub-herdr-renumber, spechub-edit"
 }
 
 apply_herdr() {

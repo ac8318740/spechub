@@ -3667,6 +3667,74 @@ then ok "uninstall removes the gh-dash page keys it bound"
 else no "uninstall removes the gh-dash page keys it bound"; fi
 
 
+echo "spechub-edit sends a file to its own herdr tab"
+# diffnav's "o" key runs $EDITOR in diffnav's own pane, and a herdr popup
+# cannot host a second full-screen app. These pin both halves of the helper
+# that carries the file out to a tab instead.
+EDITBIN="$WORK/edit-bin"; EDITHOME="$WORK/edit-home"
+mkdir -p "$EDITBIN" "$EDITHOME"
+cp "$(extract spechub-edit)" "$EDITBIN/spechub-edit"
+cp "$(extract spechub-herdr-tab)" "$EDITBIN/spechub-herdr-tab"
+printf '#!/bin/sh\necho "editor ran: $*"\n' > "$EDITBIN/fake-editor"
+chmod +x "$EDITBIN/fake-editor"
+edit_env() { env -i PATH="$EDITBIN:/usr/bin:/bin" HOME="$EDITHOME" \
+                 SPECHUB_EDIT_EDITOR="$EDITBIN/fake-editor" "$@"; }
+
+# No herdr means no tab to open, and the file still has to reach the editor.
+if [ "$(edit_env spechub-edit /tmp/x.ts 2>&1)" = "editor ran: /tmp/x.ts" ]
+then ok "spechub-edit runs the editor in place when herdr is missing"
+else no "spechub-edit runs the editor in place when herdr is missing"; fi
+
+# spechub-edit is a wrapper, so the helper it hands the file to has to be
+# there. A missing one must still open the file rather than do nothing.
+mv "$EDITBIN/spechub-herdr-tab" "$WORK/herdr-tab.parked"
+if [ "$(edit_env spechub-edit /tmp/x.ts 2>&1)" = "editor ran: /tmp/x.ts" ]
+then ok "spechub-edit runs the editor in place when spechub-herdr-tab is missing"
+else no "spechub-edit runs the editor in place when spechub-herdr-tab is missing"; fi
+mv "$WORK/herdr-tab.parked" "$EDITBIN/spechub-herdr-tab"
+
+# A stub herdr, so the tab call is checked without a running session. The path
+# holds a space, because herdr pane run hands the string to a shell.
+cat > "$EDITBIN/herdr" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$HOME/calls"
+case "$1 $2" in
+  "pane current") echo '{"result":{"pane":{"workspace_id":"w1","cwd":"/repo"}}}' ;;
+  "tab create")   echo '{"result":{"root_pane":{"pane_id":"42"}}}' ;;
+esac
+STUB
+chmod +x "$EDITBIN/herdr"
+
+# The helper settles 0.3s before it calls `pane run`, so poll rather than
+# guess at a sleep long enough to cover a loaded machine.
+await_pane_run() {
+  local i=0
+  while ! grep -q 'pane run' "$EDITHOME/calls" 2>/dev/null && [ "$i" -lt 50 ]; do
+    i=$((i + 1)); sleep 0.1
+  done
+}
+
+edit_env spechub-edit "/repo/a file.ts" >/dev/null 2>&1
+await_pane_run
+if grep -q "pane run 42 .*fake-editor.*a\\\\ file.ts" "$EDITHOME/calls" 2>/dev/null
+then ok "spechub-edit opens the file in a new herdr tab, path quoted"
+else no "spechub-edit opens the file in a new herdr tab, path quoted"; fi
+
+# The label is the basename, so the tab reads as the file rather than the path.
+if grep -q 'tab create .*--label a file.ts' "$EDITHOME/calls" 2>/dev/null
+then ok "spechub-edit labels the tab with the file's basename"
+else no "spechub-edit labels the tab with the file's basename"; fi
+
+# spechub-herdr-tab quotes every argument now, and the five keybindings that
+# call it pass bare names. Those must reach the pane unchanged.
+: > "$EDITHOME/calls"
+edit_env spechub-herdr-tab diffpick spechub-diff pick >/dev/null 2>&1
+await_pane_run
+if grep -q 'pane run 42 spechub-diff pick' "$EDITHOME/calls" 2>/dev/null
+then ok "spechub-herdr-tab leaves an unquoted command untouched"
+else no "spechub-herdr-tab leaves an unquoted command untouched"; fi
+
+
 echo "the config example only documents keys setup.sh reads"
 # Both of these carry a comment admitting the script never reads them, which
 # makes the example config a place a user can change a number and see nothing
