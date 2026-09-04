@@ -1226,8 +1226,18 @@ Can not approve your own pull request.
 | `t` | Search and jump to a file |
 | `e` | Toggle the file tree |
 | `s` | Side-by-side or unified |
-| `o` | Open the file in `$EDITOR` |
+| `o` | Open the file in Neovim, in a new herdr tab |
 | `q` | Quit |
+
+`o` opens a tab rather than taking over the pane, and the reason is the popup:
+
+- diffnav runs `$EDITOR` inside its own pane, and a herdr popup cannot host a second full-screen app
+- Neovim never drew in the `alt+f` and `alt+x` popups, so the key looked dead
+- `spechub-edit` stands in as `$EDITOR` and hands the file to `spechub-herdr-tab`, the same helper the tab keys use
+    - The tab opens in the workspace and directory you pressed the key in
+    - The tab carries the file's name, not its whole path
+    - The popup keeps the diff, so close it to reach the tab
+    - Outside herdr the helper runs your real editor in place
 
 ## 9. What crosses back to your machine
 
