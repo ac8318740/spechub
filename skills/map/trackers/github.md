@@ -110,6 +110,7 @@ the dependencies API nor a GraphQL parent query.
 - Claim: `gh issue edit <n> --add-label claimed`. Release removes it.
 - Resolve: append the answer to the body. Then run `gh issue close <n> --reason completed`
 - Out of scope: `gh issue close <n> --reason "not planned"`
+- Root: only `archive` closes it, once the map clears
 - Graduate fog: `gh issue edit <n> --remove-label fog`
 - Change an edge: rewrite the header line **and** change the matching native
   link in the same step. Editing one copy alone leaves the two out of step.
@@ -140,9 +141,12 @@ Reading the native links instead costs a GraphQL query for the parent and a
 REST call for the blockers, per issue, on every round.
 
 - **Frontier**: from `list`, keep open issues without `fog` or `claimed`
-  labels. Drop any whose header `blocked-by` names an open issue.
+  labels. Drop any whose header `blocked-by` names an open issue, and drop
+  the issue labelled `root-node`.
   Order by provenance depth (follow header `answers` up to the root), issue
   number as the final tiebreak.
+
+    The root is never work. `archive` closes it when the map clears.
 
 - **Walk**: start at the issue labelled `root-node`, then recurse over the
   nodes whose header `answers` names it, in number order. Read the root and

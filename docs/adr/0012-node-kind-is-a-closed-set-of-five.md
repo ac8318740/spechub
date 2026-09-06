@@ -4,7 +4,11 @@ A map node carries one `kind`. It is one of `destination`, `notes`, `decision`, 
 
 The CLI enforces the set with a zod enum. It rejects anything else at create, at update, and on reading a stored file. Before this, `kind` was free text that the CLI called advisory only.
 
-The five split in two. `destination` and `notes` are records, resolved the moment someone writes them. `decision`, `research`, and `work` are things still to settle.
+The five split in two. `destination` and `notes` are records rather than questions. `decision`, `research`, and `work` are things still to settle.
+
+The two records resolve differently. `notes` resolves the moment someone writes it. `destination` is the root, and it carries no status of its own.
+
+The root's state follows its subtree. It stays open while any node below it still needs work. `archive` resolves it when the map clears.
 
 Each has one test.
 
