@@ -203,6 +203,55 @@ failing without it. The checker then holds the new tests to existing and
 passing, the full suite to passing, and the test count to not dropping. It
 reports which mode it ran in.
 
+**The audit and polish pass** – Design review on a UI task, between Phase 3 and Phase 4
+
+This pass carries no phase number. It runs after the task-checker passes, and before the frontend-verifier.
+
+Three conditions gate it. The pass runs only when all three hold:
+
+- the design gate is on
+- `spechub/project.yaml` configures `frontend`
+- frontend files changed
+
+One command answers whether the gate is on:
+
+```bash
+~/.claude/spechub/bin/spechub design-gate
+```
+
+It prints `on` and exits 0 when the gate is on. It prints `off: <reason>` and exits 1 when the gate is off.
+
+**You type both commands yourself.** `/impeccable audit` and `/impeccable polish` are markdown playbooks. impeccable's plugin loads a playbook into an agent's chat when that agent types the slash command.
+
+Type each command in turn, over the file list. This is the one exception to the delegate-everything rule at the top of this file. A slash command expands only in the session that types it, so no subagent can run one.
+
+The file list is the one the task-checker already derived in its section 5.5, from `git status --porcelain -- <frontend.directory>`. `frontend.directory` is the `spechub/project.yaml` key naming where the frontend lives. It defaults to `frontend/`.
+
+The task-checker already ran impeccable's design detector over that same file list. The audit runs after that check cleared.
+
+Five steps run in this order:
+
+```
+1. task-checker passes (Phase 3)
+2. /impeccable audit  – reports findings, edits nothing, needs no browser
+3. /impeccable polish – fixes the same files, from the audit findings
+4. task-checker again – polish changed the code
+5. frontend-verifier  – Phase 4, once, on the final code
+```
+
+**Polish leaves a factual claim in copy untouched.** The polish playbook says "Ask before changing claims" for factual copy. Polish runs unattended here, so it cannot ask.
+
+Tell polish to list every factual claim it left alone in its report.
+
+**Five commands audit can recommend never run in this pass.** They are `harden`, `clarify`, `adapt`, `optimize`, and `onboard`.
+
+Audit closes its report with "Recommended Actions", a priority-ordered list of `/impeccable <verb>` commands. Only `polish` runs from that list. The other five wait for a human.
+
+A human picks one of the five in a grill round (see ADR 0016). Two rules carry the names that far:
+
+- **Audit names each command against the finding that earned it**
+- **Your completion report repeats those names**, so the user can pick one later
+
 **Phase 4: frontend-verifier** – Browser verification, when `spechub/project.yaml` configures a frontend
 
 ```
@@ -215,6 +264,7 @@ DELEGATE to frontend-verifier subagent
 ```
 
 If Phase 3 fails -> route back to the appropriate phase with feedback.
+If the second task-checker run fails -> route back to the task-executor with the feedback.
 If Phase 4 fails -> route back to Phase 2 with the UI bug details.
 
 ### Formatting before the checker
@@ -237,6 +287,8 @@ task-checker as usual.
 - **You may skip the test-writer** for pure config, infra or docs changes with no testable behavior
 - **The format step runs** only when `commands.format` names a command
 - **Frontend-verifier only runs** when `spechub/project.yaml` sets `frontend` AND the change touched frontend files AND `workflow.frontend_verification` is `true`
+- **The audit and polish pass only runs** when the design gate is on AND `spechub/project.yaml` sets `frontend` AND the change touched frontend files
+- **You may skip the second task-checker run** when the audit and polish pass did not run
 - **Never skip** the task-checker – verification always runs, under strict TDD and under relaxed
 - **Never skip** the frontend-verifier when the change touched frontend files and the project configures it – it's non-negotiable
 
@@ -358,6 +410,8 @@ Read `spechub/project.yaml` for the specific commands. The general pattern:
 
 When a change touches frontend files, Phase 4 (frontend-verifier) runs automatically. This is non-negotiable. There is no LOW CONFIDENCE escape hatch.
 
+The audit and polish pass runs before Phase 4 when the design gate is on. The verifier therefore only ever sees the final code.
+
 The frontend-verifier agent:
 
 1. Reads the project's verification knowledge base (`<helpers_dir>/VERIFICATION-KNOWLEDGE.md`)
@@ -430,7 +484,7 @@ that runs spec sync.
 
 ## Key principles
 
-- **TDD** – Four-phase pipeline: test-writer -> executor -> checker -> frontend-verifier
+- **TDD** – Four-phase pipeline: test-writer -> executor -> checker -> frontend-verifier. On a UI task the audit and polish pass sits between the checker and the verifier
 - **KISS** – Keep it simple
 - **YAGNI** – Don't build what you don't need
 - **Delegate everything** – You orchestrate, subagents and teammates implement

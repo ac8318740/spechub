@@ -56,11 +56,16 @@ effort. Nothing declares which.
    `grilling` skill). The destination is the root of everything that follows –
    settle it before any other question.
 
-2. **Open with a breadth-first grill.** Work the conversation frontier in
+2. **Load the frontend branch on a frontend destination.** `frontend.md`
+   beside this skill holds five more rules. Read it when the destination
+   touches `frontend.directory`, the path in `spechub/project.yaml` where the
+   frontend lives. Every other map skips it.
+
+3. **Open with a breadth-first grill.** Work the conversation frontier in
    rounds per the grilling skill. Explore the codebase for facts as you go –
    facts are your job, never the user's.
 
-3. **Apply the fog test to what surfaced.** A question you can state precisely
+4. **Apply the fog test to what surfaced.** A question you can state precisely
    now is `open`. One you cannot state is `fog` – record it without forcing it
    sharp. The test is whether you can *state* the question precisely, not
    whether you can answer it.
@@ -199,6 +204,8 @@ same queries per `trackers/github.md`.
 5. **After every resolution**, in order:
     - Invoke `record-context`
     - Create nodes for anything the resolution surfaced
+    - Create the critique node when the resolved node changed the frontend,
+      per `frontend.md`
     - Regenerate the diagram on the resolved node's parent (see Regenerating
       diagrams)
     - Recompute the frontier

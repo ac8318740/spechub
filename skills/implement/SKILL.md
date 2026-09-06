@@ -108,13 +108,55 @@ completion:
 
     Report a non-zero exit. It never counts as a failed implementation.
 
-4. **task-checker subagent** – verify tests pass, full suite passes, and
-   test count >= baseline. Also check the mock audit, TDD isolation,
-   integration wired, and frontend visual verification (if applicable).
+4. **task-checker subagent** – verify the build compiles, lints, and
+   typechecks. Verify tests pass, the full suite passes, and test count >=
+   baseline. Also check the mock audit, TDD isolation, and integration
+   wired.
+
+    When `spechub/project.yaml` configures `frontend` and frontend files
+    changed, the checker also runs the frontend build, lint, and unit
+    tests.
+
+5. **`/impeccable audit`** – report design findings on the changed frontend
+   files. The audit edits nothing. It needs no browser.
+
+    You type the command yourself. impeccable's plugin loads it into your chat
+    as a markdown playbook.
+
+    The audit runs only when the design gate is on, `spechub/project.yaml`
+    configures `frontend`, and frontend files changed. Read the gate with
+    `~/.claude/spechub/bin/spechub design-gate`.
+
+    The file list is the one the checker derived in its section 5.5, from
+    `git status --porcelain -- <frontend.directory>`.
+
+6. **`/impeccable polish`** – fix the same files. Polish reads the audit
+   findings as its backlog. It edits source.
+
+    You type this command yourself too, and the same three conditions gate it.
+
+    Tell polish to leave a factual claim in copy untouched. Tell it to list
+    every such claim in its report.
+
+    Only `polish` runs from the audit's "Recommended Actions". Tell the audit
+    to name each other command against the finding that earned it.
+
+    Name `harden`, `clarify`, `adapt`, `optimize`, and `onboard` in your
+    completion report, so the user can pick one later.
+
+7. **task-checker subagent, second run** – polish changed the code, so verify
+   it again. This run happens only when polish ran.
+
+8. **frontend-verifier subagent** – verify the UI in a browser. The
+   verifier runs after the second checker passes, only when
+   `spechub/project.yaml` configures `frontend`, frontend files changed,
+   and `workflow.frontend_verification` is true.
 
 `workflow.tdd.strict: false`, relaxed TDD, runs step 2 before step 1. It
-skips nothing. Relaxed TDD means nobody writes the tests first, and all
-three subagents still run.
+skips nothing. Relaxed TDD means nobody writes the tests first, and the
+first three subagents still run.
+
+The frontend-verifier's gate is the same under either setting.
 
 The format step stays immediately before the checker, so under relaxed
 it formats the new tests as well.
@@ -134,8 +176,8 @@ Under `false` nothing can show them failing without the implementation. The
 checker then holds the new tests to existing and passing. It holds the full
 suite to passing, and the test count to not dropping.
 
-If the checker fails, route back to the executor with the feedback. If the
-work stalls or the session must stop mid-node, release the claim
+If either checker run fails, route back to the executor with the feedback.
+If the work stalls or the session must stop mid-node, release the claim
 (`--status open`). The node is plainly open again, and you need no phase
 breadcrumb.
 
@@ -184,8 +226,12 @@ diff.
 ## Key rules
 
 - **TDD pipeline is mandatory** – test-writer -> task-executor ->
-  task-checker. Only pure config work skips the test-writer.
+  task-checker -> frontend-verifier (frontend only). Only pure config work
+  skips the test-writer.
   `workflow.tdd.strict: false` reorders the first two and skips neither.
+
+    With the design gate on, the audit and polish pass and a second
+    task-checker run sit between the first checker and the verifier
 
 - **Executors CANNOT modify test files** – if tests are wrong, report it.
 - **The tracker is the progress record** – claim on start, resolve on pass,

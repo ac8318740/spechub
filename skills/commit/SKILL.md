@@ -53,9 +53,11 @@ Read `spechub/project.yaml` – if `workflow.spec_sync` is `true` (or not explic
     - Analyze what the staged changes add, modify, or remove
     - Generate lightweight ADDED/MODIFIED/REMOVED entries
     - Update the domain's spec.md
-4. Stage any updated spec files
-5. Include spec updates in the commit
-6. Flag unmapped source files and prompt user to map them
+4. Refresh `DESIGN.md`, per Step 2 of the `sync` skill
+5. Stage any updated spec files
+    - Stage `DESIGN.md` and `.impeccable/design.json` too when the refresh ran
+6. Include spec updates in the commit
+7. Flag unmapped source files and prompt user to map them
 
 **Skip spec sync ONLY when:**
 
@@ -64,6 +66,10 @@ Read `spechub/project.yaml` – if `workflow.spec_sync` is `true` (or not explic
 - Changed files don't match any domain
 - Changes are docs/config only (no behavioral changes)
 - No spec.md exists for affected domains (don't create from scratch here)
+
+**Those conditions govern the living specs only.** The `DESIGN.md` refresh
+answers to the design gate alone. Run Step 2 of the `sync` skill whenever
+`~/.claude/spechub/bin/spechub design-gate` exits 0, even when spec sync skips.
 
 ## Step 5: Stage and Commit
 

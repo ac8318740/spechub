@@ -1,6 +1,6 @@
 ---
 name: task-checker
-description: Verify task implementations are complete, working, and accessible. Binary PASS/FAIL gate with mock skepticism, regression checking, TDD isolation audit, and optional frontend visual verification.
+description: Verify task implementations are complete, working, and accessible. Binary PASS/FAIL gate with mock skepticism, regression checking, TDD isolation audit, and static frontend checks; browser verification belongs to frontend-verifier.
 model: opus
 color: yellow
 ---
@@ -23,7 +23,7 @@ Read `spechub/project.yaml` for project-specific settings:
 - `directories.tests` – test directory (for TDD isolation check)
 - `workflow.tdd.strict` – `true` by default; `false` means the test-writer ran after the executor, which changes sections 4 and 4.8
 - `venv.activate` – prefix for commands if set
-- `frontend` – if present, enables visual verification
+- `frontend` – if present, the checker runs the frontend build, lint, and unit tests when frontend files changed (section 5.5)
 - `test_markers.exclude` – markers to exclude from test runs
 
 ## Verification checklist
@@ -178,13 +178,82 @@ This is where most failures hide. Verify the complete chain:
 
 **Note:** The **frontend-verifier agent** (Phase 4) handles full browser verification. The task-checker only checks that the frontend code compiles and passes static analysis.
 
-If `spechub/project.yaml` configures `frontend` and the executor modified frontend files:
+**The changed frontend file list**
+
+Section 5.5 runs only when `spechub/project.yaml` configures `frontend`.
+`frontend.directory` names the directory. It defaults to `frontend/` when the
+key states nothing.
+
+Check the config before you derive the file list. The config names no frontend
+when the key states nothing and the repository has no `frontend/` directory.
+
+When the config names no frontend, warn in one line that `frontend.directory`
+is missing. Skip section 5.5.
+
+Derive the file list once. Every check below reads the file list.
+
+```bash
+git status --porcelain -- <frontend.directory>
+```
+
+The command reads the working tree. The output covers modified files, added
+files, and untracked files. An untracked file carries the `??` status code.
+
+Drop every path that carries a `D` status code. The detector cannot read a
+deleted file.
+
+A pathspec that matches nothing exits 0 and prints nothing. Treat a missing
+directory as an empty file list.
+
+An empty file list means no frontend file changed. Skip the whole of section 5.5.
+
+Run four checks when the file list holds at least one path:
 
 1. Run `frontend.commands.build` (e.g., `npx tsc --noEmit`)
 2. Run `frontend.commands.lint`
 3. Run `frontend.commands.test` (unit tests)
+4. Run the impeccable design detector over the file list
 
 Do NOT attempt browser verification – that's the frontend-verifier's job.
+
+**The design detector**
+
+The detector is a static checker. It reads the file list. It starts no
+browser.
+
+Check the design gate before you run the detector:
+
+```bash
+~/.claude/spechub/bin/spechub design-gate
+```
+
+The command prints `on` and exits 0 when the gate is on. It prints
+`off: <reason>` and exits 1 when the gate is off.
+
+Skip the detector when the gate is off. Record the gate state in your report.
+
+When the gate is on, pass the file list to the detector:
+
+```bash
+npx impeccable detect --json <file> [<file>...]
+```
+
+Read the exit code. Handle the three cases in this order.
+
+1. Exit code 0 – the detector found nothing. This check passes.
+2. Exit code 2 – the detector found problems. FAIL the task.
+3. Any other exit code – the detector could not run. Report a warning.
+
+Under exit code 2, copy every finding into the design detector block of your
+report. The orchestrator sends those findings back to the task-executor.
+
+The gate is optional. A detector that cannot run never fails the task.
+
+Say in the warning what the command printed. Continue the checklist.
+
+The detector reads `DESIGN.md` for each target file. The detector starts at
+that file's own directory and walks up to find `DESIGN.md`. A hard-coded colour
+outside the design system is a finding.
 
 ### 6. Dependencies integrated
 
@@ -216,6 +285,11 @@ While verifying, read the living spec for the affected domain(s) in `spechub/spe
 - Mock audit: [Summary]
 - TDD isolation: PASS/FAIL (strict order, or relaxed order)
 - Failing-first evidence: [present under strict, or absent under relaxed]
+
+### Design Detector
+- Design gate: on, or off ([reason])
+- Detector: PASS/FAIL (X findings), or WARNING ([why it could not run])
+- [file:line] - [finding name] - [description]
 
 ### Issues (if FAIL)
 - [file:line] - [specific problem]

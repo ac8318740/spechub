@@ -20,7 +20,74 @@ Read `spechub/project.yaml` for project-specific settings:
 - `commands.test` – how to run tests
 - `commands.lint` – how to lint
 - `workflow.tdd.strict` – `false` means the test-writer runs after you, not before
+- `frontend.directory` – where the frontend lives, so every user interface (UI) file sits under it
+- `workflow.design_review` – `true` turns the design gate on (see the design context section below)
 - `venv.activate` – prefix for commands if set
+
+## Design context before a UI edit (mandatory)
+
+impeccable is a third-party design plugin. It holds the project's design context, meaning the files that state the design rules and the token definitions a UI file follows.
+
+Load that context before your first edit under `frontend.directory`. Load it once per task.
+
+**Check the design gate first**
+
+The design gate is the set of optional checks impeccable adds to spechub's pipeline. `workflow.design_review` in `spechub/project.yaml` turns the gate on. Ask spechub for the answer:
+
+```bash
+~/.claude/spechub/bin/spechub design-gate --json
+```
+
+- exit code 0 means the gate is on
+- exit code 1 means the gate is off
+
+The command prints one JSON object:
+
+```json
+{"on": true, "reasons": ["..."], "impeccable": {"version": "4.2.0", "launcher": "/abs/path/to/scripts/impeccable"}}
+```
+
+The `impeccable` field holds the launcher path. It holds `null` only when the gate is off.
+
+When the gate is off, edit exactly as you do today. Make no impeccable call, and skip the rest of this section.
+
+**Load the context once per task**
+
+When the gate is on, run the launcher path the JSON printed:
+
+```bash
+<launcher> context --target <file>
+```
+
+- `<launcher>` is the `impeccable.launcher` path from the design-gate JSON
+- `context` is a verb of impeccable's bundled launcher binary, not of its npm command-line tool
+- `<file>` is the first file you edit under `frontend.directory`
+
+Run this command once for the whole task. impeccable's own skill says to follow the directives it prints and never to rerun the command.
+
+**Directives you act on**
+
+- `RESOLVED_CONTEXT` – JSON naming where the project's design files live, such as the token definitions you reuse
+
+**Directives you report instead**
+
+Each directive below asks for work you do not own. Put it in your report and carry on with the edit.
+
+- `CONTEXT_STALE` – the loaded context is out of date. Never rerun `context`
+- `NO_PRODUCT_MD` and `PRODUCT_INIT_REQUIRED` – both point at impeccable's `init`, which owns `PRODUCT.md`
+- `INCUMBENT_WORLD_UNDOCUMENTED` and `WORLD_DISCOVERY_REQUIRED` – both point at impeccable's `document`, which owns `DESIGN.md`
+- `UPDATE_AVAILABLE` – never run impeccable's `update` in the same turn, because it rewrites files this session is reading
+- `MANUAL_DETECTOR_REQUIRED` – the task-checker runs impeccable's detector, not you
+
+**File ownership**
+
+You never write `PRODUCT.md` or `DESIGN.md`. impeccable's `init` interviews the user and writes `PRODUCT.md`. spechub's sync skill runs impeccable's `document` at commit time, which refreshes `DESIGN.md`.
+
+You own the task's source files, and nothing else. This ban rests on ownership, like the ban on writing test files.
+
+**impeccable checks the files you write**
+
+impeccable installs its own PostToolUse hook, a check Claude Code runs right after a file write. The hook reads each UI file you write. You never run that check yourself.
 
 ## Core responsibilities
 
