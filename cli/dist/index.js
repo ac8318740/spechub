@@ -3993,6 +3993,10 @@ function projectFile(root) {
 function domainMapFile(root) {
   return spechubFile(DOMAIN_MAP_FILE, root);
 }
+function claudeConfigRoot() {
+  const stated = process.env.CLAUDE_CONFIG_DIR;
+  return stated ? stated : join2(homedir(), CLAUDE_DIR);
+}
 var SPECHUB_DIR, CHANGES_DIR, MAPS_DIR, SPECS_DIR, ARCHIVE_DIR, PROJECT_FILE, DOMAIN_MAP_FILE, PROFILES_DIR, AGENT_BROWSER_JSON_FILE, VERIFICATION_KNOWLEDGE_FILE, AGENT_BROWSER_BIN, CLAUDE_DIR, CLAUDE_SETTINGS_FILE, CLAUDE_LOCAL_SETTINGS_FILE, SPECHUB_OUTPUT_STYLE, VOCABULARY_PATH, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE, GLOBAL_DATA_DIR;
 var init_constants = __esm({
   "src/lib/constants.ts"() {
@@ -17817,7 +17821,7 @@ function unsetProjectKey(file, key) {
     }
   });
 }
-var import_yaml3, COUNT, FRONTEND_VERIFICATION_KEY, PROJECT_KEYS, PROJECT_KEY_LIST, PERCENTAGE, BYTE_ORDER_MARK, FS_REASONS, UTF8, PROJECT_KEY_DEFAULTS;
+var import_yaml3, COUNT, FRONTEND_VERIFICATION_KEY, DESIGN_REVIEW_KEY, PROJECT_KEYS, PROJECT_KEY_LIST, PERCENTAGE, BYTE_ORDER_MARK, FS_REASONS, UTF8, PROJECT_KEY_DEFAULTS;
 var init_project_config = __esm({
   "src/lib/project-config.ts"() {
     "use strict";
@@ -17830,6 +17834,7 @@ var init_project_config = __esm({
     init_utils();
     COUNT = { kind: "number", integer: true, min: 0 };
     FRONTEND_VERIFICATION_KEY = "workflow.frontend_verification";
+    DESIGN_REVIEW_KEY = "workflow.design_review";
     PROJECT_KEYS = {
       profile: { kind: "profile" },
       "workflow.spec_sync": { kind: "boolean" },
@@ -17837,6 +17842,7 @@ var init_project_config = __esm({
       "workflow.tdd.strict": { kind: "boolean" },
       "workflow.tdd.orchestrator_strict": { kind: "boolean" },
       [FRONTEND_VERIFICATION_KEY]: { kind: "boolean" },
+      [DESIGN_REVIEW_KEY]: { kind: "boolean" },
       "workflow.maps.tracker": { kind: "enum", values: ["github", "files"] },
       "workflow.maps.persist": { kind: "boolean" },
       "workflow.handoff.agent": { kind: "string" },
@@ -17891,6 +17897,7 @@ var init_project_config = __esm({
       "workflow.tdd.strict": "true",
       "workflow.tdd.orchestrator_strict": "true",
       [FRONTEND_VERIFICATION_KEY]: "false",
+      [DESIGN_REVIEW_KEY]: "false",
       "workflow.maps.persist": "false",
       "workflow.handoff.agent": "claude",
       "workflow.handoff.ack_turns": "5",
@@ -17906,16 +17913,94 @@ var init_project_config = __esm({
   }
 });
 
+// src/lib/claude-plugins.ts
+import { existsSync as existsSync10, readFileSync as readFileSync8 } from "node:fs";
+import { join as join11 } from "node:path";
+function readJson(path) {
+  if (!existsSync10(path)) return void 0;
+  try {
+    return JSON.parse(readFileSync8(path, "utf-8"));
+  } catch {
+    return void 0;
+  }
+}
+function registryPlugins(root) {
+  const parsed = readJson(join11(root, REGISTRY_PATH));
+  if (typeof parsed !== "object" || parsed === null) return {};
+  const plugins = parsed.plugins;
+  if (typeof plugins !== "object" || plugins === null) return {};
+  return plugins;
+}
+function installPathOf(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  const first2 = entries[0];
+  if (typeof first2 !== "object" || first2 === null) return null;
+  return typeof first2.installPath === "string" ? first2.installPath : null;
+}
+function manifestVersion(installPath) {
+  const parsed = readJson(join11(installPath, MANIFEST_PATH));
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const version = parsed.version;
+  return typeof version === "string" && version !== "" ? version : null;
+}
+function findInstalledPlugin(name) {
+  const plugins = registryPlugins(claudeConfigRoot());
+  for (const [key, entries] of Object.entries(plugins)) {
+    if (key.split("@")[0] !== name) continue;
+    const installPath = installPathOf(entries);
+    if (installPath === null) return { installPath: "", version: null };
+    return { installPath, version: manifestVersion(installPath) };
+  }
+  return null;
+}
+function majorVersion(version) {
+  const head = version.split(".")[0];
+  if (!/^\d+$/.test(head)) return null;
+  return Number.parseInt(head, 10);
+}
+var REGISTRY_PATH, MANIFEST_PATH;
+var init_claude_plugins = __esm({
+  "src/lib/claude-plugins.ts"() {
+    "use strict";
+    init_constants();
+    REGISTRY_PATH = join11("plugins", "installed_plugins.json");
+    MANIFEST_PATH = join11(".claude-plugin", "plugin.json");
+  }
+});
+
+// src/lib/impeccable.ts
+import { join as join12 } from "node:path";
+function impeccableLauncher(installPath) {
+  return join12(installPath, ".claude", "skills", IMPECCABLE_PLUGIN, "scripts", IMPECCABLE_PLUGIN);
+}
+function impeccableVersionNote(version) {
+  if (version === null) {
+    return `${IMPECCABLE_PLUGIN} is installed, and its manifest states no version to read - SpecHub expects major ${IMPECCABLE_MIN_MAJOR} or later`;
+  }
+  const major = majorVersion(version);
+  if (major !== null && major >= IMPECCABLE_MIN_MAJOR) return null;
+  return `${IMPECCABLE_PLUGIN} ${version} is installed, and SpecHub expects major ${IMPECCABLE_MIN_MAJOR} or later`;
+}
+var IMPECCABLE_PLUGIN, IMPECCABLE_MIN_MAJOR;
+var init_impeccable = __esm({
+  "src/lib/impeccable.ts"() {
+    "use strict";
+    init_claude_plugins();
+    IMPECCABLE_PLUGIN = "impeccable";
+    IMPECCABLE_MIN_MAJOR = 4;
+  }
+});
+
 // src/lib/host-probe.ts
 import { spawnSync } from "node:child_process";
 import { accessSync as accessSync2, constants } from "node:fs";
 import { request } from "node:http";
-import { delimiter, join as join11 } from "node:path";
+import { delimiter, join as join13 } from "node:path";
 function binaryOnPath(binary) {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (!dir) continue;
     try {
-      accessSync2(join11(dir, binary), constants.X_OK);
+      accessSync2(join13(dir, binary), constants.X_OK);
       return true;
     } catch {
     }
@@ -17967,9 +18052,9 @@ var init_host_probe = __esm({
 });
 
 // src/commands/config-check.ts
-import { existsSync as existsSync10, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync11, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { join as join12 } from "node:path";
+import { join as join14 } from "node:path";
 function checkRequiredAxes(report, config, project) {
   report.heading("Required host axes are set");
   const why = project.hasFrontend ? " (this project has a frontend)" : "";
@@ -18118,9 +18203,9 @@ function firstLineOf(err) {
   return (err instanceof Error ? err.message : String(err)).split("\n")[0];
 }
 function readJsonFile(path) {
-  if (!existsSync10(path)) return { status: "missing" };
+  if (!existsSync11(path)) return { status: "missing" };
   try {
-    return { status: "read", value: JSON.parse(readFileSync8(path, "utf-8")) };
+    return { status: "read", value: JSON.parse(readFileSync9(path, "utf-8")) };
   } catch (err) {
     return { status: "unreadable", detail: firstLineOf(err) };
   }
@@ -18136,7 +18221,7 @@ function checkDomainMap(report, root, specSync) {
   const id = "domain-map";
   const consequence = "spec sync then skips silently and the living specs stop being updated";
   const path = domainMapFile(root);
-  if (!existsSync10(path)) {
+  if (!existsSync11(path)) {
     report.line(
       specSync ? "fail" : "info",
       id,
@@ -18178,7 +18263,7 @@ function checkFrontendFiles(report, root, project, helpersDir, verification) {
 }
 function checkAgentBrowserJson(report, root, expected) {
   const id = "agent-browser-json";
-  const read = readJsonFile(join12(root, AGENT_BROWSER_JSON_FILE));
+  const read = readJsonFile(join14(root, AGENT_BROWSER_JSON_FILE));
   if (read.status === "missing") {
     report.line(
       "fail",
@@ -18216,8 +18301,8 @@ function checkVerificationKnowledge(report, root, helpersDir) {
     );
     return;
   }
-  const relative2 = join12(helpersDir, VERIFICATION_KNOWLEDGE_FILE);
-  if (!isFile(join12(root, relative2))) {
+  const relative2 = join14(helpersDir, VERIFICATION_KNOWLEDGE_FILE);
+  if (!isFile(join14(root, relative2))) {
     report.line(
       "fail",
       id,
@@ -18241,7 +18326,7 @@ function reportFrontendVerificationFlag(report, enabled) {
   report.line("pass", id, `${key} is true, so a UI change is verified in a browser before it lands`);
 }
 function checkProjectFiles(report, loaded) {
-  report.heading("This project's files");
+  report.heading("This project's files and design tools");
   if (!loaded.root) {
     report.line("info", "no-project", "No SpecHub project here, so there are no project files to check");
     return;
@@ -18257,19 +18342,34 @@ function checkProjectFiles(report, loaded) {
     );
   }
 }
+function checkImpeccable(report) {
+  const id = "impeccable";
+  const found = findInstalledPlugin(IMPECCABLE_PLUGIN);
+  if (!found) return;
+  const note = impeccableVersionNote(found.version);
+  if (note !== null) {
+    report.line("info", id, note);
+    return;
+  }
+  report.line(
+    "pass",
+    id,
+    `${IMPECCABLE_PLUGIN} ${found.version} is installed, so a design review has a designer to call`
+  );
+}
 function settingsFiles(root) {
   return [
     {
-      label: join12(CLAUDE_DIR, CLAUDE_LOCAL_SETTINGS_FILE),
-      path: join12(root, CLAUDE_DIR, CLAUDE_LOCAL_SETTINGS_FILE)
+      label: join14(CLAUDE_DIR, CLAUDE_LOCAL_SETTINGS_FILE),
+      path: join14(root, CLAUDE_DIR, CLAUDE_LOCAL_SETTINGS_FILE)
     },
     {
-      label: join12(CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
-      path: join12(root, CLAUDE_DIR, CLAUDE_SETTINGS_FILE)
+      label: join14(CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
+      path: join14(root, CLAUDE_DIR, CLAUDE_SETTINGS_FILE)
     },
     {
-      label: join12("~", CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
-      path: join12(homedir2(), CLAUDE_DIR, CLAUDE_SETTINGS_FILE)
+      label: join14("~", CLAUDE_DIR, CLAUDE_SETTINGS_FILE),
+      path: join14(homedir2(), CLAUDE_DIR, CLAUDE_SETTINGS_FILE)
     }
   ];
 }
@@ -18306,6 +18406,8 @@ var init_config_check = __esm({
     init_constants();
     init_global_config();
     init_host_status();
+    init_claude_plugins();
+    init_impeccable();
     init_host_probe();
     init_project_config();
     init_utils();
@@ -18687,6 +18789,7 @@ async function checkConfig(asJson) {
   checkPreferredBrowserMode(report, config, loaded.host);
   checkOptionalAxes(report, config);
   checkProjectFiles(report, loaded);
+  checkImpeccable(report);
   checkOutputStyle(report, loaded.root ?? process.cwd());
   report.finish(asJson);
 }
@@ -18776,13 +18879,84 @@ var init_config = __esm({
   }
 });
 
+// src/commands/design-gate.ts
+var design_gate_exports = {};
+__export(design_gate_exports, {
+  register: () => register6
+});
+function designReviewAsked(root) {
+  let yaml = void 0;
+  try {
+    yaml = readYaml(projectFile(root));
+  } catch {
+    yaml = void 0;
+  }
+  return workflowFlag(yaml, "design_review", projectKeyDefaultFlag);
+}
+function offReasons(root, impeccable) {
+  if (root === null) return [REASON_NO_PROJECT];
+  const reasons = [];
+  if (!designReviewAsked(root)) reasons.push(REASON_KEY_FALSE);
+  if (impeccable === null) reasons.push(REASON_NOT_INSTALLED);
+  return reasons;
+}
+function impeccableJson(impeccable) {
+  if (impeccable === null) return null;
+  return {
+    version: impeccable.version ?? UNKNOWN_VERSION,
+    launcher: impeccableLauncher(impeccable.installPath)
+  };
+}
+function runDesignGate(json) {
+  const root = findProjectRoot();
+  const impeccable = findInstalledPlugin(IMPECCABLE_PLUGIN);
+  const reasons = offReasons(root, impeccable);
+  const on = reasons.length === 0;
+  if (on && impeccable !== null) {
+    const note = impeccableVersionNote(impeccable.version);
+    if (note !== null) console.error(source_default.yellow(note));
+  }
+  if (json) {
+    const answer = { on, reasons, impeccable: impeccableJson(impeccable) };
+    console.log(JSON.stringify(answer, null, 2));
+  } else if (on) {
+    console.log("on");
+  } else {
+    for (const reason of reasons) console.log(`off: ${reason}`);
+  }
+  if (!on) process.exit(1);
+}
+function register6(program3) {
+  program3.command("design-gate").description("Answer whether a design review runs here, exiting 0 for on and 1 for off").option("--json", "print the answer as one JSON object, with the reasons as data").action((opts) => {
+    runDesignGate(opts.json === true);
+  });
+}
+var REASON_NO_PROJECT, REASON_KEY_FALSE, REASON_NOT_INSTALLED, UNKNOWN_VERSION;
+var init_design_gate = __esm({
+  "src/commands/design-gate.ts"() {
+    "use strict";
+    init_source();
+    init_claude_plugins();
+    init_constants();
+    init_host_status();
+    init_impeccable();
+    init_project_config();
+    init_project();
+    init_utils();
+    REASON_NO_PROJECT = "no spechub project here";
+    REASON_KEY_FALSE = `${DESIGN_REVIEW_KEY} is false`;
+    REASON_NOT_INSTALLED = `${IMPECCABLE_PLUGIN} is not installed`;
+    UNKNOWN_VERSION = "unknown";
+  }
+});
+
 // src/commands/feedback.ts
 var feedback_exports = {};
 __export(feedback_exports, {
-  register: () => register6
+  register: () => register7
 });
 import { execSync } from "node:child_process";
-function register6(program3) {
+function register7(program3) {
   program3.command("feedback").description("Submit feedback or report an issue").argument("<message>", "feedback message").option("--body <text>", "additional details").action((message, opts) => {
     const title = encodeURIComponent(message);
     const body = opts.body ? encodeURIComponent(opts.body) : "";
@@ -18807,7 +18981,7 @@ var init_feedback = __esm({
 });
 
 // src/lib/ackfile.ts
-import { existsSync as existsSync11, readFileSync as readFileSync9 } from "node:fs";
+import { existsSync as existsSync12, readFileSync as readFileSync10 } from "node:fs";
 function isAckDecision(value) {
   return typeof value === "string" && ACK_DECISIONS.includes(value);
 }
@@ -18859,7 +19033,7 @@ function writeAck(args) {
       `That is a sidecar path, not a handoff file. Pass ${file.slice(0, -ACK_SUFFIX.length)} instead.`
     );
   }
-  if (!existsSync11(file)) {
+  if (!existsSync12(file)) {
     throw new Error(`No handoff file at ${file}. Check the path the handoff gave you.`);
   }
   const record2 = {
@@ -18875,7 +19049,7 @@ function writeAck(args) {
 function readAck(file) {
   let raw;
   try {
-    raw = readFileSync9(ackPath(file), "utf-8");
+    raw = readFileSync10(ackPath(file), "utf-8");
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
@@ -18907,12 +19081,12 @@ var init_ackfile = __esm({
 });
 
 // src/lib/ackwatch.ts
-import { readFileSync as readFileSync10, statSync as statSync4 } from "node:fs";
+import { readFileSync as readFileSync11, statSync as statSync4 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import { basename as basename2, join as join13 } from "node:path";
+import { basename as basename2, join as join15 } from "node:path";
 function transcriptPath(cwd, sessionId, projectsDir) {
-  const base = projectsDir ?? join13(homedir3(), ".claude", "projects");
-  return join13(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
+  const base = projectsDir ?? join15(homedir3(), ".claude", "projects");
+  return join15(base, cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
 }
 function parseAck(text) {
   const match = ACK_PATTERN.exec(text ?? "");
@@ -19093,7 +19267,7 @@ function analyze(lines, options) {
 }
 function readLines(path) {
   try {
-    return readFileSync10(path, "utf-8").split("\n");
+    return readFileSync11(path, "utf-8").split("\n");
   } catch (err) {
     if (err.code === "ENOENT") return [];
     throw err;
@@ -19162,7 +19336,7 @@ var init_ackwatch = __esm({
 // src/commands/handoff.ts
 var handoff_exports = {};
 __export(handoff_exports, {
-  register: () => register7
+  register: () => register8
 });
 import { isAbsolute, resolve as resolve2 } from "node:path";
 function parseIntAtLeast(name, min) {
@@ -19195,7 +19369,7 @@ function resolveTranscript(opts) {
   }
   return transcriptPath(opts.cwd, opts.sessionId);
 }
-function register7(program3) {
+function register8(program3) {
   const handoffCmd = program3.command("handoff").description("Hand work to another agent session");
   handoffCmd.command("watch").description(
     "Watch a handoff target's transcript and report whether it acknowledged the handoff, went silent for N turns, or timed out"
@@ -25440,12 +25614,12 @@ var init_prose = __esm({
 var lint_prose_exports = {};
 __export(lint_prose_exports, {
   collectFiles: () => collectFiles,
-  register: () => register8,
+  register: () => register9,
   reportFile: () => reportFile,
   summarize: () => summarize
 });
-import { existsSync as existsSync12, readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
-import { join as join14, relative, resolve as resolve4 } from "node:path";
+import { existsSync as existsSync13, readFileSync as readFileSync12, statSync as statSync5 } from "node:fs";
+import { join as join16, relative, resolve as resolve4 } from "node:path";
 function loadVocabulary() {
   const pluginRoot = findPluginRoot();
   if (!pluginRoot) {
@@ -25454,7 +25628,7 @@ function loadVocabulary() {
       VOCABULARY_HINT
     );
   }
-  const path = join14(pluginRoot, VOCABULARY_PATH);
+  const path = join16(pluginRoot, VOCABULARY_PATH);
   let markdown = null;
   try {
     markdown = readMarkdown(path);
@@ -25482,7 +25656,7 @@ function collectFiles(paths, opts) {
   if (opts.all) files.push(...markdownIn(opts.root));
   for (const path of paths) {
     const full = resolve4(path);
-    if (!existsSync12(full)) {
+    if (!existsSync13(full)) {
       missing.push(path);
       continue;
     }
@@ -25524,7 +25698,7 @@ function displayPath(root, file) {
 function reportFile(file, display, vocabulary) {
   let text;
   try {
-    text = readFileSync11(file, "utf-8");
+    text = readFileSync12(file, "utf-8");
   } catch {
     console.error(source_default.yellow(`Cannot read, skipping: ${display}`));
     return { path: display, findings: [], unreadable: true };
@@ -25564,7 +25738,7 @@ function printSummary(summary, missing) {
     `  ${source_default.bold(String(summary.total).padStart(5))}  total in ${summary.filesWithFindings} of ${summary.totalFiles} file(s)`
   );
 }
-function register8(program3) {
+function register9(program3) {
   program3.command("lint-prose").description("Warn about prose that drifts from the writing standard").argument("[paths...]", "files or directories to lint").option("--all", "lint every .md file in the repository").action((paths, opts) => {
     const root = findProjectRoot() ?? process.cwd();
     if (paths.length === 0 && !opts.all) {
@@ -25666,6 +25840,7 @@ var commands = await Promise.all([
   Promise.resolve().then(() => (init_archive(), archive_exports)),
   Promise.resolve().then(() => (init_node(), node_exports)),
   Promise.resolve().then(() => (init_config(), config_exports)),
+  Promise.resolve().then(() => (init_design_gate(), design_gate_exports)),
   Promise.resolve().then(() => (init_feedback(), feedback_exports)),
   Promise.resolve().then(() => (init_handoff(), handoff_exports)),
   Promise.resolve().then(() => (init_lint_prose(), lint_prose_exports))

@@ -51,6 +51,7 @@ interface StoredProjectYaml {
   workflow?: {
     spec_sync?: unknown;
     frontend_verification?: unknown;
+    design_review?: unknown;
     grilling?: { questions?: unknown };
     tdd?: { strict?: unknown; orchestrator_strict?: unknown };
     maps?: { tracker?: unknown; persist?: unknown };
@@ -159,6 +160,7 @@ const CHECK_ROW_IDS = {
   verificationKnowledge: 'verification-knowledge',
   frontendVerification: 'frontend-verification',
   outputStyle: 'output-style',
+  impeccable: 'impeccable',
 } as const;
 
 /**
@@ -477,6 +479,141 @@ function outputStyleSettings(style: string): string {
 /** The output style the plugin ships, which `check` reports on but never forces on. */
 const SPECHUB_OUTPUT_STYLE = 'spechub:ac-writing-style';
 
+// ---------------------------------------------------------------------
+// Installed Claude Code plugins
+//
+// The helpers below build, in a temp directory, the two files Claude Code
+// writes when a plugin is installed. Both shapes are Claude Code's, not
+// SpecHub's, so they are written here as literals rather than derived from
+// anything in this repository - a fixture that asked SpecHub for the shape
+// would agree with SpecHub even when SpecHub is wrong.
+//
+//   <config root>/plugins/installed_plugins.json  - the registry, saying
+//      which plugins are installed and where each one lives. Keys are
+//      `<plugin>@<marketplace>`, and the marketplace half varies by where
+//      the user installed from.
+//   <installPath>/.claude-plugin/plugin.json      - the installed plugin's
+//      own manifest, and the authoritative statement of its version. The
+//      registry carries a version too, and it can be stale.
+//
+// The config root is `$CLAUDE_CONFIG_DIR` when that is set and non-empty,
+// and `$HOME/.claude` otherwise.
+// ---------------------------------------------------------------------
+
+/** The registry file Claude Code writes under config root `root`. */
+function installedPluginsPath(root: string): string {
+  return join(root, 'plugins', 'installed_plugins.json');
+}
+
+/** One installed plugin, as a test wants it written into the registry. */
+interface PluginInstall {
+  /** The registry key, `<plugin>@<marketplace>`. */
+  key: string;
+  /** Where the plugin's own files live, and where its manifest is read from. */
+  installPath: string;
+  /** The version the REGISTRY states, which need not match the manifest. */
+  version: string;
+}
+
+/** Write `installs` as the whole `installed_plugins.json` under config root `root`. */
+function writeInstalledPlugins(root: string, installs: PluginInstall[]): void {
+  const plugins: Record<string, unknown[]> = {};
+  for (const install of installs) {
+    plugins[install.key] = [
+      {
+        scope: 'user',
+        installPath: install.installPath,
+        version: install.version,
+        installedAt: '2026-01-01T00:00:00.000Z',
+        lastUpdated: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+  }
+
+  mkdirSync(join(root, 'plugins'), { recursive: true });
+  writeFileSync(
+    installedPluginsPath(root),
+    JSON.stringify({ version: 2, plugins }, null, 2) + '\n'
+  );
+}
+
+/**
+ * A temp directory standing in for one plugin's install path, holding the
+ * manifest `manifest` at `.claude-plugin/plugin.json`.
+ *
+ * A `null` manifest writes no manifest file at all - the install path exists
+ * and states nothing, which is what a half-written install looks like.
+ */
+function pluginInstallDir(manifest: Record<string, unknown> | null): string {
+  const dir = mkdtempSync(join(tmpdir(), 'spechub-plugin-install-'));
+  if (manifest !== null) {
+    mkdirSync(join(dir, '.claude-plugin'), { recursive: true });
+    writeFileSync(
+      join(dir, '.claude-plugin', 'plugin.json'),
+      JSON.stringify(manifest, null, 2) + '\n'
+    );
+  }
+  return dir;
+}
+
+/** The plugin `spechub config check` reports on, spelled as its manifest spells it. */
+const IMPECCABLE_PLUGIN = 'impeccable';
+
+/**
+ * The major version SpecHub expects of an installed impeccable.
+ *
+ * Asserted by value: what counts as new enough is the whole content of the
+ * pass-or-inform decision, so a test deriving it from the implementation
+ * would agree with any number the implementation picked.
+ */
+const IMPECCABLE_MIN_MAJOR = '4';
+
+/** How a test wants impeccable installed. */
+interface ImpeccableInstall {
+  /** The version the registry states, which the manifest can disagree with. */
+  registryVersion: string;
+  /** The version the manifest states, when it differs from the registry's. */
+  manifestVersion?: string;
+  /** What a broken install is missing: the manifest file, or its version field. */
+  broken?: 'no-manifest' | 'no-version';
+  /** The half of the registry key after the `@`, which varies by install source. */
+  marketplace?: string;
+}
+
+/**
+ * Install impeccable under config root `root` and hand back its install path.
+ *
+ * The registry version and the manifest version are separate inputs because
+ * the manifest is the authority: a disagreement between the two is a case
+ * that has to be arrangeable, and it is the only way to tell which file an
+ * implementation actually read.
+ */
+function installImpeccable(root: string, opts: ImpeccableInstall): string {
+  const manifest =
+    opts.broken === 'no-manifest'
+      ? null
+      : opts.broken === 'no-version'
+        ? { name: IMPECCABLE_PLUGIN }
+        : { name: IMPECCABLE_PLUGIN, version: opts.manifestVersion ?? opts.registryVersion };
+
+  const installPath = pluginInstallDir(manifest);
+  writeInstalledPlugins(root, [
+    {
+      key: `${IMPECCABLE_PLUGIN}@${opts.marketplace ?? IMPECCABLE_PLUGIN}`,
+      installPath,
+      version: opts.registryVersion,
+    },
+  ]);
+  return installPath;
+}
+
+/** A HOME whose `.claude` holds impeccable installed exactly as `opts` describes. */
+function homeWithImpeccable(opts: ImpeccableInstall): string {
+  const home = fakeHome();
+  installImpeccable(join(home, '.claude'), opts);
+  return home;
+}
+
 /** What a test declares on the `host` side of the global config file. */
 interface HostDeclarations {
   orchestrators?: { herdr?: boolean; orca?: boolean };
@@ -514,6 +651,7 @@ function runCheck(opts: {
   path?: string[];
   home?: string;
   json?: boolean;
+  env?: NodeJS.ProcessEnv;
 }) {
   const xdg = mkdtempSync(join(tmpdir(), 'spechub-check-xdg-'));
   mkdirSync(join(xdg, 'spechub'), { recursive: true });
@@ -525,7 +663,16 @@ function runCheck(opts: {
   return runCli(['config', 'check', ...(opts.json ? ['--json'] : [])], {
     cwd: opts.cwd,
     path: opts.path ?? [emptyPathDir()],
-    env: { XDG_CONFIG_HOME: xdg, HOME: opts.home ?? fakeHome() },
+    env: {
+      XDG_CONFIG_HOME: xdg,
+      HOME: opts.home ?? fakeHome(),
+      // Emptied for the same reason HOME is replaced: Claude Code reads its
+      // config root from this variable, so a machine that happens to set it
+      // would send every read of `~/.claude` somewhere the test never wrote.
+      // An empty value is not a value, so this leaves HOME deciding.
+      CLAUDE_CONFIG_DIR: '',
+      ...(opts.env ?? {}),
+    },
   });
 }
 
@@ -1682,6 +1829,7 @@ describe('spechub config set, project keys', () => {
       ['workflow.frontend_verification', 'no', false],
       ['workflow.maps.persist', 'true', true],
       ['workflow.handoff.self_invoke', 'OFF', false],
+      ['workflow.design_review', 'yes', true],
     ];
 
     let text: string;
@@ -1717,6 +1865,48 @@ describe('spechub config set, project keys', () => {
       expect(result.stderr).toContain('boolean');
       expect(result.stderr).toContain('true');
       expect(result.stderr).toContain('false');
+    });
+  });
+
+  describe('workflow.design_review, the key that turns the design gate on', () => {
+    // A boolean like every other boolean, and pinned separately because it is
+    // the newest one: a key the schema half-knows would still pass the shared
+    // arrangement above, which writes six keys before it reads any of them.
+    it.each([
+      ['yes', 'true'],
+      ['no', 'false'],
+      ['true', 'true'],
+      ['false', 'false'],
+      ['ON', 'true'],
+      ['OFF', 'false'],
+    ])('takes "%s" and reads back as %s', (raw, expected) => {
+      const root = makeProject('name: design-review-project\n');
+
+      expect(runSet('workflow.design_review', raw, root).status).toBe(0);
+
+      const read = runGet('workflow.design_review', root);
+      expect(read.status).toBe(0);
+      expect(read.stdout.trim()).toBe(expected);
+    });
+
+    it('writes a YAML boolean under workflow, not the word the user typed', () => {
+      const root = makeProject('name: design-review-project\n');
+
+      expect(runSet('workflow.design_review', 'yes', root).status).toBe(0);
+
+      expect(atKey(parseProjectYaml(root), 'workflow.design_review')).toBe(true);
+      expect(readProjectYaml(root)).toMatch(/design_review:\s*true\s*$/m);
+    });
+
+    it('rejects a non-boolean value with exit 1, the way every boolean key does', () => {
+      const result = runSet(
+        'workflow.design_review',
+        'sometimes',
+        makeProject('name: design-review-reject\n')
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('boolean');
     });
   });
 
@@ -3032,6 +3222,7 @@ describe('spechub config get, project keys', () => {
       ['workflow.frontend_verification', 'false'],
       ['workflow.grilling.questions', 'tool'],
       ['workflow.handoff.ack_turns', '5'],
+      ['workflow.design_review', 'false'],
     ])('exits 2 for the unstated %s and names its documented default, %s', (key, fallback) => {
       const result = runGet(key, makeProject('name: defaults-project\n'));
 
@@ -3153,6 +3344,27 @@ describe('spechub config unset, project keys', () => {
       // a fallback that kept reading the old value shows here rather than
       // hiding behind a default that happened to agree with it.
       expect(gone.stderr).toContain('true');
+    });
+
+    it('round-trips workflow.design_review the same way, back to the default false', () => {
+      const root = makeProject('name: design-review-project\n');
+
+      expect(runSet('workflow.design_review', 'true', root).status).toBe(0);
+
+      const stated = runGet('workflow.design_review', root);
+      expect(stated.status).toBe(0);
+      expect(stated.stdout.trim()).toBe('true');
+
+      expect(runUnset('workflow.design_review', root).status).toBe(0);
+      expect(atKey(parseProjectYaml(root), 'workflow.design_review')).toBeUndefined();
+
+      const gone = runGet('workflow.design_review', root);
+      expect(gone.status).toBe(2);
+      expect(gone.stderr).toContain('unset');
+      // The default is the opposite of the value just removed, so a fallback
+      // still reading the removed value shows here rather than hiding behind
+      // a default that happened to agree with it.
+      expect(gone.stderr).toContain('false');
     });
   });
 
@@ -5939,6 +6151,295 @@ describe('spechub config check', () => {
     });
   });
 
+  // ---------------------------------------------------------------------
+  // The impeccable row (project rows)
+  //
+  // impeccable is a separate Claude Code plugin, installed on the machine
+  // rather than stated in the project. `check` reports whether it is there
+  // and whether it is new enough, and it reports by reading the two files
+  // Claude Code writes - it never runs impeccable itself.
+  //
+  // The row has three outcomes and no fourth:
+  //   PASS  - installed at major 4 or later. The message names the version.
+  //   INFO  - installed and older than that, or installed with a version
+  //           that cannot be read. The message names what was found.
+  //   absent - not installed. No row at all, in either output mode.
+  //
+  // It never FAILS, and it never moves the exit code. impeccable is optional,
+  // so a project that has never heard of it must not be told it has a
+  // problem, and a script running `check` in CI must not start failing the
+  // day someone uninstalls a plugin.
+  // ---------------------------------------------------------------------
+  describe('the impeccable row (project rows)', () => {
+    /** A project with nothing wrong with it, so the impeccable row is the only thing moving. */
+    function impeccableProject(): string {
+      const root = makeProject('name: impeccable-project\n');
+      writeDomainMap(root, DOMAIN_MAP_THREE);
+      return root;
+    }
+
+    /**
+     * `config check --json` against a clean project and a HOME installing
+     * `install`, or installing nothing when `install` is null.
+     */
+    function runWith(install: ImpeccableInstall | null, json = true) {
+      return runCheck({
+        cwd: impeccableProject(),
+        home: install ? homeWithImpeccable(install) : fakeHome(),
+        json,
+      });
+    }
+
+    /** The impeccable row of one `--json` run, or undefined when the report carries none. */
+    function rowOf(result: { stdout: string }): ConfigCheckJsonRow | undefined {
+      return checkJsonRow(result.stdout, CHECK_ROW_IDS.impeccable);
+    }
+
+    /** The impeccable row's message, refusing a report that carries no row. */
+    function messageOf(result: { stdout: string }): string {
+      const row = rowOf(result);
+      expect(row, 'the report carries no impeccable row').toBeDefined();
+      return (row as ConfigCheckJsonRow).message;
+    }
+
+    describe('an installed impeccable', () => {
+      it.each([['4.0.0'], ['4.2.0'], ['10.1.2']])(
+        'passes on %s, which is major 4 or later',
+        version => {
+          // 10 is here because it is the version a comparison done on the
+          // strings rather than on the numbers gets wrong: "10" sorts before
+          // "4", so a string comparison calls a newer plugin too old.
+          const result = runWith({ registryVersion: version });
+
+          expect(rowOf(result)?.status).toBe('pass');
+          expect(messageOf(result)).toContain(version);
+        }
+      );
+
+      it.each([['3.9.0'], ['0.1.0']])(
+        'reports %s as informational, because it is older than major 4',
+        version => {
+          const result = runWith({ registryVersion: version });
+
+          expect(rowOf(result)?.status).toBe('info');
+          // Both halves of the answer: what is installed, and what SpecHub
+          // wanted. A message naming only one of them leaves the reader to
+          // go and look the other up.
+          expect(messageOf(result)).toContain(version);
+          expect(messageOf(result)).toContain(IMPECCABLE_MIN_MAJOR);
+        }
+      );
+
+      it('is detected under a marketplace name other than its own', () => {
+        // The registry key is `<plugin>@<marketplace>`, and the marketplace
+        // half is wherever the user installed from. Matching the whole key
+        // would find only one of the ways the same plugin can arrive.
+        const result = runWith({ registryVersion: '4.2.0', marketplace: 'some-mirror' });
+
+        expect(rowOf(result)?.status).toBe('pass');
+        expect(messageOf(result)).toContain('4.2.0');
+      });
+    });
+
+    describe("the manifest, not the registry, states the installed version", () => {
+      it('reports the manifest version when the registry states a newer one', () => {
+        const result = runWith({ registryVersion: '4.2.0', manifestVersion: '3.9.0' });
+
+        expect(rowOf(result)?.status).toBe('info');
+        expect(messageOf(result)).toContain('3.9.0');
+        // The registry's number is the stale one, so repeating it would tell
+        // the user a version they do not have.
+        expect(messageOf(result)).not.toContain('4.2.0');
+      });
+
+      it('reports the manifest version when the registry states an older one', () => {
+        const result = runWith({ registryVersion: '3.9.0', manifestVersion: '4.2.0' });
+
+        expect(rowOf(result)?.status).toBe('pass');
+        expect(messageOf(result)).toContain('4.2.0');
+      });
+    });
+
+    describe('impeccable is not installed', () => {
+      it('carries no impeccable row when the registry file does not exist', () => {
+        const result = runWith(null);
+
+        expect(rowOf(result)).toBeUndefined();
+      });
+
+      it('carries no impeccable row when the registry names other plugins only', () => {
+        const home = fakeHome();
+        writeInstalledPlugins(join(home, '.claude'), [
+          {
+            key: 'document-skills@anthropic-agent-skills',
+            installPath: pluginInstallDir({ name: 'document-skills', version: '1.0.0' }),
+            version: '1.0.0',
+          },
+        ]);
+
+        const result = runCheck({ cwd: impeccableProject(), home, json: true });
+
+        expect(rowOf(result)).toBeUndefined();
+      });
+
+      it('names impeccable nowhere in the human report either', () => {
+        // A row absent from `--json` and printed to a human anyway would be
+        // two reports rather than two renderings of one.
+        const result = runWith(null, false);
+
+        expect(result.stdout).not.toMatch(/impeccable/i);
+      });
+    });
+
+    describe('an install whose version cannot be read', () => {
+      it.each([
+        ['the manifest file is missing', 'no-manifest'],
+        ['the manifest states no version', 'no-version'],
+      ] as const)('reports it as informational when %s', (_case, broken) => {
+        const result = runWith({ registryVersion: '4.2.0', broken });
+
+        // Informational, not passing: an unreadable version is not evidence
+        // of a new enough one. Informational, not failing: the plugin is
+        // still optional, and a broken install is not the project's problem.
+        expect(rowOf(result)?.status).toBe('info');
+        expect(messageOf(result)).toMatch(/could not|cannot|unreadable|unknown|no version/i);
+      });
+
+      it('says nothing about a version it never read', () => {
+        // The registry carries a version too, and it is not the authority.
+        // Printing it here would report a version as installed on the
+        // strength of the one file that can be stale.
+        const result = runWith({ registryVersion: '4.2.0', broken: 'no-manifest' });
+
+        expect(messageOf(result)).not.toContain('4.2.0');
+      });
+    });
+
+    describe('the row never fails and never moves the exit code', () => {
+      it.each([
+        ['not installed at all', null],
+        ['installed and new enough', { registryVersion: '4.2.0' }],
+        ['installed and too old', { registryVersion: '3.9.0' }],
+        ['installed with no readable version', { registryVersion: '4.2.0', broken: 'no-manifest' }],
+      ] as [string, ImpeccableInstall | null][])(
+        'exits 0 with no FAIL line when impeccable is %s',
+        (_case, install) => {
+          const cwd = impeccableProject();
+          const home = install ? homeWithImpeccable(install) : fakeHome();
+
+          const text = runCheck({ cwd, home, json: false });
+          const json = runCheck({ cwd, home, json: true });
+
+          expect(failLines(text.stdout)).toEqual([]);
+          expect(text.status).toBe(0);
+          expect(json.status).toBe(0);
+          // An install produces a row, and no arrangement produces a failing
+          // one. Asserting both together is what stops "never fails" from
+          // being satisfied by a row that is never printed.
+          if (install) expect(rowOf(json)).toBeDefined();
+          expect(rowOf(json)?.status).not.toBe('fail');
+        }
+      );
+
+      it('leaves every other row exactly as it was when impeccable is installed', () => {
+        // The impeccable row is the only difference the install may make. A
+        // row that changed status alongside it would be this check reaching
+        // into an answer that is not its own.
+        const cwd = impeccableProject();
+        const withPlugin = runCheck({
+          cwd,
+          home: homeWithImpeccable({ registryVersion: '4.2.0' }),
+          json: true,
+        });
+        const without = runCheck({ cwd, home: fakeHome(), json: true });
+
+        const others = (result: { stdout: string }): ConfigCheckJsonRow[] =>
+          (JSON.parse(result.stdout) as ConfigCheckJson).checks.filter(
+            check => check.id !== CHECK_ROW_IDS.impeccable
+          );
+
+        expect(rowOf(withPlugin)).toBeDefined();
+        expect(others(withPlugin)).toEqual(others(without));
+        expect(withPlugin.status).toBe(without.status);
+      });
+    });
+
+    describe('where the installed plugins are read from', () => {
+      it('reads CLAUDE_CONFIG_DIR when it is set, not ~/.claude', () => {
+        const configDir = mkdtempSync(join(tmpdir(), 'spechub-claude-config-'));
+        installImpeccable(configDir, { registryVersion: '4.2.0' });
+
+        const result = runCheck({
+          cwd: impeccableProject(),
+          home: fakeHome(),
+          json: true,
+          env: { CLAUDE_CONFIG_DIR: configDir },
+        });
+
+        expect(rowOf(result)?.status).toBe('pass');
+        expect(messageOf(result)).toContain('4.2.0');
+      });
+
+      it('reads CLAUDE_CONFIG_DIR instead of ~/.claude when both hold an install', () => {
+        // Not "as well as": the variable moves the config root, so a HOME
+        // install is not a second place to look.
+        const configDir = mkdtempSync(join(tmpdir(), 'spechub-claude-config-'));
+        installImpeccable(configDir, { registryVersion: '3.9.0' });
+
+        const result = runCheck({
+          cwd: impeccableProject(),
+          home: homeWithImpeccable({ registryVersion: '4.2.0' }),
+          json: true,
+          env: { CLAUDE_CONFIG_DIR: configDir },
+        });
+
+        expect(rowOf(result)?.status).toBe('info');
+        expect(messageOf(result)).toContain('3.9.0');
+      });
+
+      it('falls back to ~/.claude when CLAUDE_CONFIG_DIR is set to an empty value', () => {
+        const result = runCheck({
+          cwd: impeccableProject(),
+          home: homeWithImpeccable({ registryVersion: '4.2.0' }),
+          json: true,
+          env: { CLAUDE_CONFIG_DIR: '' },
+        });
+
+        expect(rowOf(result)?.status).toBe('pass');
+      });
+    });
+
+    it('prints the installed version in the human report too', () => {
+      const result = runWith({ registryVersion: '4.2.0' }, false);
+
+      const line = result.stdout.split('\n').find(text => /impeccable/i.test(text));
+      expect(line).toBeDefined();
+      expect(line).toContain('PASS');
+      expect(line).toContain('4.2.0');
+    });
+
+    it('never runs impeccable, however installed it is', () => {
+      // Detection is two file reads. Running the plugin to ask it its
+      // version would make `check` slow, and would make it depend on a
+      // command that a broken install may not be able to start at all.
+      const marker = join(mkdtempSync(join(tmpdir(), 'spechub-impeccable-marker-')), 'ran');
+      const binDir = mkdtempSync(join(tmpdir(), 'spechub-fake-bin-'));
+      const command = join(binDir, IMPECCABLE_PLUGIN);
+      writeFileSync(command, `#!/bin/sh\necho ran > '${marker}'\nexit 0\n`);
+      chmodSync(command, 0o755);
+
+      const result = runCheck({
+        cwd: impeccableProject(),
+        home: homeWithImpeccable({ registryVersion: '4.2.0' }),
+        path: [binDir],
+        json: true,
+      });
+
+      expect(rowOf(result)?.status).toBe('pass');
+      expect(existsSync(marker)).toBe(false);
+    });
+  });
+
   describe('project rows and the exit code', () => {
     it('exits 1, never 2, when a project row fails and every required host axis is declared', () => {
       const cwd = makeProject('name: unmapped-project\n');
@@ -6042,9 +6543,17 @@ describe('spechub config check', () => {
 
       it('carries all six project rows under their contract identifiers, the four file rows passing', () => {
         const parsed = json();
-        for (const id of Object.values(CHECK_ROW_IDS)) {
+        // Every id but impeccable's. That row reports on a plugin installed
+        // on the MACHINE rather than on anything in the project, and this
+        // arrangement gives the CLI a HOME with no plugins installed at all,
+        // so the row is legitimately absent here.
+        const projectRows = Object.values(CHECK_ROW_IDS).filter(
+          id => id !== CHECK_ROW_IDS.impeccable
+        );
+        for (const id of projectRows) {
           expect(row(parsed, id), `no row with id "${id}"`).toBeDefined();
         }
+        expect(row(parsed, CHECK_ROW_IDS.impeccable)).toBeUndefined();
         expect(row(parsed, CHECK_ROW_IDS.domainMap)?.status).toBe('pass');
         expect(row(parsed, CHECK_ROW_IDS.agentBrowser)?.status).toBe('pass');
         expect(row(parsed, CHECK_ROW_IDS.agentBrowserJson)?.status).toBe('pass');

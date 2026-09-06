@@ -54,13 +54,14 @@ flowchart TD
     - The setup skill copies them from a profile
         - An omitted one names nothing at all
 
-Three commands read the file and change nothing.
+Four commands read the file and change nothing.
 
 | Command | What it prints |
 | --- | --- |
 | `spechub config show` | the profile, the commands, and what the project says about its browser |
 | `spechub config check` | an audit of the project and the machine, exiting 2 when a required host axis has no value |
 | `spechub config list` | every key the file states |
+| `spechub design-gate` | whether a design review runs here, as `on` and exit 0 or one `off: <reason>` line per reason and exit 1 (section 3) |
 
 ### 1.1. Which file a write lands in
 
@@ -205,7 +206,7 @@ Three refusals protect a file neither command can handle.
 
 ## 3. workflow: the switches
 
-*Four booleans sit in the block. Each one changes how much discipline SpecHub applies. A fifth key decides how Claude asks you a question.*
+*Five booleans sit in the block. Each one changes how much discipline SpecHub applies. A sixth key decides how Claude asks you a question.*
 
 | Key | Values | Default | What changes |
 | --- | --- | --- | --- |
@@ -213,6 +214,7 @@ Three refusals protect a file neither command can handle.
 | `workflow.tdd.strict` | `true`, `false` | `true` | `false` runs the task-executor before the test-writer; all three phases still run, and the checker's gate changes with the key |
 | `workflow.tdd.orchestrator_strict` | `true`, `false` | `true` | `false` lets the coordinating session read and write code itself for small tasks, instead of handing every piece to a subagent |
 | `workflow.frontend_verification` | `true`, `false` | `false` | the frontend-verifier runs only when this is `true`, the file configures a `frontend` block, and the change touched frontend files |
+| `workflow.design_review` | `true`, `false` | `false` | a design review runs on a UI change only when this is `true`; it needs the impeccable plugin installed, which `spechub config check` reports on |
 
 How a boolean reads:
 
@@ -229,6 +231,12 @@ How a boolean reads:
     - The defaults block in section 11 shows `true` for this key
     - That is what `/spechub:setup` writes for a project with a frontend
     - That is what setup writes, and not what an absent key means
+- `workflow.design_review` reads as off unless the file states one of the three true spellings outright
+    - `spechub design-gate` is the one command that answers whether the gate is on
+        - On needs both halves: the key true, and the impeccable plugin installed
+        - It reads this file and the plugin registry, runs nothing, and never exits 2
+        - An impeccable older than major 4, or one whose version it cannot read, warns on stderr and stays on
+        - `--json` prints the same answer as `{"on": ..., "reasons": [...], "impeccable": ...}`
 
 ### 3.1. What `workflow.tdd.strict` moves
 
@@ -539,6 +547,7 @@ workflow:
   # /spechub:setup writes true for a project with a frontend.
   # An absent key reads as false. Section 3 says why.
   frontend_verification: true
+  design_review: false
   maps:
     # tracker has no default: the map skill picks and writes it
     persist: false

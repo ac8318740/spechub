@@ -44,6 +44,7 @@ import { readYaml } from '../lib/utils.js';
 import {
   CheckReport,
   checkDeclaredBrowserModes,
+  checkImpeccable,
   checkOptionalAxes,
   checkOrchestrators,
   checkOutputStyle,
@@ -496,6 +497,10 @@ async function checkConfig(asJson: boolean): Promise<void> {
   checkPreferredBrowserMode(report, config, loaded.host);
   checkOptionalAxes(report, config);
   checkProjectFiles(report, loaded);
+  // Adds to the section `checkProjectFiles` just opened rather than opening
+  // one, because impeccable is optional and a section that came and went with
+  // an install would renumber the report. `checkImpeccable` says more.
+  checkImpeccable(report);
   // The output style lives in Claude Code's settings rather than in the
   // project, so it gets its own section rather than sitting among files the
   // project owns. Without a project root the settings files are still looked
