@@ -615,7 +615,85 @@ Read what this machine already decided:
 ~/.claude/spechub/bin/spechub config get host.terminal_workspace
 ```
 
-On exit 0 the user has already answered. Say nothing and go to Step 13.
+On exit 0 the user has already answered. Read which way it went:
+
+- On `false`, say nothing and go to Step 13
+- On `true`, check whether the workspace on this machine has fallen behind
+
+```bash
+PLUGIN=$(dirname "$(dirname "$(dirname "$(readlink -f ~/.claude/spechub/bin/spechub)")")")
+SETUP="$PLUGIN/assets/terminal-workspace/setup.sh"
+bash "$SETUP" outdated
+```
+
+Resolve the script rather than guessing its path. The SessionStart hook
+repoints that CLI symlink at every start, so it names the newest installed
+version. The `terminal-workspace` skill resolves the same script the same
+way.
+
+If the file is not there, say nothing and go to Step 13.
+
+Act on what `outdated` returned:
+
+- **Exit 0** – nothing has moved on. Say nothing and go to Step 13
+- **Exit 2** – it cannot tell. Say one line naming why, then go to Step 13
+- **Exit 1** – there is something to do. Show the findings verbatim, one per line, then ask once
+
+A user deciding whether to spend two minutes on downloads needs to see what the
+findings are.
+
+Exit 1 with no tab-separated row is an older script printing its usage for a
+subcommand it does not know. Say nothing and go to Step 13.
+
+The findings decide which question to ask. A `missing` row means this machine
+never installed the workspace, and it takes the first question. Everything else
+takes the second.
+
+On a `missing` row:
+
+```json
+{
+  "question": "You said yes but the workspace was never installed here. Install it?",
+  "header": "Workspace",
+  "options": [
+    {"label": "Yes", "description": "You then run /spechub:terminal-workspace, which installs herdr and the tools around it: several agents side by side in one terminal, sessions that survive a disconnect, and diffs, pull requests and files on one key each. Eleven components, every one reversible."},
+    {"label": "No", "description": "Leave this machine as it is. Nothing in SpecHub needs the workspace, and the offer comes back next time you run setup."}
+  ]
+}
+```
+
+On **Yes**, print this line and go to Step 13:
+
+```
+Run /spechub:terminal-workspace – the installer is reserved for you to start.
+```
+
+On any other finding:
+
+```json
+{
+  "question": "The terminal workspace has updates. Fetch them?",
+  "header": "Workspace",
+  "options": [
+    {"label": "Yes", "description": "You then run /spechub:terminal-workspace upgrade, which reinstalls each stale tool and adds any new component's config block to your file."},
+    {"label": "No", "description": "Leave this machine as it is. Everything installed keeps working, and the offer comes back next time you run setup."}
+  ]
+}
+```
+
+On **Yes**, print this line and go to Step 13:
+
+```
+Run /spechub:terminal-workspace upgrade – the installer is reserved for you to start.
+```
+
+Never run `upgrade` or `apply` yourself. Both install binaries and write the
+user's config, which is the work the `terminal-workspace` skill owns. Running
+`outdated` here is fine, because it only reads.
+
+On **No**, go straight to Step 13 and record nothing. The next version may add
+another component, so a "never ask" flag would silence a question nobody has
+asked the user yet.
 
 On any other exit the CLI is older than this skill and does not know the key.
 Do not ask, and do not try to write the key. Say this instead, then go to
@@ -638,7 +716,7 @@ On exit 2 nobody has answered yet. Ask once:
   "question": "Set up the terminal workspace on this machine?",
   "header": "Workspace",
   "options": [
-    {"label": "Yes", "description": "You then run /spechub:terminal-workspace, which installs herdr and the tools around it: several agents side by side in one terminal, sessions that survive a disconnect, and diffs, pull requests and files on one key each. Ten components, every one reversible."},
+    {"label": "Yes", "description": "You then run /spechub:terminal-workspace, which installs herdr and the tools around it: several agents side by side in one terminal, sessions that survive a disconnect, and diffs, pull requests and files on one key each. Eleven components, every one reversible."},
     {"label": "No", "description": "Leave this machine as it is. Nothing in SpecHub needs the workspace, and /spechub:terminal-workspace installs it any time later."}
   ]
 }
@@ -690,7 +768,7 @@ Spec sync:    [enabled/disabled]
 Frontend:     [configured/not configured]
 Browser:      [project's preferred mode / not configured]
 Host:         [orchestrators + browser modes declared / not declared]
-Workspace:    [yes / declined / not asked]
+Workspace:    [yes / yes, n updates available / not installed / declined / not asked]
 Config:       spechub/project.yaml
 Domain map:   spechub/domain-map.yaml ([n] domains / starter – fill in)
 Output style: spechub:ac-writing-style (global) | (project) | not set
@@ -716,6 +794,11 @@ The key records the answer, never the install. Setup writes it before anyone
 runs the installer, so `yes` never claims this machine has the workspace. When
 Step 12 asked in this run and the user said Yes, write `yes – run
 /spechub:terminal-workspace` so the owed command stays on screen.
+
+Two rows come from what `outdated` found in Step 12. Write `yes, n updates
+available` when it reported stale or new components, with `n` as the number of
+findings. Write `not installed` when it reported a `missing` row and the user
+declined to install it.
 
 List every row still failing under the summary. Name the row and what it needs.
 
