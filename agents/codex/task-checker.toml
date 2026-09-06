@@ -232,15 +232,18 @@ The command prints `on` and exits 0 when the gate is on. It prints
 
 Skip the detector when the gate is off. Record the gate state in your report.
 
-When the gate is on, pass the file list to the detector:
+When the gate is on, pass the file list to the detector. An advisory finding
+is a suggestion. The `--no-advisory` flag drops every advisory finding from
+the run.
 
 ```bash
-npx impeccable detect --json <file> [<file>...]
+npx impeccable detect --json --no-advisory <file> [<file>...]
 ```
 
-Read the exit code. Handle the three cases in this order.
+This run sets the verdict. Read the exit code. Handle the three cases in this
+order.
 
-1. Exit code 0 – the detector found nothing. This check passes.
+1. Exit code 0 – the detector found no problem. This check passes.
 2. Exit code 2 – the detector found problems. FAIL the task.
 3. Any other exit code – the detector could not run. Report a warning.
 
@@ -254,6 +257,26 @@ Say in the warning what the command printed. Continue the checklist.
 The detector reads `DESIGN.md` for each target file. The detector starts at
 that file's own directory and walks up to find `DESIGN.md`. A hard-coded colour
 outside the design system is a finding.
+
+**The advisory run**
+
+Run the detector a second time only when the first run exits 0. Drop the
+`--no-advisory` flag. Pass the same file list.
+
+```bash
+npx impeccable detect --json <file> [<file>...]
+```
+
+This run collects advisories. It never changes the verdict.
+
+Read the JSON output. Put every finding that carries `"advisory": true` on the
+`Notes` line of the design detector block. Send no advisory back to the
+task-executor.
+
+Omit the `Notes` line when the run found no advisory.
+
+Exit code 0 and exit code 2 both hold usable output. Say in one line that the
+advisory run failed under any other exit code. Continue the checklist.
 
 ### 6. Dependencies integrated
 
@@ -290,6 +313,7 @@ While verifying, read the living spec for the affected domain(s) in `spechub/spe
 - Design gate: on, or off ([reason])
 - Detector: PASS/FAIL (X findings), or WARNING ([why it could not run])
 - [file:line] - [finding name] - [description]
+- Notes (if any advisory): [file:line] - [finding name] - [description]
 
 ### Issues (if FAIL)
 - [file:line] - [specific problem]
