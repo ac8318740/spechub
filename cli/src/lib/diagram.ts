@@ -436,10 +436,13 @@ function collectDrawn(nodes: DiagramNode[], start: DiagramNode): Drawn[] {
  * and the ids of any blockers sitting outside the drawn subtree. Both are the
  * same move – a hold the reader has to know about, and no box to draw it
  * against, so the node it lands on names it.
+ *
+ * `statusField` is the status word for every node but the root, which prints a
+ * count of its subtree there instead.
  */
-function nodeLine({ node, hidden }: Drawn, blockersOffMap: string[]): string {
+function nodeLine({ node, hidden }: Drawn, blockersOffMap: string[], statusField: string): string {
   const [open, close] = SHAPES[node.kind];
-  const parts = [`${linkedId(node)} ${node.kind} - ${node.status}`, escapeLabel(node.label)];
+  const parts = [`${linkedId(node)} ${node.kind} - ${statusField}`, escapeLabel(node.label)];
   if (hidden > 0) parts.push(`+${hidden} more`);
   if (blockersOffMap.length > 0) {
     parts.push(`blocked by ${blockersOffMap.map(shownId).join(', ')}`);
@@ -865,13 +868,50 @@ function groupByClass(
 }
 
 /**
+ * What the root shows, derived from every other node in the map.
+ *
+ * The root carries no status of its own. The file stores one, because every
+ * node file has the field, and that stored value is what a reader would
+ * otherwise see – a root left open under a finished map, or marked resolved
+ * over a dozen open nodes. The derived value cannot say either: it is
+ * `resolved` once every other node is settled and `open` while any is not, and
+ * `field` counts those unresolved nodes so the label says how far there is left
+ * to go. The count is of the whole map, not of the boxes drawn, since a
+ * collapsed subtree hides nodes that still count.
+ */
+interface RootState {
+  status: NodeStatus;
+  field: string;
+}
+
+function deriveRootState(nodes: DiagramNode[], rootId: string | undefined): RootState {
+  const below = nodes.filter(n => n.id !== rootId);
+  const unresolved = below.filter(n => !isSettled(n.status)).length;
+  return {
+    status: unresolved === 0 ? 'resolved' : 'open',
+    field: `${unresolved} of ${below.length} open`,
+  };
+}
+
+/** The id of the one node with no parent, or undefined when the map has no single root. */
+function soleRootId(nodes: DiagramNode[]): string | undefined {
+  const roots = nodes.filter(n => !n.answers);
+  return roots.length === 1 ? roots[0].id : undefined;
+}
+
+/**
  * The whole rendered block: the marker comments around a main fence and a
  * legend fence.
  */
-export function renderDiagram(nodes: DiagramNode[], options: RenderOptions = {}): string {
-  if (nodes.length === 0) {
+export function renderDiagram(input: DiagramNode[], options: RenderOptions = {}): string {
+  if (input.length === 0) {
     throw new Error('the map has no nodes – there is nothing to draw');
   }
+  // The derived status stands in for the stored one before anything reads it,
+  // so the fill, the mermaid class and the legend swatch all follow it.
+  const rootId = soleRootId(input);
+  const root = deriveRootState(input, rootId);
+  const nodes = input.map(n => (n.id === rootId ? { ...n, status: root.status } : n));
   const start = resolveStart(nodes, options.from);
   // Validates the provenance chain and every blocking reference, then hands
   // back the nodes ready to be worked now.
@@ -881,10 +921,11 @@ export function renderDiagram(nodes: DiagramNode[], options: RenderOptions = {})
 
   const cueOf = (node: DiagramNode): Cue => ({
     frontier: onFrontier.has(node.id),
-    // Mode says who will settle a node, and nobody will settle a settled one.
-    // The border marks hitl rather than afk, because a human answering is the
-    // scarce case and the one a reader is hunting for.
-    hitl: node.mode === 'hitl' && !isSettled(node.status),
+    // Mode says who will settle a node, and nobody will settle a settled one
+    // or the root – the root is derived, so no cue ever lands on it. The border
+    // marks hitl rather than afk, because a human answering is the scarce case
+    // and the one a reader is hunting for.
+    hitl: node.id !== rootId && node.mode === 'hitl' && !isSettled(node.status),
   });
 
   const edges = buildEdges(drawn, start, drawnIds);
@@ -893,7 +934,13 @@ export function renderDiagram(nodes: DiagramNode[], options: RenderOptions = {})
 
   const main = [
     'flowchart TD',
-    ...drawn.map(entry => nodeLine(entry, offMap.get(entry.node.id) ?? [])),
+    ...drawn.map(entry =>
+      nodeLine(
+        entry,
+        offMap.get(entry.node.id) ?? [],
+        entry.node.id === rootId ? root.field : entry.node.status
+      )
+    ),
     ...edges.answers,
     ...edges.blocked,
     ...blockedLinkStyle(edges),
