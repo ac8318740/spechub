@@ -214,7 +214,7 @@ Three refusals protect a file neither command can handle.
 | `workflow.tdd.strict` | `true`, `false` | `true` | `false` runs the task-executor before the test-writer; all three phases still run, and the checker's gate changes with the key |
 | `workflow.tdd.orchestrator_strict` | `true`, `false` | `true` | `false` lets the coordinating session read and write code itself for small tasks, instead of handing every piece to a subagent |
 | `workflow.frontend_verification` | `true`, `false` | `false` | the frontend-verifier runs only when this is `true`, the file configures a `frontend` block, and the change touched frontend files |
-| `workflow.design_review` | `true`, `false` | `false` | a design review runs on a UI change only when this is `true`; it needs the impeccable plugin installed, which `spechub config check` reports on |
+| `workflow.design_review` | `true`, `false` | `false` | a design review runs on a UI change only when this is `true`; it needs the impeccable plugin installed and switched on, which `spechub config check` reports on |
 
 How a boolean reads:
 
@@ -234,7 +234,8 @@ How a boolean reads:
 - `workflow.design_review` reads as off unless the file states one of the three true spellings outright
     - `spechub design-gate` is the one command that answers whether the gate is on
         - On needs both halves: the key true, and the impeccable plugin installed
-        - It reads this file and the plugin registry, runs nothing, and never exits 2
+            - A plugin set `false` under `enabledPlugins` in `settings.json` counts as not installed
+        - It reads this file, the plugin registry, and `settings.json`, runs nothing, and never exits 2
         - An impeccable older than major 4, or one whose version it cannot read, warns on stderr and stays on
         - `--json` prints the same answer as `{"on": ..., "reasons": [...], "impeccable": ...}`
 

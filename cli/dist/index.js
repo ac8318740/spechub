@@ -17931,6 +17931,13 @@ function registryPlugins(root) {
   if (typeof plugins !== "object" || plugins === null) return {};
   return plugins;
 }
+function enabledPlugins(root) {
+  const parsed = readJson(join11(root, CLAUDE_SETTINGS_FILE));
+  if (typeof parsed !== "object" || parsed === null) return {};
+  const enabled = parsed.enabledPlugins;
+  if (typeof enabled !== "object" || enabled === null) return {};
+  return enabled;
+}
 function installPathOf(entries) {
   if (!Array.isArray(entries) || entries.length === 0) return null;
   const first2 = entries[0];
@@ -17944,8 +17951,10 @@ function manifestVersion(installPath) {
   return typeof version === "string" && version !== "" ? version : null;
 }
 function findInstalledPlugin(name) {
-  const plugins = registryPlugins(claudeConfigRoot());
-  for (const [key, entries] of Object.entries(plugins)) {
+  const root = claudeConfigRoot();
+  const enabled = enabledPlugins(root);
+  for (const [key, entries] of Object.entries(registryPlugins(root))) {
+    if (enabled[key] === false) continue;
     if (key.split("@")[0] !== name) continue;
     const installPath = installPathOf(entries);
     if (installPath === null) return { installPath: "", version: null };

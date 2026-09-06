@@ -843,6 +843,149 @@ describe('spechub design-gate', () => {
   });
 
   // -------------------------------------------------------------------
+  // A plugin the user switched off
+  //
+  // Claude Code keeps two records under its config root, and a plugin has to
+  // satisfy both to run:
+  //
+  //   plugins/installed_plugins.json - what is on disk
+  //   settings.json                  - which of it is switched on, as an
+  //      `enabledPlugins` object keyed the same `<plugin>@<marketplace>` way
+  //      the registry is
+  //
+  // A user who switched impeccable off has an install Claude Code will never
+  // load, so a gate that stayed on would send every design review to a plugin
+  // that cannot start. Off is off, and it is off for the same stated reason
+  // as a plugin that was never installed.
+  //
+  // On is the default, and the default is what every other arrangement means -
+  // a key set true, a key that is not there, an `enabledPlugins` that is not
+  // there, and a settings file that is missing or unreadable.
+  // -------------------------------------------------------------------
+  describe('impeccable is switched off in settings.json', () => {
+    /**
+     * The marketplace impeccable is installed from here, and the whole
+     * registry key that makes.
+     *
+     * Both are written out rather than one built from the other, because the
+     * key is what Claude Code writes into two separate files, and matching it
+     * across them is the whole behaviour under test.
+     */
+    const MARKETPLACE = 'pbakaus';
+    const PLUGIN_KEY = 'impeccable@pbakaus';
+
+    /** Write `body` verbatim as `<root>/settings.json`, creating `root` as needed. */
+    function writeSettings(root: string, body: string): void {
+      mkdirSync(root, { recursive: true });
+      writeFileSync(join(root, 'settings.json'), body);
+    }
+
+    /** A `settings.json` body whose `enabledPlugins` is exactly `enabled`. */
+    function enabledPluginsBody(enabled: Record<string, boolean>): string {
+      return JSON.stringify({ enabledPlugins: enabled }, null, 2) + '\n';
+    }
+
+    /**
+     * A HOME holding impeccable installed from `MARKETPLACE` at a new enough
+     * version, with `body` written verbatim as its `settings.json`.
+     *
+     * A null body writes no settings file at all, which is the state a machine
+     * that has never switched a plugin off is in.
+     */
+    function homeWithSettings(body: string | null): string {
+      const home = homeWithImpeccable({
+        registryVersion: NEW_ENOUGH,
+        marketplace: MARKETPLACE,
+      });
+      if (body !== null) writeSettings(join(home, '.claude'), body);
+      return home;
+    }
+
+    it('is off naming impeccable when settings.json sets its key false', () => {
+      // The project asks for the gate and the plugin is on disk, so the
+      // settings file is the only thing deciding this.
+      const result = runGate({
+        cwd: gatedProject(),
+        home: homeWithSettings(enabledPluginsBody({ [PLUGIN_KEY]: false })),
+      });
+
+      expect(lines(result.stdout)).toEqual([`off: ${REASON_NOT_INSTALLED}`]);
+      expect(result.status).toBe(1);
+    });
+
+    it('reports it in --json exactly as a plugin absent from the registry', () => {
+      // Two ways to end up with no usable plugin, one answer. A separate
+      // reason string or a non-null impeccable object here would make a
+      // caller handle switched-off as a third outcome.
+      const result = runGate({
+        cwd: gatedProject(),
+        home: homeWithSettings(enabledPluginsBody({ [PLUGIN_KEY]: false })),
+        json: true,
+      });
+
+      expect(parseGateJson(result.stdout)).toEqual({
+        on: false,
+        reasons: [REASON_NOT_INSTALLED],
+        impeccable: null,
+      });
+      expect(result.status).toBe(1);
+    });
+
+    it.each([
+      ['the key is set true', enabledPluginsBody({ [PLUGIN_KEY]: true })],
+      [
+        'enabledPlugins switches other plugins off only',
+        enabledPluginsBody({ 'document-skills@anthropic-agent-skills': false }),
+      ],
+      ['the false key names a different marketplace', enabledPluginsBody({ 'impeccable@other': false })],
+      ['settings.json states no enabledPlugins at all', '{}\n'],
+      ['settings.json will not parse', '{ "enabledPlugins": '],
+      ['there is no settings.json', null],
+    ] as [string, string | null][])('is on when %s', (_case, body) => {
+      // Switched on is the default, so anything short of a false key under
+      // this plugin's own key leaves the gate on.
+      const result = runGate({ cwd: gatedProject(), home: homeWithSettings(body) });
+
+      expect(lines(result.stdout)).toEqual(['on']);
+      expect(result.status).toBe(0);
+    });
+
+    describe('where the settings file is read from', () => {
+      it('reads settings.json from CLAUDE_CONFIG_DIR, so a false key there turns the gate off', () => {
+        // The registry and the settings file are two halves of one config
+        // root. Reading one from the variable and the other from HOME would
+        // answer from two machines' worth of state at once.
+        const configDir = mkdtempSync(join(tmpdir(), 'spechub-claude-config-'));
+        installImpeccable(configDir, { registryVersion: NEW_ENOUGH, marketplace: MARKETPLACE });
+        writeSettings(configDir, enabledPluginsBody({ [PLUGIN_KEY]: false }));
+
+        const result = runGate({
+          cwd: gatedProject(),
+          home: homeWithSettings(enabledPluginsBody({ [PLUGIN_KEY]: true })),
+          env: { CLAUDE_CONFIG_DIR: configDir },
+        });
+
+        expect(lines(result.stdout)).toEqual([`off: ${REASON_NOT_INSTALLED}`]);
+        expect(result.status).toBe(1);
+      });
+
+      it('ignores ~/.claude/settings.json when CLAUDE_CONFIG_DIR is set', () => {
+        const configDir = mkdtempSync(join(tmpdir(), 'spechub-claude-config-'));
+        installImpeccable(configDir, { registryVersion: NEW_ENOUGH, marketplace: MARKETPLACE });
+
+        const result = runGate({
+          cwd: gatedProject(),
+          home: homeWithSettings(enabledPluginsBody({ [PLUGIN_KEY]: false })),
+          env: { CLAUDE_CONFIG_DIR: configDir },
+        });
+
+        expect(lines(result.stdout)).toEqual(['on']);
+        expect(result.status).toBe(0);
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------
   // What the command never does
   //
   // The answer is two file reads. Everything below is a way it could stop

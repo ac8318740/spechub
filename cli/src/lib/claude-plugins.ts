@@ -1,15 +1,19 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { claudeConfigRoot } from './constants.js';
+import { claudeConfigRoot, CLAUDE_SETTINGS_FILE } from './constants.js';
 
 /**
- * What SpecHub can learn about another Claude Code plugin, by reading the two
- * files Claude Code writes when it installs one.
+ * What SpecHub can learn about another Claude Code plugin, by reading the
+ * files Claude Code writes when it installs one and when the user switches one
+ * off.
  *
  *   <config root>/plugins/installed_plugins.json  - the registry, saying which
  *      plugins are installed and where each one lives. Keys are
  *      `<plugin>@<marketplace>`, and the marketplace half is wherever the user
  *      installed from.
+ *   <config root>/settings.json                   - the user's settings, whose
+ *      optional `enabledPlugins` object says which of those installs are
+ *      switched on. Keys are the registry's, and `false` means switched off.
  *   <installPath>/.claude-plugin/plugin.json      - the installed plugin's own
  *      manifest, and the authoritative statement of its version.
  *
@@ -61,6 +65,20 @@ function registryPlugins(root: string): Record<string, unknown> {
   return plugins as Record<string, unknown>;
 }
 
+/**
+ * The `enabledPlugins` block of the settings file, or an empty one when
+ * nothing states it. Keys are the registry's, so a value is read by the whole
+ * `<plugin>@<marketplace>` key rather than by the plugin's name.
+ */
+function enabledPlugins(root: string): Record<string, unknown> {
+  const parsed = readJson(join(root, CLAUDE_SETTINGS_FILE));
+  if (typeof parsed !== 'object' || parsed === null) return {};
+
+  const enabled = (parsed as { enabledPlugins?: unknown }).enabledPlugins;
+  if (typeof enabled !== 'object' || enabled === null) return {};
+  return enabled as Record<string, unknown>;
+}
+
 /** Where the registry says `entries` is installed, or null when it says nowhere. */
 function installPathOf(entries: unknown): string | null {
   if (!Array.isArray(entries) || entries.length === 0) return null;
@@ -80,7 +98,8 @@ function manifestVersion(installPath: string): string | null {
 }
 
 /**
- * The plugin named `name`, or null when Claude Code has none installed.
+ * The plugin named `name`, or null when Claude Code has none installed and
+ * switched on.
  *
  * The registry key is `<plugin>@<marketplace>`, so only the half before the
  * `@` is matched: the same plugin arrives under a different marketplace name
@@ -88,9 +107,16 @@ function manifestVersion(installPath: string): string | null {
  * would find one of those ways and miss the rest.
  */
 export function findInstalledPlugin(name: string): InstalledPlugin | null {
-  const plugins = registryPlugins(claudeConfigRoot());
+  const root = claudeConfigRoot();
+  const enabled = enabledPlugins(root);
 
-  for (const [key, entries] of Object.entries(plugins)) {
+  for (const [key, entries] of Object.entries(registryPlugins(root))) {
+    // Switched off is not installed: Claude Code never loads a plugin whose
+    // key `enabledPlugins` sets to false. Only an explicit false counts, so
+    // every other state - true, no key, no settings file - leaves it on.
+    // Skipped before the name is matched, so a name installed twice resolves
+    // to whichever marketplace is still switched on.
+    if (enabled[key] === false) continue;
     if (key.split('@')[0] !== name) continue;
 
     const installPath = installPathOf(entries);

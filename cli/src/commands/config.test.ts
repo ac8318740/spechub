@@ -6409,6 +6409,154 @@ describe('spechub config check', () => {
       });
     });
 
+    // -------------------------------------------------------------------
+    // A plugin the user switched off
+    //
+    // Claude Code keeps two records under its config root, and a plugin has
+    // to satisfy both to run:
+    //
+    //   plugins/installed_plugins.json - what is on disk
+    //   settings.json                  - which of it is switched on, as an
+    //      `enabledPlugins` object keyed the same `<plugin>@<marketplace>`
+    //      way the registry is
+    //
+    // A user who switched impeccable off has an install Claude Code will
+    // never load, so a row calling it installed would report a plugin that
+    // cannot run. Off is off: no row, exactly as if it were never installed.
+    //
+    // On is the default, and the default is what every other arrangement
+    // means - a key set true, a key that is not there, an `enabledPlugins`
+    // that is not there, and a settings file that is missing or unreadable.
+    // -------------------------------------------------------------------
+    describe('a plugin switched off in settings.json (project rows)', () => {
+      /**
+       * The marketplace impeccable is installed from here, and the whole
+       * registry key that makes.
+       *
+       * Both are written out rather than one built from the other, because
+       * the key is what Claude Code writes into two separate files, and
+       * matching it across them is the whole behaviour under test.
+       */
+      const MARKETPLACE = 'pbakaus';
+      const PLUGIN_KEY = 'impeccable@pbakaus';
+
+      /** The version installed throughout this block, new enough to pass on its own. */
+      const INSTALLED_VERSION = '4.2.0';
+
+      /** Write `body` verbatim as `<root>/settings.json`, creating `root` as needed. */
+      function writeSettings(root: string, body: string): void {
+        mkdirSync(root, { recursive: true });
+        writeFileSync(join(root, 'settings.json'), body);
+      }
+
+      /** A `settings.json` body whose `enabledPlugins` is exactly `enabled`. */
+      function enabledPluginsBody(enabled: Record<string, boolean>): string {
+        return JSON.stringify({ enabledPlugins: enabled }, null, 2) + '\n';
+      }
+
+      /**
+       * A HOME holding impeccable installed from `MARKETPLACE`, with `body`
+       * written verbatim as its `settings.json`.
+       *
+       * A null body writes no settings file at all, which is the state a
+       * machine that has never switched a plugin off is in.
+       */
+      function homeWithSettings(body: string | null): string {
+        const home = homeWithImpeccable({
+          registryVersion: INSTALLED_VERSION,
+          marketplace: MARKETPLACE,
+        });
+        if (body !== null) writeSettings(join(home, '.claude'), body);
+        return home;
+      }
+
+      it('carries no impeccable row when settings.json sets its key false', () => {
+        const result = runCheck({
+          cwd: impeccableProject(),
+          home: homeWithSettings(enabledPluginsBody({ [PLUGIN_KEY]: false })),
+          json: true,
+        });
+
+        expect(rowOf(result)).toBeUndefined();
+      });
+
+      it('names impeccable nowhere in the human report either when its key is false', () => {
+        // Absent from `--json` and printed to a human anyway would be two
+        // reports rather than two renderings of one.
+        const result = runCheck({
+          cwd: impeccableProject(),
+          home: homeWithSettings(enabledPluginsBody({ [PLUGIN_KEY]: false })),
+          json: false,
+        });
+
+        expect(result.stdout).not.toMatch(/impeccable/i);
+      });
+
+      it.each([
+        ['the key is set true', enabledPluginsBody({ [PLUGIN_KEY]: true })],
+        [
+          'enabledPlugins switches other plugins off only',
+          enabledPluginsBody({ 'document-skills@anthropic-agent-skills': false }),
+        ],
+        ['the false key names a different marketplace', enabledPluginsBody({ 'impeccable@other': false })],
+        ['settings.json states no enabledPlugins at all', '{}\n'],
+        ['settings.json will not parse', '{ "enabledPlugins": '],
+        ['there is no settings.json', null],
+      ] as [string, string | null][])('keeps the row when %s', (_case, body) => {
+        // Switched on is the default, so anything short of a false key under
+        // this plugin's own key leaves the plugin running.
+        const result = runCheck({
+          cwd: impeccableProject(),
+          home: homeWithSettings(body),
+          json: true,
+        });
+
+        expect(rowOf(result)?.status).toBe('pass');
+        expect(messageOf(result)).toContain(INSTALLED_VERSION);
+      });
+
+      describe('where the settings file is read from', () => {
+        it('reads settings.json from CLAUDE_CONFIG_DIR, so a false key there carries the row away', () => {
+          // The registry and the settings file are two halves of one config
+          // root. Reading one from the variable and the other from HOME would
+          // answer from two machines' worth of state at once.
+          const configDir = mkdtempSync(join(tmpdir(), 'spechub-claude-config-'));
+          installImpeccable(configDir, {
+            registryVersion: INSTALLED_VERSION,
+            marketplace: MARKETPLACE,
+          });
+          writeSettings(configDir, enabledPluginsBody({ [PLUGIN_KEY]: false }));
+
+          const result = runCheck({
+            cwd: impeccableProject(),
+            home: homeWithSettings(enabledPluginsBody({ [PLUGIN_KEY]: true })),
+            json: true,
+            env: { CLAUDE_CONFIG_DIR: configDir },
+          });
+
+          expect(rowOf(result)).toBeUndefined();
+        });
+
+        it('ignores ~/.claude/settings.json when CLAUDE_CONFIG_DIR is set', () => {
+          const configDir = mkdtempSync(join(tmpdir(), 'spechub-claude-config-'));
+          installImpeccable(configDir, {
+            registryVersion: INSTALLED_VERSION,
+            marketplace: MARKETPLACE,
+          });
+
+          const result = runCheck({
+            cwd: impeccableProject(),
+            home: homeWithSettings(enabledPluginsBody({ [PLUGIN_KEY]: false })),
+            json: true,
+            env: { CLAUDE_CONFIG_DIR: configDir },
+          });
+
+          expect(rowOf(result)?.status).toBe('pass');
+          expect(messageOf(result)).toContain(INSTALLED_VERSION);
+        });
+      });
+    });
+
     it('prints the installed version in the human report too', () => {
       const result = runWith({ registryVersion: '4.2.0' }, false);
 
