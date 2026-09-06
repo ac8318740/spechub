@@ -13,3 +13,4 @@
 - [0013](0013-the-diagram-renderer-is-pure.md) – The diagram renderer takes nodes in and never calls gh
 - [0014](0014-reading-a-node-hides-its-generated-diagram.md) – Reading a node hides its generated diagram
 - [0015](0015-a-node-id-links-to-its-issue-through-an-anchor.md) – A node id links to its issue through an anchor
+- [0016](0016-call-impeccable-copy-only-its-questions.md) – Call impeccable's command line, and copy only its question sets
