@@ -6,6 +6,7 @@ import {
   ORCHESTRATOR_AXIS_KEYS,
   ORCHESTRATOR_PROBES,
   ORCHESTRATORS,
+  remoteCdpPort,
   requiredHostAxisKeys,
   type ProjectHostContext,
   type ProjectSettings,
@@ -48,9 +49,10 @@ interface HostAxisStatus {
 /**
  * Guess the value of each axis in `wanted` from the live machine.
  *
- * Only the axes the user has not declared are looked at, so a machine with no
- * frontend project never gets its CDP port knocked on for an answer nobody
- * would read.
+ * Only the axes the user has not declared are looked at, because a declared
+ * axis is the user's own answer and detection never overrides it. `show`
+ * lists all nine axes whatever the project under the cwd is, so detection
+ * answers for all nine too.
  */
 async function detectHostAxes(
   wanted: ReadonlySet<string>,
@@ -79,10 +81,9 @@ async function detectHostAxes(
     for (const key of chromiumKeys) detected.set(key, true);
   }
 
-  // Without a frontend there is no port the project would have us use, so
-  // there is nothing to detect rather than a default worth guessing at.
-  if (wanted.has(BROWSER_AXIS_KEYS.remote) && project.hasFrontend) {
-    if (await cdpPortAnswers(project.cdpPort)) detected.set(BROWSER_AXIS_KEYS.remote, true);
+  // The bridge's own port, not the project's: see `remoteCdpPort`.
+  if (wanted.has(BROWSER_AXIS_KEYS.remote)) {
+    if (await cdpPortAnswers(remoteCdpPort(project))) detected.set(BROWSER_AXIS_KEYS.remote, true);
   }
 
   return detected;

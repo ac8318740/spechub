@@ -11900,10 +11900,13 @@ function projectHostContext(projectYaml, hasProject = true) {
   const rawMode = record(browser)?.mode;
   const preferredMode = BROWSER_MODE_PRIORITY.find((mode) => mode === rawMode);
   const rawPort = record(browser)?.cdp_port;
-  const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : preferredMode === "remote" ? DEFAULT_REMOTE_CDP_PORT : DEFAULT_CDP_PORT;
+  const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535 ? rawPort : preferredMode === "remote" ? DEFAULT_REMOTE_CDP_PORT : DEFAULT_CDP_PORT;
   const rawFallback = record(browser)?.fallback;
   const fallback = typeof rawFallback === "string" ? rawFallback : void 0;
   return { hasProject, hasFrontend, preferredMode, cdpPort, fallback };
+}
+function remoteCdpPort(project) {
+  return project.preferredMode === "remote" ? project.cdpPort : DEFAULT_REMOTE_CDP_PORT;
 }
 function projectAllowsFallback(project) {
   return project.fallback !== FALLBACK_FORBIDDEN;
@@ -18094,23 +18097,24 @@ function cdpPortAnswers(port, host = "127.0.0.1") {
       resolve5(answered);
     };
     const req = request(
-      { host, port, path: "/json/version", method: "GET", timeout: PROBE_TIMEOUT_MS },
+      { host, port, path: "/json/version", method: "GET", timeout: CDP_TIMEOUT_MS },
       (res) => {
         res.resume();
         finish(true);
       }
     );
-    const deadline = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
+    const deadline = setTimeout(() => finish(false), CDP_TIMEOUT_MS);
     req.on("timeout", () => finish(false));
     req.on("error", () => finish(false));
     req.end();
   });
 }
-var PROBE_TIMEOUT_MS;
+var PROBE_TIMEOUT_MS, CDP_TIMEOUT_MS;
 var init_host_probe = __esm({
   "src/lib/host-probe.ts"() {
     "use strict";
-    PROBE_TIMEOUT_MS = 2e3;
+    PROBE_TIMEOUT_MS = 1e4;
+    CDP_TIMEOUT_MS = 2e3;
   }
 });
 
@@ -18189,10 +18193,11 @@ function checkOrchestrators(report, config) {
 }
 async function browserModeWorks(mode, project) {
   if (mode === "remote") {
-    const ok = await cdpPortAnswers(project.cdpPort);
+    const port = remoteCdpPort(project);
+    const ok = await cdpPortAnswers(port);
     return {
       ok,
-      detail: ok ? `CDP port ${project.cdpPort} answered` : `nothing answered on CDP port ${project.cdpPort}`
+      detail: ok ? `CDP port ${port} answered` : `nothing answered on CDP port ${port}`
     };
   }
   const binary = firstBinaryOnPath(CHROMIUM_BINARIES);
@@ -18541,8 +18546,8 @@ async function detectHostAxes(wanted, project) {
   if (chromiumKeys.length > 0 && firstBinaryOnPath(CHROMIUM_BINARIES)) {
     for (const key of chromiumKeys) detected.set(key, true);
   }
-  if (wanted.has(BROWSER_AXIS_KEYS.remote) && project.hasFrontend) {
-    if (await cdpPortAnswers(project.cdpPort)) detected.set(BROWSER_AXIS_KEYS.remote, true);
+  if (wanted.has(BROWSER_AXIS_KEYS.remote)) {
+    if (await cdpPortAnswers(remoteCdpPort(project))) detected.set(BROWSER_AXIS_KEYS.remote, true);
   }
   return detected;
 }

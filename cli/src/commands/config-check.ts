@@ -32,6 +32,7 @@ import {
   ORCHESTRATOR_AXIS_KEYS,
   ORCHESTRATOR_PROBES,
   ORCHESTRATORS,
+  remoteCdpPort,
   requiredHostAxisKeys,
   resolveBrowserMode,
   type BrowserMode,
@@ -266,12 +267,12 @@ async function browserModeWorks(
   project: ProjectHostContext
 ): Promise<{ ok: boolean; detail: string }> {
   if (mode === 'remote') {
-    const ok = await cdpPortAnswers(project.cdpPort);
+    // The bridge's own port, not the project's: see `remoteCdpPort`.
+    const port = remoteCdpPort(project);
+    const ok = await cdpPortAnswers(port);
     return {
       ok,
-      detail: ok
-        ? `CDP port ${project.cdpPort} answered`
-        : `nothing answered on CDP port ${project.cdpPort}`,
+      detail: ok ? `CDP port ${port} answered` : `nothing answered on CDP port ${port}`,
     };
   }
 
@@ -539,9 +540,11 @@ function checkFrontendFiles(
  * verifier that connects to nothing, so both numbers go in the message: which
  * file to change to which value is the whole of the fix.
  *
- * `expected` is the port the rest of the CLI resolves to, defaults included,
- * so a project stating no `cdp_port` is still held to the default its browser
- * mode implies rather than let off the check.
+ * `expected` is the port `agent-browser.json` and the frontend-verifier are
+ * held to, defaults included, so a project stating no `cdp_port` is still
+ * held to the default its browser mode implies rather than let off the check.
+ * It is not the port the `browser-mode:remote` probe uses, which is the
+ * bridge's own port - see `remoteCdpPort`.
  */
 function checkAgentBrowserJson(report: CheckReport, root: string, expected: number): void {
   const id = 'agent-browser-json';

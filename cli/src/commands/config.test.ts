@@ -208,8 +208,10 @@ function runCli(args: string[], opts: { cwd?: string; path?: string[]; env?: Nod
     env,
     cwd: opts.cwd,
     // Bounded so a probe that fails to time out on its own end can never hang
-    // the test run; well above anything a correct implementation should take.
-    timeout: 10_000,
+    // the test run. Must stay above PROBE_TIMEOUT_MS times the number of
+    // orchestrators, plus CDP_TIMEOUT_MS, because one `config check` run can
+    // wait out every one of those probes in turn.
+    timeout: 30_000,
   });
 }
 
