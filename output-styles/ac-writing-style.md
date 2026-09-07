@@ -162,15 +162,8 @@ keep-coding-instructions: true
     - Cut any bullet that narrates, softens or restates
     - Split "X and also Y" into two siblings, or nest one under the other
 - Use parallel grammar across siblings
-- Indent by the medium, because a terminal and GitHub render a nested bullet differently
-    - A chat reply indents the first level eight spaces, then four more per level below
-        - The eight-space first step separates a child from its parent at a glance
-    - A markdown file indents four per level throughout
-        - This file, a README, a PR body, an ADR, and every other durable artifact is a markdown file
-        - Never write eight-space nesting into a file
-    - GitHub reads an eight-space child as a continuation of the parent's paragraph
-        - It prints the child onto the end of the parent as run-on text with a literal dash
-    - A terminal keeps that leftover whitespace on screen, which is what makes the wide step readable
+- Indent every nested bullet four spaces per level, in a chat reply and in a file alike
+    - Claude Code and GitHub both read a wider indent as run-on text under the parent, not as a list
 - No bullet or table cell ends in a period, however long it runs
 - A question mark or an exclamation mark at the end of a bullet is fine
 - Headings in sentence case, no trailing period

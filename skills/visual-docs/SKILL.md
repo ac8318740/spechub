@@ -170,14 +170,7 @@ Pick a table over a bullet list wherever every item answers the same two or thre
 
 The output style `ac-writing-style` applies these same ten rules to a chat reply. This section is where the rules live, and that file is one reader of them.
 
-The indent is the one rule that differs by medium.
-
-- A terminal reply indents the first level eight spaces, then four more per level
-    - The wider first step separates a child from its parent at a glance
-- A markdown file cannot afford that step
-    - It indents four per level throughout
-    - GitHub reads an eight-space child as a continuation of the parent's paragraph
-        - It prints the child onto the end of the parent as run-on text with a literal dash
+Indent every nested bullet four spaces per level, in a terminal reply and in a file alike. Claude Code and GitHub both read a wider indent as run-on text under the parent, not as a list.
 
 ## 4. Diagrams
 
