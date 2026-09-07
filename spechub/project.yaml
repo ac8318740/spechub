@@ -10,6 +10,7 @@ workflow:
     strict: true
     orchestrator_strict: true
   frontend_verification: false
+  design_review: false
   handoff:
     agent: "claude"
     ack_turns: 5

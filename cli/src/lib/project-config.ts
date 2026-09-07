@@ -108,6 +108,15 @@ const COUNT: NumberSpec = { kind: 'number', integer: true, min: 0 };
 export const FRONTEND_VERIFICATION_KEY = 'workflow.frontend_verification';
 
 /**
+ * The key that says whether a design change goes through a design review
+ * before it lands.
+ *
+ * Named here for the same reason as the key above it: the schema, the default
+ * table and everything that reports the flag all have to spell it one way.
+ */
+export const DESIGN_REVIEW_KEY = 'workflow.design_review';
+
+/**
  * Every key `spechub/project.yaml` holds, in the order docs/config-reference.md
  * documents them. This table is the schema: a key absent from it is a key
  * `spechub config set` refuses, so adding a documented key here is the whole
@@ -125,6 +134,7 @@ export const PROJECT_KEYS: Readonly<Record<string, ProjectKeySpec>> = {
   'workflow.tdd.strict': { kind: 'boolean' },
   'workflow.tdd.orchestrator_strict': { kind: 'boolean' },
   [FRONTEND_VERIFICATION_KEY]: { kind: 'boolean' },
+  [DESIGN_REVIEW_KEY]: { kind: 'boolean' },
   'workflow.maps.tracker': { kind: 'enum', values: ['github', 'files'] },
   'workflow.maps.persist': { kind: 'boolean' },
   'workflow.handoff.agent': { kind: 'string' },
@@ -827,6 +837,7 @@ export const PROJECT_KEY_DEFAULTS: Readonly<Record<string, string>> = {
   'workflow.tdd.strict': 'true',
   'workflow.tdd.orchestrator_strict': 'true',
   [FRONTEND_VERIFICATION_KEY]: 'false',
+  [DESIGN_REVIEW_KEY]: 'false',
   'workflow.maps.persist': 'false',
   'workflow.handoff.agent': 'claude',
   'workflow.handoff.ack_turns': '5',

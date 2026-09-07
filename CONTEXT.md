@@ -16,6 +16,8 @@ The bridge lets an agent drive a real browser over the Chrome DevTools Protocol 
 
 **child session** – A subagent or a teammate, launched by another agent rather than by a person. It runs inside the **lead session**'s own process and shares that session's id, so no environment variable separates the two. A child reports its state to the lead, and never writes what the lead owns.
 
+**design gate** – The optional checks impeccable adds to spechub's pipeline when `workflow.design_review` is true. The detector runs inside task-checker, then an audit and a polish pass run before frontend-verifier.
+
 **dev setup** – The machine-level tools a SpecHub session runs inside. It names the orchestrator that hosts terminal panes and git worktrees. It also names the browser-verification modes that work on the machine, plus optional extras such as publishing the dev server to a private network.
 
 A host declares its dev setup, and a project does not.

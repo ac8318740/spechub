@@ -58,6 +58,22 @@ export const CLAUDE_SETTINGS_FILE = 'settings.json';
 export const CLAUDE_LOCAL_SETTINGS_FILE = 'settings.local.json';
 
 /**
+ * Claude Code's config root: the directory holding its plugins and its
+ * user-level settings.
+ *
+ * `CLAUDE_CONFIG_DIR` moves the whole root, so it replaces `~/.claude` rather
+ * than adding a second place to look. An empty value is not a value, so it
+ * leaves HOME deciding.
+ *
+ * A function rather than a constant, because `homedir()` has to be the HOME
+ * the process was actually given rather than the one this module loaded under.
+ */
+export function claudeConfigRoot(): string {
+  const stated = process.env.CLAUDE_CONFIG_DIR;
+  return stated ? stated : join(homedir(), CLAUDE_DIR);
+}
+
+/**
  * The output style this plugin ships, spelled the way Claude Code names it in
  * a settings file: the plugin's name, a colon, and the style's basename.
  * Written down once here so the check that reports which style is selected
