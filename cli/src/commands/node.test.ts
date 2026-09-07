@@ -1005,3 +1005,517 @@ describe('node diagram refusals', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// A. workflow.maps.tracker: github
+//
+// The map lives in GitHub issues, so spechub/maps/<name>/ is not there and
+// never will be. Every command that reads a map has to say so rather than
+// answer from an empty directory, because an empty answer reads as a finished
+// map and is the one wrong answer nobody checks.
+// ---------------------------------------------------------------------------
+
+/** Writes spechub/project.yaml with the tracker set, or with no tracker key. */
+function setTracker(value: 'github' | 'files' | null): void {
+  const path = join(root, 'spechub', 'project.yaml');
+  const body = value === null ? '# test project\n' : `workflow:\n  maps:\n    tracker: ${value}\n`;
+  writeFileSync(path, body);
+}
+
+/** Every command that reads a map, and whether its refusal owes a --stdin route. */
+const MAP_READING_COMMANDS: Array<{ name: string; args: string[]; routes: boolean }> = [
+  { name: 'node walk', args: ['node', 'walk', '--map', 'g'], routes: true },
+  { name: 'node frontier', args: ['node', 'frontier', '--map', 'g'], routes: true },
+  { name: 'node diagram', args: ['node', 'diagram', '--map', 'g'], routes: true },
+  { name: 'node list', args: ['node', 'list', '--map', 'g'], routes: false },
+  { name: 'node read', args: ['node', 'read', '001', '--map', 'g'], routes: false },
+  {
+    name: 'node update',
+    args: ['node', 'update', '001', '--map', 'g', '--status', 'claimed'],
+    routes: false,
+  },
+  {
+    name: 'node create',
+    args: [
+      'node',
+      'create',
+      '--map',
+      'g',
+      '--title',
+      't',
+      '--kind',
+      'work',
+      '--label',
+      'l',
+      '--body',
+      'b',
+    ],
+    routes: false,
+  },
+];
+
+const ROUTING_COMMANDS = MAP_READING_COMMANDS.filter(c => c.routes);
+
+describe('tracker: github refuses every --map command', () => {
+  beforeEach(() => {
+    setTracker('github');
+  });
+
+  // One test per command rather than one per assertion, because three of these
+  // commands already exit 1 on a map directory that is not there. Split apart,
+  // those three would pass on the old wording and pin nothing.
+  it.each(MAP_READING_COMMANDS)(
+    '$name refuses, naming the map, GitHub and the setting behind it',
+    ({ args }) => {
+      const result = runCli(args, { cwd: root });
+      expect(result.status).toBe(1);
+      // An empty array or "has no nodes" on stdout is the bug: a caller reading
+      // stdout takes it as a finished map.
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain("'g'");
+      expect(result.stderr).toMatch(/github/i);
+      // The reader has to be able to find the key and change it, and naming the
+      // path is what saves them going looking for it.
+      expect(result.stderr).toContain('workflow.maps.tracker');
+    }
+  );
+
+  it.each(ROUTING_COMMANDS)('$name routes the reader to the --stdin payload', ({ args }) => {
+    const result = runCli(args, { cwd: root });
+    expect(result.stderr).toContain('--stdin');
+    expect(result.stderr).toContain('gh issue list');
+  });
+
+  it.each(MAP_READING_COMMANDS)(
+    '$name refuses even when a stray map directory exists',
+    ({ args }) => {
+      // A leftover directory from before the map moved to GitHub is still not
+      // the map, so its presence changes nothing.
+      writeNodeFile(root, 'g', { id: '001', title: 'Stray', body: 'Stray body.' });
+      const result = runCli(args, { cwd: root });
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toMatch(/github/i);
+    }
+  );
+});
+
+describe('tracker: files leaves the files backend alone', () => {
+  it('walks a stored map', () => {
+    setTracker('files');
+    writeNodeFile(root, 'w', { id: '001', title: 'Root', body: 'Root body.' });
+    writeNodeFile(root, 'w', { id: '002', title: 'Child', body: 'Child body.', answers: '001' });
+    const result = runCli(['node', 'walk', '--map', 'w'], { cwd: root });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Root body.');
+    expect(result.stdout).toContain('Child');
+  });
+
+  it('reads the frontier of a stored map', () => {
+    setTracker('files');
+    writeNodeFile(root, 'm', { id: '001', title: 'The Root', body: 'Root body.' });
+    writeNodeFile(root, 'm', { id: '002', title: 'The Child', body: 'Child body.', answers: '001' });
+    const result = runCli(['node', 'frontier', '--map', 'm', '--json'], { cwd: root });
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout) as FrontierJson[];
+    expect(parsed.map(n => n.id)).toEqual(['002']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B. A map directory that is not there, on the files backend
+//
+// `node diagram --map nope` already names the map and the missing directory.
+// The other three answered as though the map were real and empty, which is the
+// same wrong answer the github tracker produced.
+// ---------------------------------------------------------------------------
+
+const FILES_BACKEND_TRACKERS: Array<{ name: string; tracker: 'files' | null }> = [
+  { name: 'tracker: files', tracker: 'files' },
+  { name: 'no tracker key', tracker: null },
+];
+
+const MISSING_MAP_COMMANDS: Array<{ name: string; args: string[] }> = [
+  { name: 'node walk', args: ['node', 'walk', '--map', 'nope'] },
+  { name: 'node frontier', args: ['node', 'frontier', '--map', 'nope'] },
+  { name: 'node list', args: ['node', 'list', '--map', 'nope'] },
+];
+
+describe('a map directory that does not exist', () => {
+  for (const { name: trackerName, tracker } of FILES_BACKEND_TRACKERS) {
+    describe(trackerName, () => {
+      beforeEach(() => {
+        setTracker(tracker);
+      });
+
+      it.each(MISSING_MAP_COMMANDS)('$name exits 1', ({ args }) => {
+        const result = runCli(args, { cwd: root });
+        expect(result.status).toBe(1);
+      });
+
+      it.each(MISSING_MAP_COMMANDS)('$name says the map does not exist', ({ args }) => {
+        const result = runCli(args, { cwd: root });
+        expect(result.stderr).toContain("Map 'nope' does not exist");
+      });
+
+      it.each(MISSING_MAP_COMMANDS)('$name names the missing directory', ({ args }) => {
+        const result = runCli(args, { cwd: root });
+        expect(result.stderr).toContain(join(root, 'spechub', 'maps', 'nope'));
+        expect(result.stderr).toContain('directory');
+      });
+
+      it.each(MISSING_MAP_COMMANDS)('$name writes nothing at all on stdout', ({ args }) => {
+        const result = runCli(args, { cwd: root });
+        expect(result.stdout).toBe('');
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// C. node walk --stdin and node frontier --stdin
+//
+// The same contract `node diagram --stdin` already keeps: one backend named,
+// never two, and the adapter's own message when the payload is bad.
+// ---------------------------------------------------------------------------
+
+/** One `gh issue list --json ...` entry, with the state and labels spelled out. */
+function trackedIssue(opts: {
+  number: number;
+  header: string;
+  labels: string[];
+  state?: string;
+  stateReason?: string;
+}): Record<string, unknown> {
+  const state = opts.state ?? 'OPEN';
+  return {
+    number: opts.number,
+    title: `Issue ${opts.number}`,
+    body: `${opts.header}\n\nBody of ${opts.number}.`,
+    state,
+    stateReason: opts.stateReason ?? (state === 'OPEN' ? '' : 'COMPLETED'),
+    labels: opts.labels.map(name => ({ name })),
+    url: `https://github.com/acme/repo/issues/${opts.number}`,
+  };
+}
+
+/**
+ * The graph every walk and frontier assertion below shares.
+ *
+ * 201 root, 202 resolved, 203 open and unblocked, 204 open and hitl, 205 open
+ * but blocked by 203. The frontier is 203 and 204; nothing else qualifies.
+ */
+function graphIssuesJson(): string {
+  return JSON.stringify([
+    trackedIssue({
+      number: 201,
+      header: 'map: demo · root: this · label: The Root',
+      labels: ['map:demo', 'kind:destination', 'root-node'],
+    }),
+    trackedIssue({
+      number: 202,
+      header: 'map: demo · root: #201 · answers: #201 · label: Done Work',
+      labels: ['map:demo', 'kind:work', 'afk'],
+      state: 'CLOSED',
+      stateReason: 'COMPLETED',
+    }),
+    trackedIssue({
+      number: 203,
+      header: 'map: demo · root: #201 · answers: #201 · label: Afk Work',
+      labels: ['map:demo', 'kind:work', 'afk'],
+    }),
+    trackedIssue({
+      number: 204,
+      header: 'map: demo · root: #201 · answers: #201 · label: Hitl Decision',
+      labels: ['map:demo', 'kind:decision'],
+    }),
+    trackedIssue({
+      number: 205,
+      header: 'map: demo · root: #201 · answers: #201 · blocked-by: #203 · label: Blocked One',
+      labels: ['map:demo', 'kind:work', 'afk'],
+    }),
+  ]);
+}
+
+/** Pipes `payload` into the CLI, the way the diagram --stdin tests do. */
+function pipePayload(payload: string, args: string[], file = 'payload.json') {
+  const path = join(root, file);
+  writeFileSync(path, payload);
+  return runPiped(`cat ${JSON.stringify(path)}`, args, { cwd: root });
+}
+
+/** The shape `--stdin` prints for one node on walk and frontier. */
+interface StdinNodeJson {
+  id: string;
+  title: string;
+  status: string;
+  mode: string;
+  kind: string;
+  label: string;
+  depth: number;
+  body?: string;
+}
+
+/** The node whose id carries `number`. */
+function byNumber(nodes: StdinNodeJson[], number: number): StdinNodeJson {
+  const found = nodes.find(n => n.id.includes(String(number)));
+  expect(found, `no node carrying ${number}`).toBeDefined();
+  return found!;
+}
+
+const STDIN_COMMANDS: Array<{ name: string; command: string }> = [
+  { name: 'node walk', command: 'walk' },
+  { name: 'node frontier', command: 'frontier' },
+];
+
+describe('--stdin backend refusals on walk and frontier', () => {
+  it.each(STDIN_COMMANDS)('$name says to use one backend, not both', ({ command }) => {
+    const result = runCli(['node', command, '--map', 'm', '--stdin'], { cwd: root });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'Use --map <name> for the files backend or --stdin for the github one, not both.'
+    );
+  });
+
+  it.each(STDIN_COMMANDS)('$name names both backends when neither is given', ({ command }) => {
+    const result = runCli(['node', command], { cwd: root });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'Name a backend: --map <name> for the files backend, or --stdin for the github one.'
+    );
+  });
+});
+
+describe('node frontier --stdin', () => {
+  it('prints the open unblocked nodes and nothing else', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'frontier', '--stdin']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Afk Work');
+    expect(result.stdout).toContain('Hitl Decision');
+    // The root carries no status anyone works, 202 is resolved, and 205 waits
+    // on 203.
+    expect(result.stdout).not.toContain('The Root');
+    expect(result.stdout).not.toContain('Done Work');
+    expect(result.stdout).not.toContain('Blocked One');
+  });
+
+  it('--json returns exactly the two open unblocked nodes', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'frontier', '--stdin', '--json']);
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout) as StdinNodeJson[];
+    expect(parsed).toHaveLength(2);
+    expect(parsed.map(n => n.id).join(' ')).toContain('203');
+    expect(parsed.map(n => n.id).join(' ')).toContain('204');
+  });
+
+  it('--json orders the frontier shallowest first', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'frontier', '--stdin', '--json']);
+    const parsed = JSON.parse(result.stdout) as StdinNodeJson[];
+    const depths = parsed.map(n => n.depth);
+    expect(depths).toEqual([...depths].sort((a, b) => a - b));
+  });
+
+  it('--mode afk keeps only the afk node', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'frontier', '--stdin', '--mode', 'afk']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Afk Work');
+    expect(result.stdout).not.toContain('Hitl Decision');
+  });
+
+  it('--json reads the kind, mode and status the labels and state carry', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'frontier', '--stdin', '--json']);
+    const parsed = JSON.parse(result.stdout) as StdinNodeJson[];
+    const afk = byNumber(parsed, 203);
+    expect(afk.status).toBe('open');
+    expect(afk.mode).toBe('afk');
+    expect(afk.kind).toBe('work');
+    expect(afk.label).toBe('Afk Work');
+    const decision = byNumber(parsed, 204);
+    expect(decision.mode).toBe('hitl');
+    expect(decision.kind).toBe('decision');
+  });
+
+  it('--json carries every field the files backend frontier carries, bar the file', () => {
+    // One reader consumes both backends, so a field on one and not the other is
+    // a field that reader cannot rely on. `file` is the exception: a GitHub map
+    // has no file to name.
+    writeNodeFile(root, 'm', { id: '001', title: 'The Root', body: 'Root body.' });
+    writeNodeFile(root, 'm', { id: '002', title: 'The Child', body: 'Child body.', answers: '001' });
+    const files = runCli(['node', 'frontier', '--map', 'm', '--json'], { cwd: root });
+    expect(files.status).toBe(0);
+    const expected = Object.keys((JSON.parse(files.stdout) as object[])[0]).filter(
+      k => k !== 'file'
+    );
+    expect(expected).toContain('depth');
+
+    const piped = pipePayload(graphIssuesJson(), ['node', 'frontier', '--stdin', '--json']);
+    expect(piped.status).toBe(0);
+    const entry = (JSON.parse(piped.stdout) as object[])[0];
+    expect(Object.keys(entry)).toEqual(expect.arrayContaining(expected));
+  });
+
+  it('works with tracker: github in project.yaml, which is the whole point', () => {
+    setTracker('github');
+    const result = pipePayload(graphIssuesJson(), ['node', 'frontier', '--stdin']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Afk Work');
+  });
+
+  it('works with no tracker key at all', () => {
+    setTracker(null);
+    const result = pipePayload(graphIssuesJson(), ['node', 'frontier', '--stdin']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Afk Work');
+  });
+});
+
+describe('node walk --stdin', () => {
+  it('prints every node in the payload', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin']);
+    expect(result.status).toBe(0);
+    for (const label of ['The Root', 'Done Work', 'Afk Work', 'Hitl Decision', 'Blocked One']) {
+      expect(result.stdout).toContain(label);
+    }
+  });
+
+  it('puts the root before every node that answers it', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin']);
+    const rootAt = result.stdout.indexOf('The Root');
+    expect(rootAt).toBeGreaterThanOrEqual(0);
+    for (const label of ['Done Work', 'Afk Work', 'Hitl Decision', 'Blocked One']) {
+      expect(result.stdout.indexOf(label)).toBeGreaterThan(rootAt);
+    }
+  });
+
+  it('prints the root in full and the rest as one-line summaries', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin']);
+    expect(result.stdout).toContain('Body of 201.');
+    expect(result.stdout).not.toContain('Body of 203.');
+    expect(result.stdout).not.toContain('Body of 205.');
+  });
+
+  it('--full prints every body', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin', '--full']);
+    expect(result.status).toBe(0);
+    for (const number of [201, 202, 203, 204, 205]) {
+      expect(result.stdout).toContain(`Body of ${number}.`);
+    }
+  });
+
+  it('--json gives every node a depth, with the root at zero', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin', '--json']);
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout) as StdinNodeJson[];
+    expect(parsed).toHaveLength(5);
+    expect(byNumber(parsed, 201).depth).toBe(0);
+    expect(byNumber(parsed, 203).depth).toBe(1);
+  });
+
+  it('drops the header line from the root body', () => {
+    // The header is the github backend's frontmatter, and the files backend
+    // never prints frontmatter in a body.
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Body of 201.');
+    expect(result.stdout).not.toContain('map: ');
+  });
+
+  it('--full drops the header line from every body', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin', '--full']);
+    expect(result.status).toBe(0);
+    for (const number of [201, 202, 203, 204, 205]) {
+      expect(result.stdout).toContain(`Body of ${number}.`);
+    }
+    expect(result.stdout).not.toContain('map: ');
+  });
+
+  it('--json carries the prose alone in body', () => {
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin', '--json', '--full']);
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout) as StdinNodeJson[];
+    expect(byNumber(parsed, 201).body).toBe('Body of 201.');
+    expect(byNumber(parsed, 205).body).toBe('Body of 205.');
+  });
+
+  it('--json gives a header-only issue an empty body', () => {
+    const header = 'map: demo · root: this · label: The Root';
+    const headerOnly = JSON.stringify([
+      {
+        number: 201,
+        title: 'Issue 201',
+        body: header,
+        state: 'OPEN',
+        stateReason: '',
+        labels: [{ name: 'map:demo' }, { name: 'kind:destination' }, { name: 'root-node' }],
+        url: 'https://github.com/acme/repo/issues/201',
+      },
+    ]);
+    const result = pipePayload(headerOnly, ['node', 'walk', '--stdin', '--json']);
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout) as StdinNodeJson[];
+    expect(byNumber(parsed, 201).body).toBe('');
+  });
+
+  it('works with tracker: github in project.yaml, which is the whole point', () => {
+    setTracker('github');
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('The Root');
+  });
+
+  it('works with no tracker key at all', () => {
+    setTracker(null);
+    const result = pipePayload(graphIssuesJson(), ['node', 'walk', '--stdin']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('The Root');
+  });
+});
+
+describe('a payload the adapter refuses, on walk and frontier', () => {
+  /** Two issues sharing a number - the adapter names the duplicate and stops. */
+  function duplicateNumbers(): string {
+    return JSON.stringify([
+      trackedIssue({
+        number: 301,
+        header: 'map: demo · root: this · label: The Root',
+        labels: ['map:demo', 'kind:destination', 'root-node'],
+      }),
+      trackedIssue({
+        number: 301,
+        header: 'map: demo · root: #301 · answers: #301 · label: The Twin',
+        labels: ['map:demo', 'kind:work'],
+      }),
+    ]);
+  }
+
+  /** A blocked-by naming an issue nobody sent. */
+  function unknownBlocker(): string {
+    return JSON.stringify([
+      trackedIssue({
+        number: 401,
+        header: 'map: demo · root: this · label: The Root',
+        labels: ['map:demo', 'kind:destination', 'root-node'],
+      }),
+      trackedIssue({
+        number: 402,
+        header: 'map: demo · root: #401 · answers: #401 · blocked-by: #999 · label: Waiting',
+        labels: ['map:demo', 'kind:work'],
+      }),
+    ]);
+  }
+
+  it.each(STDIN_COMMANDS)('$name reports the duplicate number the adapter found', ({ command }) => {
+    const result = pipePayload(duplicateNumbers(), ['node', command, '--stdin']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/duplicate/i);
+    expect(result.stderr).toContain('301');
+    expect(result.stdout).toBe('');
+  });
+
+  it.each(STDIN_COMMANDS)('$name reports the unknown blocker the adapter found', ({ command }) => {
+    const result = pipePayload(unknownBlocker(), ['node', command, '--stdin']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('999');
+    expect(result.stdout).toBe('');
+  });
+});

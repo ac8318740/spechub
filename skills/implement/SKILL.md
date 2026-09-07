@@ -31,6 +31,9 @@ operations – files backend shown below).
 ~/.claude/spechub/bin/spechub node frontier --map <name> --mode afk --json
 ```
 
+On the github backend `--map` refuses – pipe `gh issue list` into `node
+frontier --stdin` instead (see the map skill's `trackers/github.md`).
+
 These are the workable nodes: open, unblocked, and containing no decision.
 Pull them regardless of depth – work can hang anywhere, including straight
 off the root.
@@ -60,6 +63,9 @@ With a map, orient once per session before claiming:
 ```bash
 ~/.claude/spechub/bin/spechub node walk --map <name>
 ```
+
+On the github backend, pipe `gh issue list` into `node walk --stdin` instead
+(see the map skill's `trackers/github.md`).
 
 The walk prints the map in one pass: the root and pinned nodes in full,
 everything else as a one-line gist.

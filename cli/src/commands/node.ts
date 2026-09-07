@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import chalk from 'chalk';
 import { fail, inProject, readStdin } from '../lib/utils.js';
 import { invalidEnumValue } from '../lib/global-config.js';
+import { projectFile } from '../lib/constants.js';
+import { getProjectKey } from '../lib/project-config.js';
 import { renderDiagram, stripDiagrams } from '../lib/diagram.js';
 import { nodesFromIssues } from '../lib/github-issues.js';
 import {
@@ -15,6 +17,7 @@ import {
   ALLOWED_KINDS_SENTENCE,
   LABEL_CAP_SENTENCE,
   oneOf,
+  type GraphNode,
   type MapNode,
   type NodeStatus,
   type NodeMode,
@@ -87,7 +90,93 @@ function readBody(body?: string, bodyFile?: string): string | undefined {
   return readFileSync(bodyFile, 'utf-8');
 }
 
-function toJson(node: MapNode): Record<string, unknown> {
+// Where the tracker is named, and the command whose output every --stdin route
+// reads. Both are written once: the refusal that names the key has to name the
+// key `spechub config set` takes, and every route has to ask gh for the same
+// fields the adapter reads.
+const TRACKER_KEY = 'workflow.maps.tracker';
+const GH_ISSUE_LIST = 'gh issue list --json number,title,body,state,stateReason,labels,url';
+
+/**
+ * Refuses a `--map` read when the project keeps its maps in GitHub issues.
+ *
+ * `spechub/maps/<name>/` is not there on that tracker and never will be, so an
+ * unguarded read answers out of an empty directory - and an empty map reads as
+ * a finished one, which is the one wrong answer nobody goes and checks. A
+ * stray directory left over from before the move is still not the map, so this
+ * refuses whether or not one is there.
+ *
+ * `stdinRoute` names the subcommand for the three that can read the map from a
+ * pipe. The other four have nowhere to send the reader, so they say nothing
+ * about a flag those readers cannot use.
+ */
+function refuseGithubMap(root: string, map: string, stdinRoute?: string): void {
+  const tracked = getProjectKey(projectFile(root), TRACKER_KEY);
+  if (tracked.status !== 'set' || tracked.value !== 'github') return;
+  const route = stdinRoute
+    ? `Pipe the map in instead: ${GH_ISSUE_LIST} | spechub node ${stdinRoute} --stdin.`
+    : 'Work the issue through gh, not this command.';
+  fail(`Map '${map}' lives in GitHub issues - ${TRACKER_KEY} is github. ${route}`);
+}
+
+/**
+ * The stored map's nodes, refusing a map directory that is not there.
+ *
+ * A missing directory loads as an empty map, and an empty one is what "the map
+ * has no nodes" reports - so a typo in the name came back as a claim about the
+ * map the reader meant.
+ */
+function storedNodes(root: string, map: string): MapNode[] {
+  const dir = mapDir(root, map);
+  if (!existsSync(dir)) {
+    fail(`Map '${map}' does not exist - there is no ${dir} directory.`);
+  }
+  return loadNodes(root, map);
+}
+
+/** The two flags naming a backend, on the three commands that read either. */
+interface BackendOptions {
+  map?: string;
+  stdin?: boolean;
+}
+
+/**
+ * The nodes of whichever backend the flags name, for `walk`, `frontier` and
+ * `diagram`. One home for the rules, so the three cannot drift apart on which
+ * backend a pair of flags means or on how they refuse a map they cannot read.
+ */
+function backendNodes(root: string, command: string, opts: BackendOptions): GraphNode[] {
+  // The two backends are exclusive, and passing neither is a different mistake
+  // from passing both. One message for each, so neither reader is told about a
+  // flag they did not use.
+  if (opts.map && opts.stdin) {
+    fail('Use --map <name> for the files backend or --stdin for the github one, not both.');
+  }
+  if (!opts.map && !opts.stdin) {
+    fail('Name a backend: --map <name> for the files backend, or --stdin for the github one.');
+  }
+  if (opts.stdin) return nodesFromIssues(readStdin());
+  const map = opts.map as string;
+  refuseGithubMap(root, map, command);
+  return storedNodes(root, map);
+}
+
+/**
+ * How an empty answer names the map it is about.
+ *
+ * `--map` names it and a `--stdin` pipe cannot, since the payload arrives with
+ * no map name on it. Both readers still get a sentence about the map they
+ * asked for.
+ */
+function aboutMap(opts: BackendOptions): string {
+  return opts.map ? `map '${opts.map}'` : 'the map';
+}
+
+/** The help both backend flags carry, on all three commands that take them. */
+const MAP_HELP = 'map name (files backend)';
+const STDIN_HELP = 'read the github issue list as JSON from stdin';
+
+function toJson(node: GraphNode): Record<string, unknown> {
   return {
     id: node.id,
     title: node.title,
@@ -109,11 +198,11 @@ const VISUALS_HELP = 'keep the generated diagram blocks this command otherwise s
 
 // Both the one-line print and the walk summary name a label the same way. The
 // quoting is what keeps a label holding a comma readable inside a list.
-function labelFragment(node: MapNode): string {
+function labelFragment(node: GraphNode): string {
   return `label ${JSON.stringify(node.label)}`;
 }
 
-function printNode(node: MapNode): void {
+function printNode(node: GraphNode): void {
   const flags = [node.kind, labelFragment(node), node.pinned ? 'pinned' : undefined]
     .filter(Boolean)
     .join(', ');
@@ -162,6 +251,13 @@ interface UpdateOptions {
   json?: boolean;
 }
 
+/** The flags `node walk` takes, as commander hands them to the action. */
+interface WalkOptions extends BackendOptions {
+  full?: boolean;
+  json?: boolean;
+  visuals?: boolean;
+}
+
 function registerCreate(nodeCmd: Command): void {
   nodeCmd
     .command('create')
@@ -180,6 +276,7 @@ function registerCreate(nodeCmd: Command): void {
     .option('--json', 'output as JSON')
     .action(
       inProject((root, opts: CreateOptions) => {
+        refuseGithubMap(root, opts.map);
         const node = createNode(root, opts.map, {
           title: opts.title,
           status: opts.status,
@@ -210,6 +307,7 @@ function registerRead(nodeCmd: Command): void {
     .option('--visuals', VISUALS_HELP)
     .action(
       inProject((root, id: string, opts: { map: string; json?: boolean; visuals?: boolean }) => {
+        refuseGithubMap(root, opts.map);
         const node = getNode(root, opts.map, id);
         if (opts.json) {
           console.log(JSON.stringify({ ...toJson(node), body: node.body }, null, 2));
@@ -241,6 +339,7 @@ function registerUpdate(nodeCmd: Command): void {
     .option('--json', 'output as JSON')
     .action(
       inProject((root, id: string, opts: UpdateOptions) => {
+        refuseGithubMap(root, opts.map);
         // `fail` exits the process, so this rejection never reaches the
         // wrapper's catch. It reads as its own refusal either way.
         if (opts.pinned !== undefined && opts.pinned !== 'true' && opts.pinned !== 'false') {
@@ -272,14 +371,16 @@ function registerFrontier(nodeCmd: Command): void {
   nodeCmd
     .command('frontier')
     .description(
-      'Open nodes with no unresolved blockers, shallowest first (fewest answers links from the root)'
+      'Open nodes with no unresolved blockers, shallowest first (fewest answers links from the root).\n' +
+        `Reads the files backend with --map, or a \`${GH_ISSUE_LIST}\` pipe with --stdin.`
     )
-    .requiredOption('--map <name>', 'map name')
+    .option('--map <name>', MAP_HELP)
+    .option('--stdin', STDIN_HELP)
     .option('--mode <mode>', `filter by mode: ${NODE_MODES.join(', ')}`, parseMode)
     .option('--json', 'output as JSON')
     .action(
-      inProject((root, opts: { map: string; mode?: NodeMode; json?: boolean }) => {
-        const nodes = loadNodes(root, opts.map);
+      inProject((root, opts: BackendOptions & { mode?: NodeMode; json?: boolean }) => {
+        const nodes = backendNodes(root, 'frontier', opts);
         const depths = deriveDepths(nodes);
         let ready = frontier(nodes);
         if (opts.mode) ready = ready.filter(n => n.mode === opts.mode);
@@ -294,7 +395,7 @@ function registerFrontier(nodeCmd: Command): void {
           return;
         }
         if (ready.length === 0) {
-          console.log(chalk.dim(`Frontier of map '${opts.map}' is empty.`));
+          console.log(chalk.dim(`The frontier of ${aboutMap(opts)} is empty.`));
           return;
         }
         for (const node of ready) printNode(node);
@@ -307,16 +408,18 @@ function registerWalk(nodeCmd: Command): void {
     .command('walk')
     .description(
       'Reading-order dump of the whole map for handoff – parents before children, ' +
-        'pinned nodes and the root in full, the rest as one-line summaries'
+        'pinned nodes and the root in full, the rest as one-line summaries.\n' +
+        `Reads the files backend with --map, or a \`${GH_ISSUE_LIST}\` pipe with --stdin.`
     )
-    .requiredOption('--map <name>', 'map name')
+    .option('--map <name>', MAP_HELP)
+    .option('--stdin', STDIN_HELP)
     .option('--full', 'emit every body, not only pinned nodes and the root')
     .option('--json', 'output as JSON')
     .option('--visuals', VISUALS_HELP)
     .action(
-      inProject((root, opts: { map: string; full?: boolean; json?: boolean; visuals?: boolean }) => {
-        const entries = walkTree(loadNodes(root, opts.map));
-        const inFull = (node: MapNode, depth: number): boolean =>
+      inProject((root, opts: WalkOptions) => {
+        const entries = walkTree(backendNodes(root, 'walk', opts));
+        const inFull = (node: GraphNode, depth: number): boolean =>
           Boolean(opts.full) || node.pinned || depth === 0;
         if (opts.json) {
           console.log(
@@ -333,7 +436,7 @@ function registerWalk(nodeCmd: Command): void {
           return;
         }
         if (entries.length === 0) {
-          console.log(chalk.dim(`Map '${opts.map}' has no nodes.`));
+          console.log(chalk.dim(`There are no nodes in ${aboutMap(opts)}.`));
           return;
         }
         const sections: string[] = [];
@@ -349,9 +452,12 @@ function registerWalk(nodeCmd: Command): void {
           ]
             .filter(Boolean)
             .join(', ');
-          const full = opts.visuals ? node.body : stripDiagrams(node.body);
-          const body = inFull(node, depth) ? full.trim() : '';
-          sections.push(`${heading} ${node.id} – ${node.title}\n(${meta})${body ? `\n\n${body}` : ''}`);
+          const body = node.body ?? '';
+          const full = opts.visuals ? body : stripDiagrams(body);
+          const shown = inFull(node, depth) ? full.trim() : '';
+          sections.push(
+            `${heading} ${node.id} – ${node.title}\n(${meta})${shown ? `\n\n${shown}` : ''}`
+          );
         }
         console.log(sections.join('\n\n'));
       })
@@ -363,37 +469,14 @@ function registerDiagram(nodeCmd: Command): void {
     .command('diagram')
     .description(
       'Render the map as mermaid, wrapped in the replaceable diagram markers.\n' +
-        'Reads the files backend with --map, or a `gh issue list --json ' +
-        'number,title,body,state,stateReason,labels,url` pipe with --stdin.'
+        `Reads the files backend with --map, or a \`${GH_ISSUE_LIST}\` pipe with --stdin.`
     )
-    .option('--map <name>', 'map name (files backend)')
-    .option('--stdin', 'read the github issue list as JSON from stdin')
+    .option('--map <name>', MAP_HELP)
+    .option('--stdin', STDIN_HELP)
     .option('--from <id>', 'draw this node and its descendants only, rather than the whole map')
     .action(
-      inProject((root, opts: { map?: string; stdin?: boolean; from?: string }) => {
-        // The two backends are exclusive, and passing neither is a different
-        // mistake from passing both. One message for each, so neither reader is
-        // told about a flag they did not use.
-        if (opts.map && opts.stdin) {
-          fail('Use --map <name> for the files backend or --stdin for the github one, not both.');
-        }
-        if (!opts.map && !opts.stdin) {
-          fail('Name a backend: --map <name> for the files backend, or --stdin for the github one.');
-        }
-        let nodes;
-        if (opts.stdin) {
-          nodes = nodesFromIssues(readStdin());
-        } else {
-          const map = opts.map as string;
-          // A map that does not exist reads as an empty one, and an empty one
-          // is what "the map has no nodes" reports - so a typo in the name came
-          // back as a claim about the map the reader meant.
-          if (!existsSync(mapDir(root, map))) {
-            fail(`Map '${map}' does not exist - there is no ${mapDir(root, map)} directory.`);
-          }
-          nodes = loadNodes(root, map);
-        }
-        console.log(renderDiagram(nodes, { from: opts.from }));
+      inProject((root, opts: BackendOptions & { from?: string }) => {
+        console.log(renderDiagram(backendNodes(root, 'diagram', opts), { from: opts.from }));
       })
     );
 }
@@ -407,7 +490,8 @@ function registerList(nodeCmd: Command): void {
     .option('--json', 'output as JSON')
     .action(
       inProject((root, opts: { map: string; status?: NodeStatus; json?: boolean }) => {
-        let nodes = loadNodes(root, opts.map);
+        refuseGithubMap(root, opts.map);
+        let nodes: MapNode[] = storedNodes(root, opts.map);
         if (opts.status) nodes = nodes.filter(n => n.status === opts.status);
         if (opts.json) {
           console.log(JSON.stringify(nodes.map(toJson), null, 2));

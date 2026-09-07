@@ -97,6 +97,9 @@ something by running a command, it should run the command.
 | Test baseline, last result  | `.test-baseline`, then run the suite                                              |
 | What the code does          | the living specs in `spechub/specs/`                                              |
 
+On GitHub, `--map` refuses – pipe `gh issue list` into `--stdin` per the
+map skill's `trackers/github.md`.
+
 The same applies to specs, architecture decision records, issues and commits.
 Reference them by path or URL.
 

@@ -168,8 +168,38 @@ function issueLabel(named: string, header: Map<string, string>): string {
   return trimmed;
 }
 
+/**
+ * The issue body with its header line gone, and the blank line under it.
+ *
+ * The header is this backend's frontmatter. The files backend keeps
+ * frontmatter out of `body`, so a reader printing one node's body gets the
+ * prose alone on either backend. An issue holding a header and nothing else
+ * has no prose, and its body is empty.
+ *
+ * `parseHeader` has already read that line by the time this runs, so the first
+ * non-blank line is always the header.
+ */
+function proseBody(body: string): string {
+  const lines = body.replace(/\r\n/g, '\n').split('\n');
+  const header = lines.findIndex(line => line.trim());
+  return lines
+    .slice(header + 1)
+    .join('\n')
+    .replace(/^\n+/, '')
+    .replace(/\n+$/, '');
+}
+
+/**
+ * One issue as a node: every field the renderer draws, plus the issue body the
+ * walk prints. GitHub keeps no copy of the body anywhere else, so the node
+ * carries it rather than the reader going back for it.
+ */
+export interface IssueNode extends DiagramNode {
+  body: string;
+}
+
 /** One issue as a node, or the reason it is not one. */
-function nodeFromIssue(entry: unknown, at: number): DiagramNode {
+function nodeFromIssue(entry: unknown, at: number): IssueNode {
   // An entry with no number has nothing to name it by, so it is named by where
   // it sits in the list gh emitted, counting from one.
   const where = `the issue at position ${at + 1}`;
@@ -185,7 +215,8 @@ function nodeFromIssue(entry: unknown, at: number): DiagramNode {
   }
   const named = `issue ${issue.number}`;
   const labels = labelsOf(named, issue.labels);
-  const header = parseHeader(firstNonBlankLine(bodyOf(named, issue.body)));
+  const body = bodyOf(named, issue.body);
+  const header = parseHeader(firstNonBlankLine(body));
   if (!header) {
     throw new Error(
       `${named}: the body does not open with the "map: ..." header line, ` +
@@ -203,6 +234,7 @@ function nodeFromIssue(entry: unknown, at: number): DiagramNode {
     answers: answers ? bareId(answers) : undefined,
     blockedBy: (header.get('blocked-by') ?? '').split(',').map(bareId).filter(Boolean),
     pinned: labels.has('pinned'),
+    body: proseBody(body),
     url: typeof issue.url === 'string' ? issue.url : undefined,
   };
 }
@@ -261,7 +293,7 @@ function refuseBlockedByCycles(nodes: DiagramNode[]): void {
 }
 
 /** Turns `gh issue list --json ...` output into the nodes the renderer draws. */
-export function nodesFromIssues(json: string): DiagramNode[] {
+export function nodesFromIssues(json: string): IssueNode[] {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
