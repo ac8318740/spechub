@@ -3,6 +3,8 @@ import {
   requiredHostAxisKeys,
   fallbackBrowserMode,
   projectHostContext,
+  remoteCdpPort,
+  DEFAULT_REMOTE_CDP_PORT,
   ORCHESTRATOR_PROBES,
   ORCHESTRATORS,
 } from './host-status.js';
@@ -135,6 +137,21 @@ describe('projectHostContext fallback', () => {
 });
 
 /**
+ * `projectHostContext` fills in a default for any `cdp_port` no socket could
+ * ever be opened on. A number above 65535 is not a port, and passing one
+ * through would reach `cdpPortAnswers` and throw where a failed check was the
+ * only sensible answer.
+ */
+describe('projectHostContext cdp_port bounds', () => {
+  it('falls back to the default when the stated cdp_port is above 65535', () => {
+    const ctx = projectHostContext({
+      frontend: { browser: { mode: 'remote', cdp_port: 99999 } },
+    });
+    expect(ctx.cdpPort).toBe(DEFAULT_REMOTE_CDP_PORT);
+  });
+});
+
+/**
  * An orchestrator probe answers one question: is this orchestrator actually
  * running on this machine? Its exit status is the whole answer, so a probe
  * that cannot exit 0 on a healthy host fails every host it is pointed at.
@@ -157,5 +174,41 @@ describe('ORCHESTRATOR_PROBES', () => {
 
   it('probes orca with the status subcommand', () => {
     expect(ORCHESTRATOR_PROBES.orca.args).toEqual(['status', '--json']);
+  });
+});
+
+/**
+ * `remoteCdpPort(project)` is the port `browser-mode:remote` probes in
+ * `spechub config check` - see its doc comment in host-status.ts for the
+ * rule. These cases pin the five inputs that rule branches on.
+ */
+describe('remoteCdpPort', () => {
+  it('returns the bridge port when there is no SpecHub project at all', () => {
+    const project = projectHostContext(undefined, false);
+    expect(remoteCdpPort(project)).toBe(DEFAULT_REMOTE_CDP_PORT);
+  });
+
+  it('returns the bridge port when the project states no frontend block', () => {
+    const project = projectHostContext({ profile: 'node-typescript' });
+    expect(remoteCdpPort(project)).toBe(DEFAULT_REMOTE_CDP_PORT);
+  });
+
+  it('returns the bridge port when the project prefers headless, ignoring its cdp_port', () => {
+    const project = projectHostContext({
+      frontend: { browser: { mode: 'headless', cdp_port: 4444 } },
+    });
+    expect(remoteCdpPort(project)).toBe(DEFAULT_REMOTE_CDP_PORT);
+  });
+
+  it('returns the bridge port when the project prefers remote and states no cdp_port', () => {
+    const project = projectHostContext({ frontend: { browser: { mode: 'remote' } } });
+    expect(remoteCdpPort(project)).toBe(DEFAULT_REMOTE_CDP_PORT);
+  });
+
+  it('returns the project-stated port when a project preferring remote moves the bridge port', () => {
+    const project = projectHostContext({
+      frontend: { browser: { mode: 'remote', cdp_port: 20000 } },
+    });
+    expect(remoteCdpPort(project)).toBe(20000);
   });
 });

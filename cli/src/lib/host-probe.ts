@@ -10,8 +10,26 @@ import { delimiter, join } from 'node:path';
  * port or a wedged binary must come back as a failed check, never as a hang.
  */
 
-/** How long any single probe may take before it counts as "did not answer". */
-const PROBE_TIMEOUT_MS = 2000;
+/**
+ * How long a probe command may run before it counts as "did not answer".
+ *
+ * `orca-ide status --json` can take two to three seconds on a healthy
+ * machine, because Orca is an Electron app. `herdr api snapshot` answers in
+ * milliseconds instead, because it reads a local socket. The ceiling sits
+ * above the slower of the two, so it only costs time when a tool has
+ * actually wedged.
+ */
+export const PROBE_TIMEOUT_MS = 10000;
+
+/**
+ * How long the CDP port probe may take before it counts as "did not answer".
+ *
+ * Lower than the command ceiling, because a working probe is fast: the port
+ * is on this machine, so a browser or relay that is home answers within
+ * milliseconds. A longer wait only delays the two failures - a dead port
+ * refuses the connection at once, and a wedged tunnel never answers at all.
+ */
+export const CDP_TIMEOUT_MS = 2000;
 
 /**
  * Whether `binary` is an executable on PATH.
@@ -96,14 +114,14 @@ export function cdpPortAnswers(port: number, host = '127.0.0.1'): Promise<boolea
     };
 
     const req = request(
-      { host, port, path: '/json/version', method: 'GET', timeout: PROBE_TIMEOUT_MS },
+      { host, port, path: '/json/version', method: 'GET', timeout: CDP_TIMEOUT_MS },
       res => {
         res.resume(); // Drain, so the socket can close rather than linger.
         finish(true);
       }
     );
 
-    const deadline = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
+    const deadline = setTimeout(() => finish(false), CDP_TIMEOUT_MS);
     req.on('timeout', () => finish(false));
     req.on('error', () => finish(false));
     req.end();

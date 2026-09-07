@@ -116,9 +116,9 @@ Neither tool sees the other's sessions.
 *The three modes are not alternatives. A machine can offer any combination. Each one needs something different.*
 
 - **remote** drives a real browser on the developer's own machine, over the Playwriter bridge
-    - Something must answer HTTP on the CDP port the project resolves to
-    - That is the stated `frontend.browser.cdp_port`, else `19988` when the project's mode is `remote`, else `9555`
-    - Check 3 knocks on it
+    - Something must answer HTTP on the bridge's port, `19988`
+    - The bridge listens there whatever the project says, so check 3 knocks on `19988` even for a project with no frontend
+    - Only a project that sets `frontend.browser.mode: remote` moves that port, with `frontend.browser.cdp_port`
 - **headless** launches headless Chromium here and needs no display
     - It needs `chromium`, `chromium-browser`, `google-chrome`, or `google-chrome-stable` on `PATH`
 - **local** launches a visible browser here

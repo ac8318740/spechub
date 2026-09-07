@@ -227,7 +227,7 @@ export function projectHostContext(projectYaml: unknown, hasProject = true): Pro
 
   const rawPort = record(browser)?.cdp_port;
   const cdpPort =
-    typeof rawPort === 'number' && Number.isInteger(rawPort) && rawPort > 0
+    typeof rawPort === 'number' && Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535
       ? rawPort
       : preferredMode === 'remote'
         ? DEFAULT_REMOTE_CDP_PORT
@@ -237,6 +237,20 @@ export function projectHostContext(projectYaml: unknown, hasProject = true): Pro
   const fallback = typeof rawFallback === 'string' ? rawFallback : undefined;
 
   return { hasProject, hasFrontend, preferredMode, cdpPort, fallback };
+}
+
+/**
+ * The port to knock on when asking whether this machine's remote browser mode
+ * works.
+ *
+ * The Playwriter bridge is remote mode, and it always listens on
+ * `DEFAULT_REMOTE_CDP_PORT`. Only a project that itself prefers remote mode
+ * can move that: for that project alone, `frontend.browser.cdp_port` names
+ * the bridge's port rather than some other browser's, so `project.cdpPort` is
+ * the right answer there and wrong everywhere else.
+ */
+export function remoteCdpPort(project: ProjectHostContext): number {
+  return project.preferredMode === 'remote' ? project.cdpPort : DEFAULT_REMOTE_CDP_PORT;
 }
 
 /**
@@ -368,10 +382,15 @@ export interface ProjectBrowserSettings {
   /** `frontend.browser.mode`, or null when unstated. */
   mode: string | null;
   /**
-   * `frontend.browser.cdp_port`, or null when unstated. Deliberately not the
-   * port a probe would end up using: `ProjectHostContext.cdpPort` answers
-   * "which port do we knock on", and this answers "what did the project say",
-   * which are different questions with different right answers.
+   * `frontend.browser.cdp_port` as written, or null when unstated.
+   *
+   * Three places answer a question about this port, and each answer is
+   * different. This field says what the project stated, null included.
+   * `ProjectHostContext.cdpPort` says what port the project dials, with
+   * defaults filled in - that is the port `checkAgentBrowserJson` checks
+   * `agent-browser.json` against. `remoteCdpPort` says what port the remote
+   * probe knocks on, which is the bridge's own port unless this project
+   * prefers remote mode.
    */
   cdpPort: number | null;
   /** `frontend.browser.fallback`, or null when unstated. */
