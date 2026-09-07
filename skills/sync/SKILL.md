@@ -26,7 +26,64 @@ that keeps specs current even when a workflow skips full spec planning.
 
 Extract from the diff: files added/modified/deleted, functions/classes changed.
 
-## Step 2: map changes to domains
+## Step 2: refresh DESIGN.md
+
+`DESIGN.md` at the repo root records the project's design tokens. The
+`impeccable document` command writes that file from the code. A **token
+source** is a file that defines those tokens, meaning CSS custom properties or
+a Tailwind theme.
+
+This step runs before Step 3. Step 3 exits early when the diff touches no
+domain, and a token source such as `app/globals.css` usually sits outside every
+domain.
+
+1. Run `~/.claude/spechub/bin/spechub design-gate`
+    - It prints `on` and exits 0 when the design gate is on
+    - It prints `off: <reason>` and exits 1 when the gate is off
+    - Skip the whole step on a non-zero exit
+2. Check for `DESIGN.md` at the repo root
+    - Skip the whole step when the file is missing
+    - Sync never creates `DESIGN.md` – the open-designer plugin writes it
+3. Look for a token source in the diff Step 1 chose
+
+    A token source is exactly one of these four, matching what `impeccable
+    document` scans:
+
+    - a CSS file whose diff adds or changes a line holding `--color-`,
+      `--font-`, `--spacing-`, `--radius-`, `--shadow-`, `--ease-` or
+      `--duration-`
+    - a Tailwind config: `tailwind.config.js`, `tailwind.config.ts` or
+      `tailwind.config.mjs`
+    - a CSS-in-JS theme file: `theme.ts`, `theme.js`, `tokens.ts` or `tokens.js`
+    - a token file: `tokens.json` or `design-tokens.json`
+
+    Grep the diff for the CSS-property case:
+
+    ```bash
+    git diff --cached -U0 -- '*.css' | grep -E '^[+-].*--(color|font|spacing|radius|shadow|ease|duration)-'
+    ```
+
+    Match the diff command to what Step 1 chose. Use `git diff HEAD -U0`
+    instead when Step 1 picked `git diff HEAD`.
+
+    Skip the whole step when the diff holds no token source.
+
+4. Run the `/impeccable document` slash command
+
+    `document` is a slash-command playbook, not a command-line verb.
+
+    The playbook finds `DESIGN.md` and stops. It asks whether to refresh,
+    overwrite, or merge. Answer refresh every time.
+
+    Do not call AskUserQuestion. Do not ask the user. The code is the only
+    source of truth for design tokens.
+
+5. Stage what `document` wrote
+
+    `document` writes `DESIGN.md` and `.impeccable/design.json`. Stage both
+    with the commit, the same way this skill stages an updated spec file.
+
+## Step 3: map changes to domains
 
 1. Read `spechub/domain-map.yaml`
 2. Match changed files against domain path patterns
@@ -35,7 +92,7 @@ Extract from the diff: files added/modified/deleted, functions/classes changed.
 
 If the diff affects no domains, report "No spec-relevant changes". Then exit.
 
-## Step 3: generate lightweight deltas
+## Step 4: generate lightweight deltas
 
 For each affected domain:
 
@@ -60,7 +117,7 @@ Write each functional requirement (FR) entry per the `writing` skill.
 - **Source**: `hooks/session-start-handoff.sh`
 ```
 
-## Step 4: apply deltas
+## Step 5: apply deltas
 
 For each affected domain:
 
@@ -70,7 +127,7 @@ For each affected domain:
 
 Write each merged FR per the `writing` skill.
 
-## Step 5: glossary check
+## Step 6: glossary check
 
 Glossaries live in `CONTEXT.md` at the repo root (cross-domain terms) and
 `spechub/specs/[domain]/CONTEXT.md` (domain terms). If neither exists, skip.
@@ -91,7 +148,7 @@ it.
 
 This check only surfaces the drift.
 
-## Step 6: report
+## Step 7: report
 
 ```
 Spec sync: [N] domains updated
@@ -106,7 +163,8 @@ When `/commit` calls this skill:
 1. Receives the staged diff as context
 2. Runs silently (no user prompts)
 3. Returns a list of modified spec files for staging
-4. Outputs minimal detail so it does not interrupt the commit flow
+4. Adds `DESIGN.md` and `.impeccable/design.json` when Step 2 refreshed them
+5. Outputs minimal detail so it does not interrupt the commit flow
 
 ## Spec correction (fix it when you see it)
 

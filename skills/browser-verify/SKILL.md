@@ -223,7 +223,7 @@ The snapshot gives you accessible names and roles automatically. Use these to fi
 ## Integration points
 
 - **frontend-verifier agent** uses agent-browser for Phase 4 verification – this skill is its reference
-- **task-checker agent** delegates to frontend-verifier when frontend files changed
+- **task-checker agent** runs the static frontend checks – the `implement` skill runs frontend-verifier as its own step after the checker passes
 - **/spechub:setup** runs the setup interviews (install, config, knowledge base scaffolding) and offers a fix for each row the health check fails
 - **`spechub config check`** audits the browser infrastructure and changes nothing
 - **/spechub:quick-fix** uses agent-browser for visual verification of bug fixes

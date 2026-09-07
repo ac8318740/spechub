@@ -37,6 +37,8 @@ import {
   type BrowserMode,
   type ProjectHostContext,
 } from '../lib/host-status.js';
+import { findInstalledPlugin } from '../lib/claude-plugins.js';
+import { IMPECCABLE_PLUGIN, impeccableVersionNote } from '../lib/impeccable.js';
 import { cdpPortAnswers, firstBinaryOnPath, runCommand } from '../lib/host-probe.js';
 import { FRONTEND_VERIFICATION_KEY } from '../lib/project-config.js';
 import { readYaml } from '../lib/utils.js';
@@ -644,7 +646,7 @@ function reportFrontendVerificationFlag(report: CheckReport, enabled: boolean): 
  * two types in one file is a name that has to be read twice everywhere.
  */
 export function checkProjectFiles(report: CheckReport, loaded: LoadedProject): void {
-  report.heading("This project's files");
+  report.heading("This project's files and design tools");
 
   if (!loaded.root) {
     // Nothing here is this directory's business: without spechub/ there is no
@@ -664,6 +666,46 @@ export function checkProjectFiles(report: CheckReport, loaded: LoadedProject): v
       loaded.workflow.frontendVerification
     );
   }
+}
+
+/**
+ * Whether impeccable is installed, and whether it is new enough.
+ *
+ * impeccable is a separate Claude Code plugin, so this row reports on the
+ * machine rather than on a file the project owns. It is optional, which
+ * decides the three outcomes: installed and new enough passes, installed and
+ * older or unreadable is a note, and not installed prints no row at all. It
+ * never fails, so a project that has never heard of impeccable is never told
+ * it has a problem, and a script running `check` in continuous integration
+ * never starts failing the day someone uninstalls a plugin.
+ *
+ * No heading of its own. The report's section numbers are load-bearing - the
+ * checks above address each other by number - and a section that appeared
+ * only when a plugin happened to be installed would move the writing style
+ * from section 7 to section 8 on some machines and not others. So the row
+ * joins the section the caller opened last, and that section is headed "and
+ * design tools" for this row rather than for the project files around it.
+ */
+export function checkImpeccable(report: CheckReport): void {
+  const id = 'impeccable';
+  const found = findInstalledPlugin(IMPECCABLE_PLUGIN);
+  if (!found) return;
+
+  // The registry states a version too, and it goes unread on purpose: it
+  // records what was installed, so printing it here would name a version the
+  // user may no longer have. `impeccableVersionNote` is the same sentence
+  // `spechub design-gate` warns with, so the two surfaces cannot drift.
+  const note = impeccableVersionNote(found.version);
+  if (note !== null) {
+    report.line('info', id, note);
+    return;
+  }
+
+  report.line(
+    'pass',
+    id,
+    `${IMPECCABLE_PLUGIN} ${found.version} is installed, so a design review has a designer to call`
+  );
 }
 
 /** One Claude Code settings file, named the way the user would refer to it. */

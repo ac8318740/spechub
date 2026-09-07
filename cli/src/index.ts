@@ -14,6 +14,7 @@ const commands = await Promise.all([
   import('./commands/archive.js'),
   import('./commands/node.js'),
   import('./commands/config.js'),
+  import('./commands/design-gate.js'),
   import('./commands/feedback.js'),
   import('./commands/handoff.js'),
   import('./commands/lint-prose.js'),
