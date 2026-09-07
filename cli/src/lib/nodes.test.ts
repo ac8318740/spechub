@@ -641,4 +641,38 @@ describe('frontier', () => {
     const ready = frontier(loadNodes(root, 'demo'));
     expect(ready.map(n => n.id)).toEqual(['004', '005', '003']);
   });
+
+  // The root carries no status of its own – its state is derived from its
+  // subtree – so nobody works it and it never sits on the frontier, whatever
+  // the file happens to store.
+  it.each(['open', 'fog', 'claimed', 'resolved'] as const)(
+    'never returns the root, whatever status it stores: %s',
+    status => {
+      createNode(root, 'demo', {
+        title: 'Root',
+        kind: 'destination',
+        label: 'Root',
+        status,
+      });
+      createNode(root, 'demo', { title: 'A', kind: 'work', label: 'A', answers: '001' });
+      const ready = frontier(loadNodes(root, 'demo'));
+      expect(ready.map(n => n.id)).toEqual(['002']);
+    }
+  );
+
+  it('leaves every other node in place when the root is open rather than resolved', () => {
+    const specs = (rootStatus: 'open' | 'resolved'): CreateNodeInput[] => [
+      { title: 'Root', kind: 'destination', label: 'Root', status: rootStatus },
+      { title: 'Deep parent', kind: 'notes', label: 'Deep parent', answers: '001', status: 'resolved' },
+      { title: 'Deep open', kind: 'work', label: 'Deep open', answers: '002' },
+      { title: 'Late shallow', kind: 'work', label: 'Late shallow', answers: '001' },
+      { title: 'Blocked', kind: 'work', label: 'Blocked', answers: '001', blockedBy: ['003'] },
+    ];
+    for (const spec of specs('resolved')) createNode(root, 'settled', spec);
+    for (const spec of specs('open')) createNode(root, 'unsettled', spec);
+    const settled = frontier(loadNodes(root, 'settled')).map(n => n.id);
+    const unsettled = frontier(loadNodes(root, 'unsettled')).map(n => n.id);
+    expect(settled).toEqual(['004', '003']);
+    expect(unsettled).toEqual(settled);
+  });
 });

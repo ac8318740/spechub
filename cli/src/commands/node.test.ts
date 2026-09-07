@@ -626,6 +626,50 @@ describe('node walk', () => {
 });
 
 // ---------------------------------------------------------------------------
+// node frontier
+//
+// The root carries no status of its own, so nobody works it. It never reaches
+// the frontier, on either output, whatever its file stores.
+// ---------------------------------------------------------------------------
+
+/** The shape `--json` prints for one frontier node. */
+interface FrontierJson {
+  id: string;
+  title: string;
+}
+
+describe('node frontier', () => {
+  /** A root and one child, both stored open, which is what writeNodeFile writes. */
+  function writeOpenPair(): void {
+    writeNodeFile(root, 'm', { id: '001', title: 'The Root', body: 'Root body.' });
+    writeNodeFile(root, 'm', { id: '002', title: 'The Child', body: 'Child body.', answers: '001' });
+  }
+
+  it('never prints the root, even when the root is stored open', () => {
+    writeOpenPair();
+    const result = runCli(['node', 'frontier', '--map', 'm'], { cwd: root });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('The Child');
+    expect(result.stdout).not.toContain('The Root');
+  });
+
+  it('--json never includes the root, even when the root is stored open', () => {
+    writeOpenPair();
+    const result = runCli(['node', 'frontier', '--map', 'm', '--json'], { cwd: root });
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout) as FrontierJson[];
+    expect(parsed.map(n => n.id)).toEqual(['002']);
+  });
+
+  it('reports an empty frontier on a map holding the root alone', () => {
+    writeNodeFile(root, 'm', { id: '001', title: 'The Root', body: 'Root body.' });
+    const result = runCli(['node', 'frontier', '--map', 'm', '--json'], { cwd: root });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // node kinds
 //
 // The five kinds are a closed set a shell loop has to iterate - the github
@@ -877,6 +921,21 @@ describe('stdin window', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('n101');
     expect(result.stdout).toContain('n102');
+  });
+
+  it('draws the root issue with a subtree count and no frontier outline', () => {
+    // The root issue is open and hitl on the github backend too, and the rule
+    // is the backend's input, not the files one's.
+    const path = join(root, 'root-issues.json');
+    writeFileSync(path, issuesJson());
+    const result = runPiped(`cat ${JSON.stringify(path)}`, ['node', 'diagram', '--stdin'], {
+      cwd: root,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('&num;101</a> destination - 1 of 1 open');
+    // The class name is the cue: the root takes the plain fill of its derived
+    // status, never the frontier outline and never the hitl dash.
+    expect(result.stdout).toMatch(/^\s*class\s+n101\s+open\s*$/m);
   });
 
   it('refuses a silent pipe on node diagram --stdin too', () => {

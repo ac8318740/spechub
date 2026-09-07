@@ -33,11 +33,13 @@ flowchart TD
         SRV["Terminals that survive disconnect<br/>(herdr server and its panes)"]
         RD["Reading code and markdown<br/>(yazi, spechub-md)"]
         PR["Diffs and pull requests<br/>(gh-dash, diffnav)"]
+        DB["A SQL editor on one key<br/>(harlequin, spechub-db)"]
     end
     EM -->|"keys you press"| CL
     CL -->|"SSH"| SRV
     SRV --> RD
     SRV --> PR
+    SRV --> DB
     RD -->|"clickable links and copied text<br/>(OSC 8, OSC 52)"| OUT
     PR -->|"clickable links and copied text<br/>(OSC 8, OSC 52)"| OUT
     OUT -->|"no browser or clipboard reachable"| FB["A link on screen for you to click<br/>(spechub-open link route)"]
@@ -49,18 +51,19 @@ flowchart TD
 | herdr server and its panes | 5. The herdr server |
 | Terminal emulator | 6. Freeing your emulator's keys |
 | Reading code and markdown | 7. Reading code, markdown, and diagrams |
-| Diffs and pull requests | 8. Diffs and pull requests |
-| Clipboard and browser | 9. What crosses back to your machine |
-| A link on screen for you to click | 9.2. spechub-open: the browser |
+| A SQL editor on one key | 8. Harlequin: a SQL editor on one key |
+| Diffs and pull requests | 9. Diffs and pull requests |
+| Clipboard and browser | 10. What crosses back to your machine |
+| A link on screen for you to click | 10.2. spechub-open: the browser |
 
 - Sections 1 and 2 cover what you get and the loop you run daily
 - Section 3 installs it
-- Section 10 explains why the parts work the way they do
-- Section 11 lists the things that cost real time to find
+- Section 11 explains why the parts work the way they do
+- Section 12 lists the things that cost real time to find
 
 ## 1. What you get, and its parts
 
-*Four tools you drive day to day. herdr owns the terminals, gh-dash triages pull requests, diffnav reads diffs, lazygit commits them. Five more tools and SpecHub's own helpers sit behind them. Use this when your code lives on a dev machine, you drive more than one agent at a time, and you want a keyboard-only workflow.*
+*Five tools you drive day to day. herdr owns the terminals, gh-dash triages pull requests, diffnav reads diffs, lazygit commits them, harlequin queries the database. Five more tools and SpecHub's own helpers sit behind them. Use this when your code lives on a dev machine, you drive more than one agent at a time, and you want a keyboard-only workflow.*
 
 - Skip it if you work locally in a graphical editor
     - A desktop tool serves you better
@@ -69,7 +72,7 @@ flowchart TD
     - You stop hunting for the stuck one
 - **Review without a browser.** Pull request triage, diffs with a file tree, and comments, all from the terminal
 
-The four you drive day to day:
+The five you drive day to day:
 
 | Tool | Role | Why this one |
 |---|---|---|
@@ -77,8 +80,9 @@ The four you drive day to day:
 | [gh-dash](https://github.com/dlvhdr/gh-dash) | Pull request dashboard | Saved searches per section, custom actions, `gh` underneath |
 | [diffnav](https://github.com/dlvhdr/diffnav) | Diff reader | File tree beside the diff, the blast-radius view a plain pager lacks |
 | [lazygit](https://github.com/jesseduffield/lazygit) | Git TUI | Stage, commit, amend and push without leaving the keyboard, and LazyVim already binds it |
+| [harlequin](https://github.com/tconbeer/harlequin) | SQL editor | Query, results and schema tree in one window, with adapters for postgres and Snowflake |
 
-Five more tools do the work those four ask for.
+Five more tools do the work those five ask for.
 
 - You drive one of them yourself, tuicr, from the moment a review starts on gh-dash's `D` key
 
@@ -94,7 +98,7 @@ SpecHub adds two helpers of its own beside those tools.
 
 - `spechub-md` reads markdown and draws its mermaid diagrams
 - `spechub-clip` and `spechub-open` carry your clipboard and your browser back across the link
-    - Section 9 covers that pair
+    - Section 10 covers that pair
 
 ## 2. The daily loop
 
@@ -104,7 +108,7 @@ Three terms, then the loop.
 
 - **A workspace** is one herdr container of tabs and panes, usually one per repository or worktree
 - **A worktree** is a second checkout of the same repository on its own branch
-- **Every key below** is one this setup binds (see sections 3 to 9)
+- **Every key below** is one this setup binds (see sections 3 to 10)
 
 1. **Dispatch.** Press `alt+r` to create a worktree workspace. Or ask an agent, and the `new-worktree` skill registers one with herdr for you
 2. **Monitor.** Press `alt+s` for the sidebar, the strip listing every workspace and every agent.
@@ -120,14 +124,24 @@ Three terms, then the loop.
 
 *One command installs every tool and writes every config. The rest of this section is the same work done by hand.*
 
-The `/spechub:terminal-workspace` skill runs `assets/terminal-workspace/setup.sh` for you, and that script takes four commands.
+The `/spechub:terminal-workspace` skill runs `assets/terminal-workspace/setup.sh` for you, and that script takes six commands.
 
 | Command | What it does |
 | --- | --- |
 | `setup.sh apply` | installs every enabled tool and writes its config |
 | `setup.sh status` | reports what this machine ended up with |
+| `setup.sh outdated` | reports which tools are behind and which components are new, and changes nothing |
+| `setup.sh upgrade [tool...]` | reinstalls what `outdated` reported, and adds any new component's config block to your file |
 | `setup.sh disable <component>` | removes one component's keys and config |
 | `setup.sh uninstall` | removes everything `apply` wrote, in every config it touched |
+
+What `outdated` answers in its exit code:
+
+- Exit 0 means nothing to do, and 1 means a missing, new, or stale finding
+- Exit 2 means it cannot read the config or the shipped example
+- It reads herdr's stable release manifest, so a machine on the preview channel sees herdr reported stale
+- Name a tool on `upgrade` to skip the version comparison, which is the only way to refresh `mermaid-ascii`
+    - `mermaid-ascii` has no version flag, so nothing can read the installed version
 
 What `uninstall` removes:
 
@@ -137,13 +151,14 @@ What `uninstall` removes:
 - It removes the keybindings it wrote into gh-dash
 - It deletes `~/.config/nvim/lua/plugins/spechub.lua`, a file it wrote whole
 - Your own settings in those files survive, and so does every tool binary
+    - harlequin is the exception, because uv owns its whole environment rather than one file in `~/.local/bin`
 
 What the config holds:
 
 - The script reads `~/.config/spechub/terminal-workspace.yaml`, which the skill copies from `assets/terminal-workspace/config.example.yaml`
-- The config holds ten components, each with its own `enabled` key
+- The config holds eleven components, each with its own `enabled` key
     - You turn a part off there and run `apply` again
-- Seven components name a tool this setup installs: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, `lazygit`, and `yazi`
+- Eight components name a tool this setup installs: `herdr`, `gh_dash`, `diffnav`, `delta`, `tuicr`, `lazygit`, `yazi`, and `harlequin`
 - `neovim` names an editor you installed yourself, and writes one file into its config
     - It is the only component that starts off, and section 3.5 says why
 - The other two name a feature
@@ -171,7 +186,7 @@ Every setting has a default, so `apply` works with no config file and says so wh
 
 ### 3.1. What `apply` installs, and how to do it by hand
 
-*`apply` installs diffnav and the five supporting tools into `~/.local/bin`, herdr through its own installer, and gh-dash as a `gh` extension. None of it needs root.*
+*`apply` installs eight tools into `~/.local/bin`, herdr through its own installer, gh-dash as a `gh` extension, and harlequin through uv. None of it needs root.*
 
 Two things to do first:
 
@@ -193,7 +208,7 @@ curl -fsSL https://herdr.dev/install.sh | sh
 gh extension install dlvhdr/gh-dash
 ```
 
-The other seven are single static binaries.
+Eight more are single static binaries.
 
 - Download each project's Linux x86_64 release
 - Put the binary in `~/.local/bin`, then `chmod +x` it
@@ -203,10 +218,16 @@ The other seven are single static binaries.
 | delta | `dandavison/delta` | `x86_64-unknown-linux-gnu` |
 | diffnav | `dlvhdr/diffnav` | `Linux_x86_64` |
 | fzf | `junegunn/fzf` | `linux_amd64` |
+| lazygit | `jesseduffield/lazygit` | `linux_x86_64` |
 | tuicr | `agavra/tuicr` | `x86_64-unknown-linux-gnu` |
 | yazi | `sxyazi/yazi` | `x86_64-unknown-linux-gnu`, which also carries `ya` |
 | mermaid-ascii | `AlexanderGrooff/mermaid-ascii` | `Linux_x86_64` |
 | glow | `charmbracelet/glow` | `Linux_x86_64` |
+
+harlequin is the one tool uv installs, rather than a release tarball.
+
+- `uv tool install harlequin --with harlequin-postgres --with harlequin-snowflake` installs the editor and both adapters
+- A machine without `uv` skips the component, and `apply` prints the one command that installs uv
 
 Three more steps `apply` handles that no release tarball covers:
 
@@ -811,7 +832,7 @@ Both keys move.
 - In `less`, `b` is back-a-page
     - The binding costs you nothing, and both `Ctrl-B` and `PageUp` still do that
 - Both bindings need `less` 582 or newer, and an older version leaves the two keys alone
-- Section 10.2 explains how they reach a running pager
+- Section 11.2 explains how they reach a running pager
 
 A wide diagram cannot fit a narrow pane.
 
@@ -820,7 +841,7 @@ A wide diagram cannot fit a narrow pane.
 - The `--diagram N` flag prints that one diagram unwrapped through `less -S`, where the arrow keys scroll sideways
 - `SPECHUB_MD_PAD` tunes the spacing passed to `mermaid-ascii`, defaulting to `-x 2 -y 2`
     - Tighter padding buys roughly a third of the height back and very little width
-- Section 10.3 explains why the note exists at all
+- Section 11.3 explains why the note exists at all
 - Terminal mode replaces each mermaid fence with a box-drawing rendering
 - `mermaid-ascii` handles `graph`, `flowchart`, and `sequenceDiagram`
 - Anything else keeps its source visible with a note rather than disappearing
@@ -888,11 +909,11 @@ The file tree draws markdown twice over.
 - The switch is a file on disk, `$XDG_STATE_HOME/spechub/md-line-numbers`
 - `spechub-md --toggle-line-numbers` creates and removes it
 - That is what the key runs
-- Only the preview pane reads it (see section 10.5)
+- Only the preview pane reads it (see section 11.5)
 - `setup.sh apply` reads a `yazi.toml` you wrote first and leaves alone anything you have set
 - Add `spechub-md` to your own `[opener]` table to read markdown with it
 - Add `show_hidden = true` to your own `mgr` table if you want hidden files shown
-- Section 10.4 says what it concedes and why
+- Section 11.4 says what it concedes and why
 - `D` sends the file under the cursor to the machine you sit at, over Tailscale Taildrop
     - Taildrop is Tailscale's file send
     - It beats `scp` back to a laptop, because it needs nothing installed at the other end and no inbound port there
@@ -938,7 +959,7 @@ The [Playwriter bridge](../skills/bridge/SKILL.md) is the setup that lets a prog
 The opener is the route you want.
 
 - It is a small service on your laptop that takes a page and opens it in your default browser
-- Section 9.5 covers how it gets installed
+- Section 10.5 covers how it gets installed
 - There is nothing to arm and no extension
 - The browser it reaches is your default one rather than a dedicated Chrome profile
 - Read one document after another and each simply appears
@@ -967,7 +988,7 @@ The bridge is the fallback, and it is the one that needs explaining.
 - The `--browser` flag is `--html` plus the delivery
 - The two share one renderer
     - The page cannot differ between them
-- They differ in exactly one place, which section 10.6 covers
+- They differ in exactly one place, which section 11.6 covers
 - On the bridge the page replaces what is in the armed tab
 - The helper opens no new tab
 - Arming the extension is how you nominate the tab this may take over
@@ -994,11 +1015,74 @@ We measured one delivery rather than estimating it.
 - `chafa` is worth adding by hand, with `apt install chafa`, if you want images drawn as text
 - It ships source-only so the setup script does not install it
 
-## 8. Diffs and pull requests
+## 8. Harlequin: a SQL editor on one key
+
+*`alt+q` opens harlequin on a connection profile. `alt+shift+q` opens it in a tab.*
+
+- Query on the left, rows on the right, schema tree beside both
+- Profiles live in `~/.config/spechub/harlequin.toml`, which `spechub-db` writes once and never touches again
+- `spechub-db` with no argument launches the only profile, or opens an fzf menu when there is more than one
+- `spechub-db <profile>` skips the menu
+
+### 8.1. Why uv, and not a release binary
+
+- harlequin is a python program, so there is no static binary to download
+- `uv tool install harlequin --with harlequin-postgres --with harlequin-snowflake` builds it an environment of its own and links one command into `~/.local/bin`
+- A machine without `uv` skips the component, and `apply` names the one command that installs uv
+- Adding an adapter to `harlequin.adapters` and re-running `apply` reinstalls with the new set
+    - `uv tool install` on an already-installed tool does nothing, so `apply` compares the config against uv's own receipt and passes `--force` when they differ
+
+### 8.2. Postgres profiles
+
+- Keep the password out of the profile file: write the line `host:5432:db:user:password` in `~/.pgpass`, `chmod 600` it, and leave the password out of `conn_str`
+    - libpq reads that file on every connection, so harlequin never handles the secret
+- Put `read_only = true` on any production profile, which harlequin hands to the postgres adapter so every connection on that profile refuses a write
+
+```toml
+[profiles.prod]
+adapter = "postgres"
+conn_str = "postgresql://postgres@db.example.supabase.co:5432/postgres"
+read_only = true
+```
+
+### 8.3. Connecting to Snowflake
+
+- Put the credentials in `~/.snowflake/connections.toml` and name the connection from the profile, rather than writing a connection string into the spechub file
+- `externalbrowser` authentication does not work on a dev machine, because there is no browser for it to open
+    - Use a key pair, or a password
+- `--read-only` exists for postgres and not for snowflake
+
+### 8.4. Keys inside harlequin
+
+*A function key jumps straight to a pane. `tab` cycles them.*
+
+| Key | Does |
+|---|---|
+| `f2` | the editor |
+| `f5` | the results |
+| `f6` | the catalog |
+| `tab` / `shift+tab` | next / previous pane |
+| `ctrl+enter` or `ctrl+j` | run the query |
+| `f4` | format the query |
+| `f8` | query history |
+| `ctrl+e` | export the results |
+| `f9` or `ctrl+b` | hide the catalog sidebar |
+| `f10` | full-screen the focused pane, and again to restore it |
+| `ctrl+p` | the command palette |
+| `f1` | every key |
+| `ctrl+q` | quit |
+
+- `tab` cycles the panes from outside the editor, and inside it `tab` indents
+- In the catalog, the schema tree, `space` expands the node under the cursor and `ctrl+enter` puts its name in the editor at the cursor
+    - Plain `enter` selects the node and leaves the editor alone
+- The footer writes `ctrl+q` as `^q`, and `f1` opens the full list
+- Custom keys go in a `[[keymaps.<name>]]` block in the profile file, named from `keymap_name` on a profile, which harlequin's own documentation covers
+
+## 9. Diffs and pull requests
 
 *Diffs with a file tree, pull request triage with saved searches, and the two helpers that make one key always show something useful.*
 
-### 8.1. Five git settings that route every diff through delta
+### 9.1. Five git settings that route every diff through delta
 
 *One pager for `git diff`, `git show`, and gh-dash alike.*
 
@@ -1014,7 +1098,7 @@ git config --global merge.conflictstyle zdiff3
     - The git command only pages to a terminal
     - A caller that pipes or captures the output still gets plain text
 
-### 8.2. Saved searches become dashboard tabs
+### 9.2. Saved searches become dashboard tabs
 
 *Any GitHub search string is a section, and two keys hand a pull request to tuicr or to an agent.*
 
@@ -1054,7 +1138,7 @@ keybindings:
 - Anything you can type into GitHub's search box becomes a tab
 - Avoid binding `R`, the built-in refresh-all
 
-### 8.3. The diff and dashboard helpers
+### 9.3. The diff and dashboard helpers
 
 *One key shows what your branch adds to dev. Another picks any comparison. A third opens the dashboard, scoped to where you are standing.*
 
@@ -1162,7 +1246,7 @@ gh dash --config "$GEN" "$@"
 
 - Because a herdr popup inherits the focused pane's directory, `alt+i` from an agent's worktree opens the dashboard already scoped to that repository
 
-### 8.4. spechub-gh: why an action failed
+### 9.4. spechub-gh: why an action failed
 
 *gh-dash throws gh's stderr away, so a helper on `$PATH` turns a refusal into a notification.*
 
@@ -1189,7 +1273,7 @@ Can not approve your own pull request.
 - It also passes through every subcommand that is not an action, `repo view` and `api` among them
 - Those fail for reasons a notification cannot help with
 
-### 8.5. gh-dash keys
+### 9.5. gh-dash keys
 
 *Vim movement, `[` and `]` for the preview tabs, and `D` or `S` to hand the pull request on.*
 
@@ -1212,7 +1296,7 @@ Can not approve your own pull request.
 | `r` / `R` | Refresh section / all |
 | `/` · `?` · `q` | Search · help · quit |
 
-### 8.6. diffnav keys
+### 9.6. diffnav keys
 
 *Vim movement in the tree, and `Tab` to cross between the tree and the diff.*
 
@@ -1239,7 +1323,7 @@ Can not approve your own pull request.
     - The popup keeps the diff, so close it to reach the tab
     - Outside herdr the helper runs your real editor in place
 
-## 9. What crosses back to your machine
+## 10. What crosses back to your machine
 
 *A dev machine has no display and no clipboard of its own. The `spechub-clip` and `spechub-open` helpers carry each one back across the link.*
 
@@ -1251,7 +1335,7 @@ Two gaps, and three gh-dash keys fall into them:
 - Neither is a gh-dash bug, because the clipboard and the browser are on the machine you are typing at, several hops away
 - The two helpers below carry each one back across
 
-### 9.1. spechub-clip: the clipboard
+### 10.1. spechub-clip: the clipboard
 
 *OSC 52 crosses SSH for free, so a copy on the dev machine lands on your own clipboard.*
 
@@ -1276,7 +1360,7 @@ spechub-clip --out            # print what was copied last
 - The `remote.clipboard_shim` key turns it off, and `setup.sh uninstall` removes it
 - The script skips it anyway on a machine with a real `xclip`, or with a display for one to talk to
 
-### 9.2. spechub-open: the browser
+### 10.2. spechub-open: the browser
 
 *Seven routes, tried in order, ending in a link you can click from any terminal.*
 
@@ -1292,8 +1376,8 @@ It tries, in order:
 1. `$SPECHUB_OPEN_CMD`, if you set one. The escape hatch
 2. `xdg-open`, when this machine has a display after all
 3. `wslview` or `explorer.exe`, when the Windows half of the machine holds the browser
-4. The opener on your laptop, which puts the page in your default browser with nothing to click. See section 9.5
-5. Chrome on your laptop through the [Playwriter bridge](../skills/bridge/SKILL.md), but only after it proves the browser is really reachable that way. See section 10.7
+4. The opener on your laptop, which puts the page in your default browser with nothing to click. See section 10.5
+5. Chrome on your laptop through the [Playwriter bridge](../skills/bridge/SKILL.md), but only after it proves the browser is really reachable that way. See section 11.7
 6. A clickable link. The terminal you are sitting at draws the URL as an OSC 8 hyperlink, so ctrl+click reaches your own browser. The URL goes on your clipboard too
 7. With no terminal to draw on either, the URL still goes on the clipboard, and the command reports failure
 
@@ -1315,7 +1399,7 @@ The opener sits ahead of the bridge because the two are not competing for the sa
 - Each keeps its own job
 - `setup.sh status` prints which route a machine will take, and the last line of `~/.cache/spechub/open.log` says what the last press actually did
 
-### 9.3. Under `herdr --remote`
+### 10.3. Under `herdr --remote`
 
 *We wrote both helpers for this shape, and they need no change. The clipboard crosses, and the browser falls to the link route, which is the one built for it.*
 
@@ -1358,7 +1442,7 @@ One trap belongs to your SSH config rather than to herdr.
 - You want the local number instead
 - Forwarding `6419` to `6419` avoids the question entirely
 
-### 9.4. On a machine with none of this
+### 10.4. On a machine with none of this
 
 *The link route needs only a terminal. One environment variable buys back a real one-key open.*
 
@@ -1368,7 +1452,7 @@ The link route works over SSH, through herdr, and under `herdr --remote`. To get
 export SPECHUB_OPEN_CMD="ssh laptop open"   # or any command taking a URL
 ```
 
-### 9.5. The opener: a page in your own browser, with nothing to click
+### 10.5. The opener: a page in your own browser, with nothing to click
 
 *A small service on your laptop. It takes a page from the dev machine, stores it, serves it back, and opens your default browser on it.*
 
@@ -1422,11 +1506,11 @@ The opener rides the same machinery as the bridge.
 - A document outlives the session that rendered it, which lets a page still work after the dev machine has gone away
 - The opener prunes a stored document after a week
 
-## 10. Design notes
+## 11. Design notes
 
 *Why the parts work the way they do. Read this when you are changing the setup or debugging it, and skip it otherwise.*
 
-### 10.1. Why the markdown helpers are separate executables
+### 11.1. Why the markdown helpers are separate executables
 
 *Node's startup would roughly double the cost of a preview that runs on every cursor move.*
 
@@ -1436,7 +1520,7 @@ The opener rides the same machinery as the bridge.
 - So `spechub md` runs `spechub-md`, either form works
 - A config can keep the fast one
 
-### 10.2. How `b` and `#` reach a running pager
+### 11.2. How `b` and `#` reach a running pager
 
 *A `lesskey` binding whose `quit` action carries an exit status, which `spechub-md` reads and acts on.*
 
@@ -1451,7 +1535,7 @@ The opener rides the same machinery as the bridge.
 - Only a leading `#` needs the escape
     - A backslash means something of its own to `lesskey`, and `\b` would bind backspace rather than the letter
 
-### 10.3. Why a wide diagram becomes a note
+### 11.3. Why a wide diagram becomes a note
 
 *Nothing can shrink a diagram. Wrapping box-drawing art destroys it.*
 
@@ -1467,7 +1551,7 @@ The opener rides the same machinery as the bridge.
     - glow already wrapped the prose to the pane
         - Only the diagram lines chop, and the arrow keys pan across them
 
-### 10.4. What yazi's config merge concedes
+### 11.4. What yazi's config merge concedes
 
 *Declaring anything twice would make yazi reject the whole file, so `apply` gives up whatever you already set.*
 
@@ -1510,7 +1594,7 @@ One collision belongs to herdr rather than yazi.
 - It returns in about 100ms rather than three and a half seconds
 - Without that a stray pane sits in the current tab
 
-### 10.5. Why the line-number switch lives in a file
+### 11.5. Why the line-number switch lives in a file
 
 *The key and the preview pane are two processes that never meet, so the switch has to sit on disk between them.*
 
@@ -1522,7 +1606,7 @@ One collision belongs to herdr rather than yazi.
 - The full-width read has **Read with line numbers** as its own entry under `O`
 - The `--diagram N` flag outranks the file too, since asking for one drawing is a different question from which view the pane is on
 
-### 10.6. Why `--html` names a CDN and `--serve` does not
+### 11.6. Why `--html` names a CDN and `--serve` does not
 
 *A document standing on its own has no server behind it to answer for `/mermaid.js`.*
 
@@ -1540,7 +1624,7 @@ A document bound for the opener is the third case.
 - The 3.5MB goes up once, the first time the opener admits it has no copy
 - Every document after that draws its diagrams without reaching a CDN at all
 
-### 10.7. Why the bridge and the opener must prove themselves
+### 11.7. Why the bridge and the opener must prove themselves
 
 *`agent-browser` launches a headless Chrome when it cannot attach. It then reports success to nobody.*
 
@@ -1572,7 +1656,7 @@ The opener proves itself the same way and for the same reason.
 - The document would land in it, the helper would report success
 - You would never see it
 
-## 11. Traps
+## 12. Traps
 
 *Each of these cost real time to find.*
 
@@ -1604,6 +1688,10 @@ The opener proves itself the same way and for the same reason.
 - **A dev machine has no clipboard and no browser**
     - The `o`, `y`, and `Y` keys in gh-dash all fail there until `apply` installs `spechub-clip` and `spechub-open`
     - The `setup.sh status` command says which browser route a machine ended up with
+- **Snowflake's browser login cannot work on a dev machine**
+    - `externalbrowser` authentication opens a browser, and that machine has none
+    - Use a key pair or a password, held in `~/.snowflake/connections.toml`
+    - `--read-only` guards a postgres connection only, so a snowflake profile has no such switch
 - **diffnav aborts on one very long line**
     - delta dies on `SIGABRT`, and diffnav quits with `FATA signal: aborted (core dumped)`, showing none of the diff
     - `spechub-diff` drops any file whose patch holds a line over 20,000 characters and names it in the banner

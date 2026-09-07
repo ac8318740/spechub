@@ -88,15 +88,20 @@ operation. First the root:
 ```bash
 # files backend – github.md has the equivalent
 ~/.claude/spechub/bin/spechub node create --map <name> --title "<destination>" \
-  --status resolved --kind destination --label "<at most four words>" \
+  --kind destination --label "<at most four words>" \
   --body "<the destination, as settled>"
 ```
 
-- The root is the destination, already resolved. It counts as pinned without
-  the flag. `node walk` returns pinned nodes in full at the start of every
-  session, so every session orients to the root. On GitHub it also carries
-  the `root-node` label, which is how a query finds the entry point without
-  walking parent links.
+- The root is the destination. Pass no `--status` flag, so it opens.
+
+    The root's state follows its subtree. It stays open while any node below
+    it is open, fog or claimed. `archive` resolves it when the map clears.
+    Nothing else writes the root's status, and the frontier never returns it.
+
+- The root counts as pinned without the flag. At the start of every session,
+  `node walk` returns pinned nodes in full, so every session orients to the root.
+  On GitHub it also carries the `root-node` label, which is how a query finds
+  the entry point without walking parent links.
 
 - On GitHub, every node body opens with a header line declaring its map, its
   root, its `answers` parent, its `blocked-by` ids, and its short `label`.
@@ -166,7 +171,8 @@ same queries per `trackers/github.md`.
 2. **Query the frontier.** `spechub node frontier --map <name>` – open nodes
    with no unresolved blockers, shallowest provenance depth first, number
    only as a tiebreak. Provenance depth is how many `answers` links separate
-   a node from the root, so the broadest questions come first.
+   a node from the root, so the broadest questions come first. The query never
+   returns the root.
 
 3. **Route by `mode` – the only field the machine routes on** (`kind` picks
    the node's diagram shape, never its route):
@@ -262,5 +268,5 @@ extracted it along the way.
 Report what the map settled. Point at anything the map left `out-of-scope`.
 
 Then invoke `archive` to close the map out. It re-checks the gate itself and
-refuses if anything is still open, verifies the residue actually landed, and
-asks before disposing of the nodes.
+refuses if anything is still open. It verifies the residue actually landed,
+resolves the root, and asks before disposing of the nodes.

@@ -152,6 +152,7 @@ the end of its own run, and writes `host.terminal_workspace` from the answer.
 
 - The offer comes last on purpose: the workspace installs binaries, and nothing in SpecHub needs it
 - Either answer ends the offer for good
+- After a `true` answer, `/spechub:setup` re-checks this machine on every later run and offers `upgrade` when a tool or a component has moved on
 - The key records the answer, never the install: `true` means the user said yes, not that the workspace is on the machine
 - `/spechub:terminal-workspace` is the only thing that installs it, and only you can start it
 

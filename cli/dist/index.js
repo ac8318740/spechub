@@ -16275,7 +16275,7 @@ function frontier(nodes) {
     }
     return isSettled(blocker.status);
   };
-  return nodes.filter((n) => n.status === "open" && n.blockedBy.every(blockerSettled)).sort((a, b) => {
+  return nodes.filter((n) => Boolean(n.answers) && n.status === "open" && n.blockedBy.every(blockerSettled)).sort((a, b) => {
     const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
     return byDepth !== 0 ? byDepth : compareIds(a.id, b.id);
   });
@@ -16496,9 +16496,9 @@ function collectDrawn(nodes, start) {
   visit(start, true);
   return drawn;
 }
-function nodeLine({ node, hidden }, blockersOffMap2) {
+function nodeLine({ node, hidden }, blockersOffMap2, statusField) {
   const [open, close] = SHAPES[node.kind];
-  const parts = [`${linkedId(node)} ${node.kind} - ${node.status}`, escapeLabel(node.label)];
+  const parts = [`${linkedId(node)} ${node.kind} - ${statusField}`, escapeLabel(node.label)];
   if (hidden > 0) parts.push(`+${hidden} more`);
   if (blockersOffMap2.length > 0) {
     parts.push(`blocked by ${blockersOffMap2.map(shownId).join(", ")}`);
@@ -16726,27 +16726,49 @@ function groupByClass(drawn, cueOf) {
   }
   return [...members.entries()].sort((a, b) => cueRank(a[1].cue) - cueRank(b[1].cue));
 }
-function renderDiagram(nodes, options = {}) {
-  if (nodes.length === 0) {
+function deriveRootState(nodes, rootId) {
+  const below = nodes.filter((n) => n.id !== rootId);
+  const unresolved = below.filter((n) => !isSettled(n.status)).length;
+  return {
+    status: unresolved === 0 ? "resolved" : "open",
+    field: `${unresolved} of ${below.length} open`
+  };
+}
+function soleRootId(nodes) {
+  const roots = nodes.filter((n) => !n.answers);
+  return roots.length === 1 ? roots[0].id : void 0;
+}
+function renderDiagram(input, options = {}) {
+  if (input.length === 0) {
     throw new Error("the map has no nodes \u2013 there is nothing to draw");
   }
+  const rootId = soleRootId(input);
+  const root = deriveRootState(input, rootId);
+  const nodes = input.map((n) => n.id === rootId ? { ...n, status: root.status } : n);
   const start = resolveStart(nodes, options.from);
   const onFrontier = new Set(frontier(asMapNodes(nodes)).map((n) => n.id));
   const drawn = collectDrawn(nodes, start);
   const drawnIds = new Set(drawn.map((d) => d.node.id));
   const cueOf = (node) => ({
     frontier: onFrontier.has(node.id),
-    // Mode says who will settle a node, and nobody will settle a settled one.
-    // The border marks hitl rather than afk, because a human answering is the
-    // scarce case and the one a reader is hunting for.
-    hitl: node.mode === "hitl" && !isSettled(node.status)
+    // Mode says who will settle a node, and nobody will settle a settled one
+    // or the root – the root is derived, so no cue ever lands on it. The border
+    // marks hitl rather than afk, because a human answering is the scarce case
+    // and the one a reader is hunting for.
+    hitl: node.id !== rootId && node.mode === "hitl" && !isSettled(node.status)
   });
   const edges = buildEdges(drawn, start, drawnIds);
   const offMap = blockersOffMap(drawn, drawnIds);
   const groups = groupByClass(drawn, cueOf);
   const main = [
     "flowchart TD",
-    ...drawn.map((entry) => nodeLine(entry, offMap.get(entry.node.id) ?? [])),
+    ...drawn.map(
+      (entry) => nodeLine(
+        entry,
+        offMap.get(entry.node.id) ?? [],
+        entry.node.id === rootId ? root.field : entry.node.status
+      )
+    ),
     ...edges.answers,
     ...edges.blocked,
     ...blockedLinkStyle(edges),
