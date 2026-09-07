@@ -102,6 +102,18 @@ that drops the styling still leaves every fact readable.
 
 `cli/src/lib/diagram.ts` implements this table. Read it when the two disagree.
 
+### The root derives its state from its subtree
+
+The root is the map's one node with no `answers`. It carries no status of its
+own. Every node below it decides what it draws.
+
+- **Its label carries a count where another node carries a status**, in the
+  form `#229 destination - 3 of 12 open<br/>Ship the editor`
+- **The count reads unresolved nodes out of every node below the root**
+- **Its fill turns resolved green once every other node settles**, and open
+  blue until then
+- **It draws no mode cue** (see Mark the exception below)
+
 ### The stroke is a precedence, not a conflict
 
 Two cues want the same stroke, so they rank:
@@ -129,6 +141,7 @@ A cue that lands on nine nodes out of eleven carries no information.
   will settle a node and nobody will settle a settled one
 - **A map with no unresolved `hitl` node draws no mode cue and no mode legend
   item**
+- **The root draws no mode cue**, because nobody answers a destination
 
 ### Edges point forward in time
 

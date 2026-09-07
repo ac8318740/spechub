@@ -1,6 +1,6 @@
 ---
 name: archive
-description: Close out a cleared map – one whose frontier is empty with no fog and no claims left – by verifying the durable residue, meaning what the effort leaves behind in living specs, ADRs and the glossary, was extracted, then disposing of the nodes per workflow.maps.persist. Invoke when a map has just been cleared, when the last node on a map resolves, or when the user asks to archive or close out a map. Refuses and asks first if anything is still open. Also archives legacy spechub/changes/ directories from the pre-map workflow.
+description: Close out a cleared map – one whose frontier is empty with no fog and no claims left – by verifying the durable residue, meaning what the effort leaves behind in living specs, ADRs and the glossary, was extracted, then closing the root and disposing of the nodes per workflow.maps.persist. Invoke when a map has just been cleared, when the last node on a map resolves, or when the user asks to archive or close out a map. Refuses and asks first if anything is still open. Also archives legacy spechub/changes/ directories from the pre-map workflow.
 argument-hint: "[map or legacy change name]"
 ---
 
@@ -21,8 +21,8 @@ Once the fog clears, the answers belong in living specs, ADRs and the
 glossary, not in a second copy that drifts. That is the residue – what
 survives the map.
 
-Archive verifies the residue reached those three places, then disposes of
-the nodes.
+Archive verifies the residue reached those three places. It then closes the
+map's root node and disposes of the rest.
 
 ## Step 1: Locate the map
 
@@ -45,14 +45,19 @@ fog, no claims. Check all three on the files backend:
 ```
 
 On GitHub, compose the same checks per `trackers/github.md` in the map skill.
-`gh issue list --label "map:<name>" --state open` must come back empty. An
-open issue is open, fog or claimed, and all three fail the gate.
+`gh issue list --label "map:<name>" --state open` must come back empty, or
+hold the issue labelled `root-node` alone. Any other open issue is open, fog
+or claimed, and all three fail the gate.
 
 Never run the files commands against a GitHub-tracked map. They come back
 empty because the directory does not exist, so the gate would pass on no
 evidence.
 
-All three must come back empty.
+All three must come back empty, apart from the root.
+
+The root is the map's one node with no `answers`, and on GitHub it carries the
+`root-node` label. It stays open until Step 4 closes it. Ignore it in all
+three lists – a list holding the root alone still passes the gate.
 
 Count open nodes directly rather than through the frontier query, because the
 frontier only lists nodes with no unresolved blockers. Two nodes that block
@@ -80,7 +85,22 @@ Check each resolution left what it should have:
 3. **Out-of-scope nodes** – report them. A scope boundary is worth the user
    hearing once more before the map disappears.
 
-## Step 4: Dispose of the nodes
+## Step 4: Close the root
+
+The root carries no status of its own – it stays open while any node below it
+still needs work. Step 2 proved nothing does. Resolve the root now.
+
+```bash
+# files backend
+~/.claude/spechub/bin/spechub node update <root id> --map <name> --status resolved
+
+# github backend
+gh issue close <root issue number> --reason completed
+```
+
+A root the map already resolved or closed stays that way. Never reopen it.
+
+## Step 5: Dispose of the nodes
 
 **Confirm first when you invoked this yourself.** A user who typed
 `/spechub:archive` has already asked for disposal – proceed.
@@ -103,7 +123,7 @@ dispose – closed issues are already the archive.
 Also dispose of `spechub/handoffs/<name>/` if it exists. Consumed handoffs
 hold conversation content and should not outlive the map they served.
 
-## Step 5: Report
+## Step 6: Report
 
 - Nodes resolved / out-of-scope counts
 - Residue: domains spot-checked, ADRs and glossary entries written

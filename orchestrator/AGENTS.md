@@ -247,7 +247,7 @@ Tell polish to list every factual claim it left alone in its report.
 
 Audit closes its report with "Recommended Actions", a priority-ordered list of `/impeccable <verb>` commands. Only `polish` runs from that list. The other five wait for a human.
 
-A human picks one of the five in a grill round (see ADR 0016). Two rules carry the names that far:
+A human picks one of the five in a grill round (see ADR 0017). Two rules carry the names that far:
 
 - **Audit names each command against the finding that earned it**
 - **Your completion report repeats those names**, so the user can pick one later

@@ -305,6 +305,34 @@ function styleOf(fence: string, mermaidId: string): Record<string, string> {
 }
 
 /**
+ * The name of the class one node is bound to, or the empty string when no
+ * `class` line names it. The name is the cue itself – `open`, `resolvedHitl`,
+ * `openFront` – so a test can state which cue landed rather than unpicking the
+ * stroke properties the cue draws.
+ */
+function classNameOf(fence: string, mermaidId: string): string {
+  let name = '';
+  for (const line of fence.split('\n')) {
+    const assigned = line.match(/^\s*class\s+([\w,\s-]+?)\s+(\S+)\s*$/);
+    if (
+      assigned &&
+      assigned[1]
+        .split(',')
+        .map(s => s.trim())
+        .includes(mermaidId)
+    ) {
+      name = assigned[2];
+    }
+  }
+  return name;
+}
+
+/** The first line of a node's label, which is the id, the kind and the status field. */
+function labelHeadOf(fence: string, mermaidId: string): string {
+  return labelTextOf(fence, mermaidId).split('\n')[0];
+}
+
+/**
  * The label text one node carries, with the markup the renderer wraps around it
  * taken back off: the `<br/>` between the label's parts becomes a newline, and
  * the anchor around the id goes. Whatever `<`, `>`, `&` or `"` is left came from
@@ -364,6 +392,9 @@ function richNodes(): MapNode[] {
       blockedBy: ['002'],
       mode: 'afk',
     },
+    // The root carries no status of its own and never sits on the frontier, so
+    // the frontier node this map needs has to be one of the others.
+    { title: 'Ready', kind: 'work', label: 'Ready', answers: '001', mode: 'hitl' },
   ]);
 }
 
@@ -421,18 +452,20 @@ function thirteenBoxNodes(): MapNode[] {
       blockedBy: ['002'],
       mode: 'afk',
     },
+    // The root is hitl too, but the root never carries a mode cue, so this is
+    // the node that puts the two mode items in the legend.
     {
       title: 'Claimed',
       kind: 'work',
       label: 'Claimed',
       answers: '001',
       status: 'claimed',
-      mode: 'afk',
+      mode: 'hitl',
     },
   ]);
 }
 
-/** A map whose legend holds one shape, one fill and the frontier item, and no edge. */
+/** A map whose legend holds one shape and one fill, and no cue and no edge. */
 function oneNode(): MapNode[] {
   return makeMap('one', [{ title: 'Root', kind: 'destination', label: 'Root', mode: 'afk' }]);
 }
@@ -476,14 +509,11 @@ describe('shape', () => {
 
 describe('label text', () => {
   it('carries the id, the kind, the status and the label field', () => {
-    const nodes = makeMap('demo', [
-      { title: 'Only node', kind: 'work', label: 'Ship the thing', mode: 'afk' },
-    ]);
-    const main = mainFence(renderDiagram(nodes));
-    expect(main).toContain('001');
-    expect(main).toContain('work');
-    expect(main).toContain('open');
-    expect(main).toContain('Ship the thing');
+    // The root's status word is replaced by a count of its subtree, so the
+    // node stating this rule is one of the others.
+    const main = mainFence(renderDiagram(rootAndChild()));
+    expect(labelHeadOf(main, 'n002')).toBe('&num;002 work - open');
+    expect(labelTextOf(main, 'n002')).toContain('Child');
   });
 
   it.each([
@@ -875,7 +905,7 @@ describe('legend', () => {
   });
 
   it.each([
-    ['one node', 3, 1, oneNode],
+    ['one node', 2, 1, oneNode],
     ['four shapes, two fills, a frontier item and both edge items', 11, 2, elevenBoxNodes],
   ] as const)('draws the legend for %s, %i boxes, as %i rows', (_name, boxes, rows, nodes) => {
     const legend = legendFence(renderDiagram(nodes()));
@@ -957,7 +987,7 @@ describe('legend', () => {
   });
 
   it.each([
-    ['the frontier cue', oneNode, 'n001'],
+    ['the frontier cue', rootAndChild, 'n002'],
     ['the hitl cue', richNodes, 'n002'],
   ] as const)('draws %s with the stroke the diagram draws it with', (_name, nodes, mermaidId) => {
     const out = renderDiagram(nodes());
@@ -1069,12 +1099,8 @@ describe('node id', () => {
 
 describe('stroke', () => {
   it('outlines a frontier node in magenta at five pixels', () => {
-    const main = mainFence(
-      renderDiagram(
-        makeMap('demo', [{ title: 'Root', kind: 'destination', label: 'Root', mode: 'afk' }])
-      )
-    );
-    const style = styleOf(main, 'n001');
+    // The root never sits on the frontier, so the outlined node is the child.
+    const style = styleOf(mainFence(renderDiagram(rootAndChild())), 'n002');
     expect(style['stroke']).toBe('#bf3989');
     expect(style['stroke-width']).toBe('5px');
     expect(style['stroke-dasharray']).toBeUndefined();
@@ -1095,7 +1121,7 @@ describe('stroke', () => {
   });
 
   it('keeps the mode dash on a node both on the frontier and unresolved hitl', () => {
-    const style = styleOf(mainFence(renderDiagram(richNodes())), 'n001');
+    const style = styleOf(mainFence(renderDiagram(richNodes())), 'n006');
     expect(style['stroke']).toBe('#bf3989');
     expect(style['stroke-width']).toBe('5px');
     expect(style['stroke-dasharray']).toBe('6 4');
@@ -1111,6 +1137,162 @@ describe('stroke', () => {
       )
     );
     expect(main).not.toContain('stroke-dasharray');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The root
+//
+// The root carries no status of its own. What it shows is derived from every
+// other node in the map: the label counts them, the fill says whether any is
+// still unresolved, and no cue ever lands on it.
+// ---------------------------------------------------------------------------
+
+/** A root of the given stored status, over one child of the given status. */
+function rootOver(
+  map: string,
+  rootStatus: MapNode['status'],
+  childStatus: MapNode['status'],
+  rootMode: MapNode['mode'] = 'afk'
+): MapNode[] {
+  return makeMap(map, [
+    { title: 'Root', kind: 'destination', label: 'Root', status: rootStatus, mode: rootMode },
+    { title: 'Child', kind: 'work', label: 'Child', answers: '001', status: childStatus, mode: 'afk' },
+  ]);
+}
+
+describe('root label', () => {
+  it('counts the unresolved nodes below the root in place of a status word', () => {
+    const nodes = makeMap('counted', [
+      { title: 'Root', kind: 'destination', label: 'Root', mode: 'afk' },
+      { title: 'Done', kind: 'work', label: 'Done', answers: '001', status: 'resolved', mode: 'afk' },
+      {
+        title: 'Dropped',
+        kind: 'work',
+        label: 'Dropped',
+        answers: '001',
+        status: 'out-of-scope',
+        mode: 'afk',
+      },
+      { title: 'Ready', kind: 'work', label: 'Ready', answers: '001', mode: 'afk' },
+      { title: 'Foggy', kind: 'work', label: 'Foggy', answers: '001', status: 'fog', mode: 'afk' },
+      {
+        title: 'Claimed',
+        kind: 'work',
+        label: 'Claimed',
+        answers: '001',
+        status: 'claimed',
+        mode: 'afk',
+      },
+    ]);
+    // Five nodes below the root, of which open, fog and claimed are unresolved.
+    expect(labelHeadOf(mainFence(renderDiagram(nodes)), 'n001')).toBe(
+      '&num;001 destination - 3 of 5 open'
+    );
+  });
+
+  it('prints 0 of 0 open on a root with no other node', () => {
+    expect(labelHeadOf(mainFence(renderDiagram(oneNode())), 'n001')).toBe(
+      '&num;001 destination - 0 of 0 open'
+    );
+  });
+
+  it('counts the nodes a collapsed subtree hides, not the boxes drawn', () => {
+    const nodes = makeMap('hidden', [
+      { title: 'Root', kind: 'destination', label: 'Root', mode: 'afk' },
+      { title: 'Done', kind: 'work', label: 'Done', answers: '001', status: 'resolved', mode: 'afk' },
+      {
+        title: 'Deeper',
+        kind: 'work',
+        label: 'Deeper',
+        answers: '002',
+        status: 'resolved',
+        mode: 'afk',
+      },
+    ]);
+    const main = mainFence(renderDiagram(nodes));
+    expect(drawing(main)).not.toContain('003');
+    expect(labelHeadOf(main, 'n001')).toBe('&num;001 destination - 0 of 2 open');
+  });
+
+  it.each(['open', 'fog', 'claimed', 'resolved', 'out-of-scope'] as const)(
+    'ignores the status the root file stores: %s',
+    status => {
+      const main = mainFence(renderDiagram(rootOver(status, status, 'open')));
+      const head = labelHeadOf(main, 'n001');
+      expect(head).toBe('&num;001 destination - 1 of 1 open');
+      expect(head).not.toMatch(/destination - (open|fog|claimed|resolved|out-of-scope)\b/);
+    }
+  );
+
+  it('counts the subtree when from names the root itself', () => {
+    const main = mainFence(renderDiagram(rootAndChild(), { from: '001' }));
+    expect(labelHeadOf(main, 'n001')).toBe('&num;001 destination - 1 of 1 open');
+  });
+
+  it('keeps the status word on a non-root node that from names', () => {
+    const main = mainFence(renderDiagram(rootAndChild(), { from: '002' }));
+    expect(labelHeadOf(main, 'n002')).toBe('&num;002 work - open');
+    expect(drawing(main)).not.toContain('001');
+  });
+});
+
+describe('root fill', () => {
+  it('fills the root as resolved when every other node is settled', () => {
+    const main = mainFence(renderDiagram(rootOver('settled', 'open', 'resolved')));
+    expect(styleOf(main, 'n001')['fill']).toBe('#dafbe1');
+    expect(classNameOf(main, 'n001')).toBe('resolved');
+  });
+
+  it('fills the root as open when one other node is unresolved', () => {
+    const main = mainFence(renderDiagram(rootOver('unsettled', 'resolved', 'open')));
+    expect(styleOf(main, 'n001')['fill']).toBe('#ddf4ff');
+    expect(classNameOf(main, 'n001')).toBe('open');
+  });
+
+  it.each([
+    ['resolved', 'resolved', 'open'],
+    ['fog', 'open', 'resolved'],
+  ] as const)(
+    'swatches the derived status in the legend when the child is %s',
+    (childStatus, shown, hidden) => {
+      // The legend lists the statuses the drawing uses, so the root's stored
+      // status must not put a swatch there and its derived one must.
+      const legend = legendFence(renderDiagram(rootOver('swatch', hidden, childStatus)));
+      expect(legend).toContain(shown);
+      expect(legend).not.toContain(hidden);
+    }
+  );
+});
+
+describe('root cues', () => {
+  it('never outlines the root as a frontier node', () => {
+    const main = mainFence(renderDiagram(rootOver('front', 'open', 'open')));
+    const style = styleOf(main, 'n001');
+    expect(classNameOf(main, 'n001')).toBe('open');
+    expect(style['stroke']).toBe(style['fill']);
+    expect(style['stroke-width']).toBeUndefined();
+  });
+
+  it('never dashes the root, even when it stores hitl and open', () => {
+    const main = mainFence(renderDiagram(rootOver('dash', 'open', 'open', 'hitl')));
+    const style = styleOf(main, 'n001');
+    expect(classNameOf(main, 'n001')).toBe('open');
+    expect(style['stroke-dasharray']).toBeUndefined();
+  });
+
+  it('draws no mode legend item when the root is the only hitl node', () => {
+    const legend = legendFence(renderDiagram(rootOver('lone', 'open', 'open', 'hitl')));
+    expect(legend).not.toContain('hitl');
+    expect(legend).not.toContain('afk');
+  });
+
+  it('draws the mode legend item when an unresolved hitl node is not the root', () => {
+    const nodes = makeMap('other', [
+      { title: 'Root', kind: 'destination', label: 'Root', mode: 'hitl' },
+      { title: 'Child', kind: 'work', label: 'Child', answers: '001', mode: 'hitl' },
+    ]);
+    expect(legendFence(renderDiagram(nodes))).toContain('hitl (a human must answer)');
   });
 });
 

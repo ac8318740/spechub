@@ -42,6 +42,7 @@ Add `shift` to any of these to open it in a full tab instead of a popup.
 | `alt+g` | lazygit | stage, commit, push |
 | `alt+i` | gh-dash | your PRs on GitHub |
 | `alt+y` | yazi | find a file |
+| `alt+q` | harlequin | run a SQL query |
 
 ## Inside each tool
 
@@ -76,6 +77,19 @@ Add `shift` to any of these to open it in a full tab instead of a popup.
 | `o` | open by rule, which for markdown is the reader |
 | `b` | open in the browser you are sitting at |
 | `D` | send the file to your laptop over Taildrop |
+
+### harlequin (`alt+q`)
+
+| Key | Does |
+|---|---|
+| `f2` / `f5` / `f6` | editor / results / catalog |
+| `tab` / `shift+tab` | next / previous pane, from outside the editor |
+| `ctrl+enter` | run the query, or in the catalog insert the name into the editor |
+| `f4` | format the query |
+| `f8` | query history |
+| `f9` | hide the catalog sidebar |
+| `f10` | full-screen the focused pane |
+| `f1` | every key |
 
 ### tuicr
 

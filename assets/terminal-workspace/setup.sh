@@ -2,7 +2,9 @@
 # SpecHub terminal workspace setup.
 #   setup.sh status     what is installed and enabled
 #   setup.sh apply      install and configure everything enabled in the config
-#   setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|neovim|tuicr>
+#   setup.sh outdated   what has a newer version, and what components are new
+#   setup.sh upgrade    reinstall whatever outdated reported
+#   setup.sh disable <herdr|delta|diffnav|gh_dash|harlequin|lazygit|neovim|tuicr>
 #   setup.sh uninstall  remove every managed block, keep the binaries
 #
 # Idempotent. Only ever edits between managed markers, so hand-written config
@@ -68,9 +70,49 @@ print(d if d is not None else sys.argv[2])
 PY
 }
 
+# The example config that shipped beside this script. Both `outdated` and the
+# stamp read it, so resolve it once.
+EXAMPLE="$(dirname "$0")/config.example.yaml"
+STAMP="$(dirname "$CFG")/terminal-workspace.applied"
+
+# Reads a yaml list into one item per line. cfg_get prints a python list repr
+# for a list value, which no caller can use.
+cfg_get_list() {  # cfg_get_list <dotted.path> <space-separated default>
+  SPECHUB_CFG="$CFG" py "$1" "${2:-}" <<'PY'
+import os, sys
+import yaml
+p = os.environ["SPECHUB_CFG"]
+d = (yaml.safe_load(open(p)) or {}) if os.path.isfile(p) else {}
+for k in sys.argv[1].split("."):
+    d = d.get(k) if isinstance(d, dict) else None
+    if d is None: break
+print("\n".join(str(x) for x in d) if isinstance(d, list) else sys.argv[2].replace(" ", "\n"))
+PY
+}
+
+# What `apply` had to offer, recorded so a later run can tell what arrived
+# since. Without it, a component added by an upgrade is invisible: cfg_get
+# returns its default, apply installs it, and nobody is ever told it is there.
+write_stamp() {
+  [ -f "$EXAMPLE" ] || return 0
+  mkdir -p "$(dirname "$STAMP")"
+  { echo "# written by spechub terminal-workspace apply, do not edit"
+    py "$EXAMPLE" <<'PY'
+import sys
+import yaml
+for k in (yaml.safe_load(open(sys.argv[1])) or {}):
+    print(k)
+PY
+  } > "$STAMP"
+}
+
 install_binary() {  # install_binary <name> <repo> <asset-match>
   local name="$1" repo="$2" match="$3"
-  have "$name" && { say "$name already installed"; return 0; }
+  # `upgrade` reinstalls over a binary that is already here. `apply` never
+  # does: it installs what is missing and leaves what is not.
+  if [ "${INSTALL_FORCE:-0}" != "1" ] && have "$name"; then
+    say "$name already installed"; return 0
+  fi
   local url json
   # py reads its script from stdin, so the release JSON has to arrive by
   # environment rather than by pipe: a pipe here is silently swallowed by
@@ -418,6 +460,112 @@ PY
 gh dash --config "$GEN" "$@"
 H
   chmod +x "$BIN/spechub-dash"
+
+  cat > "$BIN/spechub-db" <<'H'
+#!/usr/bin/env bash
+# Open harlequin, the SQL editor, on one of your connection profiles.
+#
+#   spechub-db            one profile launches straight in, more than one opens a menu
+#   spechub-db <profile>  that profile, no menu
+#
+# Profiles live in a TOML file of your own. This writes a starter the first
+# time and never touches it again. Installed by spechub.
+set -uo pipefail
+# apply rewrites this line from harlequin.config_path. What ships here is the
+# default, so the helper is right even on a machine nothing rewrote it on.
+DB_CFG_DEFAULT="~/.config/spechub/harlequin.toml"  # spechub:config_path
+CFG="${SPECHUB_DB_CONFIG:-$DB_CFG_DEFAULT}"
+# A human writes ~ for home, and a human writes this config. Expanding it here
+# rather than at write time keeps the helper right on a machine whose HOME is
+# not the one apply ran under.
+case "$CFG" in
+  "~")   CFG="$HOME" ;;
+  "~/"*) CFG="$HOME/${CFG#\~/}" ;;
+esac
+
+command -v harlequin >/dev/null 2>&1 || {
+  echo "harlequin is not installed. Run: setup.sh apply"; exit 1; }
+
+if [ ! -f "$CFG" ]; then
+  mkdir -p "$(dirname "$CFG")"
+  cat > "$CFG" <<'T'
+# harlequin connection profiles. spechub wrote this once and will not write it
+# again. Edit it freely.
+default_profile = "local"
+
+[profiles.local]
+adapter = "postgres"
+conn_str = "postgres://localhost:5432/postgres"
+
+# Snowflake. Take the # marks off and fill in your own account.
+#
+# Put the credentials in ~/.snowflake/connections.toml and name the connection
+# here, rather than writing them into this file.
+#
+# externalbrowser authentication needs a browser on this machine. A dev machine
+# reached over SSH has none, so use a key pair or a password instead.
+#
+# [profiles.snowflake]
+# adapter = "snowflake"
+# connection_name = "default"
+T
+  echo "wrote a starter config at $CFG - edit it to reach your own database"
+fi
+
+launch() { exec harlequin --config-path "$CFG" -P "$1"; }
+[ $# -gt 0 ] && launch "$1"
+
+# Profile names, read with a regex rather than tomllib: tomllib needs python
+# 3.11 and nothing else this script writes has a floor that high. Names are all
+# that is wanted here, and a table header is the one line a regex reads safely.
+rows=$(python3 - "$CFG" <<'PY'
+import re, sys
+text = open(sys.argv[1]).read()
+d = re.search(r'(?m)^\s*default_profile\s*=\s*"([^"]+)"', text)
+default = d.group(1) if d else ""
+for m in re.finditer(r'(?m)^\s*\[profiles\.("?)([^\]"]+)\1\]\s*$', text):
+    name = m.group(2)
+    body = text[m.end():].split("\n[", 1)[0]
+    a = re.search(r'(?m)^\s*adapter\s*=\s*"([^"]+)"', body)
+    mark = "   (default)" if name == default else ""
+    print("%s\t%-24s %-12s%s" % (name, name, a.group(1) if a else "?", mark))
+PY
+)
+count=$(printf '%s\n' "$rows" | grep -c .)
+case "$count" in
+  0) echo "no profiles in $CFG"; exit 1 ;;
+  1) launch "$(printf '%s' "$rows" | cut -f1)" ;;
+esac
+
+command -v fzf >/dev/null 2>&1 || {
+  echo "fzf is not installed, so there is no menu. Naming a profile still works:"
+  printf '%s\n' "$rows" | cut -f1 | sed 's/.*/  spechub-db "&"/'
+  exit 1; }
+
+choice=$(printf '%s\n' "$rows" \
+  | fzf --delimiter=$'\t' --with-nth=2.. --no-multi --cycle \
+        --prompt="db > " --header="harlequin   ·   profile   adapter" \
+  | cut -f1)
+[ -n "$choice" ] || exit 0
+launch "$choice"
+H
+  chmod +x "$BIN/spechub-db"
+  # The one helper with a path in the config, so the one write that is not a
+  # heredoc on its own. The line above already holds the default, so this
+  # carries nothing but a value the user chose.
+  SPECHUB_DB_CFG="$(cfg_get harlequin.config_path "~/.config/spechub/harlequin.toml")" \
+    py "$BIN/spechub-db" <<'PY'
+import os, re, sys
+# A bash single-quoted literal, so a path with a space or a quote in it reaches
+# the helper as one word rather than as shell syntax.
+v = "'" + os.environ["SPECHUB_DB_CFG"].replace("'", "'\\''") + "'"
+p = sys.argv[1]
+t = open(p).read()
+t, n = re.subn(r"(?m)^DB_CFG_DEFAULT=.*# spechub:config_path$",
+               lambda m: "DB_CFG_DEFAULT=" + v + "  # spechub:config_path", t)
+if n:
+    open(p, "w").write(t)
+PY
 
   cat > "$BIN/spechub-gh" <<'H'
 #!/usr/bin/env bash
@@ -1804,7 +1952,7 @@ esac
 H
   chmod +x "$BIN/spechub-bridge"
 
-  say "helpers written: spechub-diff, spechub-dash, spechub-md, spechub-view"
+  say "helpers written: spechub-diff, spechub-dash, spechub-db, spechub-md, spechub-view"
   say "remote helpers written: spechub-clip, spechub-open, spechub-bridge"
   say "herdr helpers written: spechub-herdr-tab, spechub-herdr-renumber, spechub-edit"
 }
@@ -1813,7 +1961,7 @@ apply_herdr() {
   have herdr || { say "herdr not installed, skipping keymap"; return 0; }
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
   local mod wt diffkey dashkey filekey filetabkey difftabkey dashtabkey
-  local pickkey picktabkey gitkey gittabkey scrollbars
+  local pickkey picktabkey gitkey gittabkey dbkey dbtabkey scrollbars
   local theme themeauto themelight toast labels panelsort
   mod=$(cfg_get herdr.chord_modifier alt)
   wt=$(cfg_get herdr.worktrees_directory "~/.herdr/worktrees")
@@ -1829,6 +1977,8 @@ apply_herdr() {
   picktabkey=$(cfg_get diffnav.pick_tab_key "alt+shift+x")
   gitkey=$(cfg_get lazygit.popup_key "alt+g")
   gittabkey=$(cfg_get lazygit.tab_key "alt+shift+g")
+  dbkey=$(cfg_get harlequin.popup_key "alt+q")
+  dbtabkey=$(cfg_get harlequin.tab_key "alt+shift+q")
   # herdr counts the scrollbar column inside the pane rect but reports the
   # full rect width to the program running in the pane. A full-screen app then
   # writes one column more than it has, so every wrapped row starts a column
@@ -1850,12 +2000,13 @@ apply_herdr() {
   [ "$(cfg_get gh_dash.enabled true)" = "true" ] || { dashkey=""; dashtabkey=""; }
   [ "$(cfg_get yazi.enabled true)"    = "true" ] || { filekey=""; filetabkey=""; }
   [ "$(cfg_get lazygit.enabled true)" = "true" ] || { gitkey=""; gittabkey=""; }
+  [ "$(cfg_get harlequin.enabled true)" = "true" ] || { dbkey=""; dbtabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$scrollbars|$theme|$themeauto|$themelight|$toast|$labels|$panelsort|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$dbkey|$dbtabkey|$scrollbars|$theme|$themeauto|$themelight|$toast|$labels|$panelsort|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
 (mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey,
- pickkey, picktabkey, gitkey, gittabkey, scrollbars,
+ pickkey, picktabkey, gitkey, gittabkey, dbkey, dbtabkey, scrollbars,
  theme, themeauto, themelight, toast, labels, panelsort,
  begin, end) = os.environ["SPECHUB_ARGS"].split("|")
 
@@ -1874,6 +2025,9 @@ CUSTOM = [
     (gitkey,     "lazygit",                       "git: stage, commit, push", "popup", "90%"),
     (gittabkey,  "spechub-herdr-tab lazygit lazygit",
                                                   "git: stage, commit, push (tab)", "shell", None),
+    (dbkey,      "spechub-db",                    "db: harlequin SQL editor", "popup", "90%"),
+    (dbtabkey,   "spechub-herdr-tab harlequin spechub-db",
+                                                  "db: harlequin SQL editor (tab)", "shell", None),
 ]
 
 def custom_blocks():
@@ -2845,6 +2999,42 @@ H
   say "clipboard: xclip stand-in written, copying over OSC 52"
 }
 
+apply_harlequin() {
+  # uv is astral's python installer. harlequin is a python program, so there is
+  # no release tarball to unpack: uv builds it an environment of its own and
+  # links one command into ~/.local/bin. Nothing else here needs uv, so a
+  # machine without it loses this component and keeps the rest.
+  have uv || {
+    say "uv not installed, skipping harlequin"
+    say "install it with: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    return 0
+  }
+  local a adapters missing=0
+  adapters=$(cfg_get_list harlequin.adapters "postgres snowflake")
+  local -a with=()
+  for a in $adapters; do with+=(--with "harlequin-$a"); done
+
+  # uv records what it installed in a receipt beside the environment.
+  # `uv tool install` on an already-installed tool does nothing at all, so an
+  # adapter added to the config would never arrive without --force. Compare the
+  # receipt against the config and force only when they differ.
+  local receipt="${UV_TOOL_DIR:-$HOME/.local/share/uv/tools}/harlequin/uv-receipt.toml"
+  if have harlequin && [ -f "$receipt" ]; then
+    for a in $adapters; do
+      grep -q "name = \"harlequin-$a\"" "$receipt" || missing=1
+    done
+    [ "$missing" = "0" ] && { say "harlequin already installed"; return 0; }
+    say "harlequin: adapters changed, reinstalling"
+    uv tool install --force harlequin "${with[@]}" >/dev/null 2>&1 \
+      && say "harlequin reinstalled with: $(echo $adapters)" \
+      || say "harlequin reinstall failed, run: uv tool install --force harlequin"
+    return 0
+  fi
+  uv tool install harlequin "${with[@]}" >/dev/null 2>&1 \
+    && say "harlequin installed with: $(echo $adapters)" \
+    || say "harlequin install failed, run: uv tool install harlequin"
+}
+
 apply_ghdash() {
   have gh || { say "gh not installed, skipping dashboard"; return 0; }
   gh extension list 2>/dev/null | grep -q gh-dash || gh extension install dlvhdr/gh-dash >/dev/null 2>&1
@@ -2910,10 +3100,195 @@ print("  gh-dash config written")
 PY
 }
 
+# Every tool with a version worth comparing.
+#   name | component key | source | reference | release asset match
+# mermaid-ascii is deliberately absent: it has no version flag at all, so
+# nothing here can read what is installed. `upgrade mermaid-ascii` still works,
+# because upgrade_one carries an arm of its own for it. A tool that is in
+# neither place is one upgrade cannot reach, whatever the docs promise.
+version_table() {
+  cat <<'T'
+delta	delta	github	dandavison/delta	x86_64-unknown-linux-gnu
+diffnav	diffnav	github	dlvhdr/diffnav	Linux_x86_64
+fzf	diffnav	github	junegunn/fzf	linux_amd64
+lazygit	lazygit	github	jesseduffield/lazygit	linux_x86_64
+tuicr	tuicr	github	agavra/tuicr	x86_64-unknown-linux-gnu
+yazi	yazi	github	sxyazi/yazi	x86_64-unknown-linux-gnu
+glow	markdown	github	charmbracelet/glow	Linux_x86_64
+herdr	herdr	herdr	-	-
+gh-dash	gh_dash	ghext	dlvhdr/gh-dash	-
+harlequin	harlequin	pypi	harlequin	-
+T
+}
+
+installed_version() {  # installed_version <name> -> a bare version, or nothing
+  local v=""
+  case "$1" in
+    # delta 0.19.2
+    delta)     v=$(delta --version 2>/dev/null | awk '{print $2}') ;;
+    # an ASCII banner, then: version v0.12.0
+    diffnav)   v=$(diffnav --version 2>/dev/null | sed -n 's/^version //p') ;;
+    # 0.74.3 (15f64c49)
+    fzf)       v=$(fzf --version 2>/dev/null | awk '{print $1}') ;;
+    # commit=..., version=0.64.1, os=linux, arch=amd64, git version=2.43.0
+    # Split on the commas first: the line ends in git's own version, and one
+    # regex over the whole line reads that one instead of lazygit's.
+    lazygit)   v=$(lazygit --version 2>/dev/null | tr ',' '\n' | sed -n 's/^ *version=//p') ;;
+    # glow version 3.0.0 (add5e7a)
+    glow)      v=$(glow --version 2>/dev/null | awk '{print $3}') ;;
+    # tuicr 0.23.0
+    tuicr)     v=$(tuicr --version 2>/dev/null | awk '{print $2}') ;;
+    # a block of lines, one of them: "    Version: 26.8.15 (1f3588d 2026-08-15)"
+    yazi)      v=$(yazi --version 2>/dev/null | sed -n 's/^ *Version: \([^ ]*\).*/\1/p') ;;
+    # herdr 0.8.2
+    herdr)     v=$(herdr --version 2>/dev/null | awk '{print $2}') ;;
+    # gh dash<TAB>dlvhdr/gh-dash<TAB>v4.25.2
+    gh-dash)   v=$(gh extension list 2>/dev/null | awk -F'\t' '$2=="dlvhdr/gh-dash"{print $3}') ;;
+    # harlequin v2.13.0, then an indented line per command it installed
+    harlequin) v=$(uv tool list 2>/dev/null | awk '$1=="harlequin"{print $2}') ;;
+  esac
+  printf '%s' "${v#v}"
+}
+
+# One JSON field, by dotted path, read from a file. install_binary hands its
+# release document to python through the environment; this one cannot, because
+# herdr's manifest carries a whole changelog and a document that size overflows
+# the environment an exec is allowed. A file has no such ceiling.
+json_field() {  # json_field <file> <dotted.path>
+  py "$1" "$2" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except (ValueError, OSError):
+    raise SystemExit
+for k in sys.argv[2].split("."):
+    d = d.get(k) if isinstance(d, dict) else None
+    if d is None: raise SystemExit
+print(d)
+PY
+}
+
+latest_version() {  # latest_version <source> <reference> -> a version, or nothing
+  [ "${SPECHUB_TW_OFFLINE:-0}" = "1" ] && return 0
+  local url field tmp v="" tok="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  local -a auth=()
+  case "$1" in
+    github|ghext)
+      url="https://api.github.com/repos/$2/releases/latest"; field=tag_name
+      # An unauthenticated GitHub call gets 60 an hour, shared with everything
+      # else on the machine. Ten tools in one run is a sixth of that. A token
+      # raises it to 5000 and costs nothing to pass. It goes to GitHub and
+      # nowhere else: the two hosts below never see it.
+      [ -n "$tok" ] && auth=(-H "Authorization: Bearer $tok") ;;
+    # herdr publishes its own manifest, and `herdr update` installs from it.
+    herdr) url="https://herdr.dev/latest.json"; field=version ;;
+    pypi)  url="https://pypi.org/pypi/$2/json"; field=info.version ;;
+    *) return 0 ;;
+  esac
+  tmp=$(mktemp)
+  curl -sSf "${auth[@]}" --max-time 10 "$url" -o "$tmp" 2>/dev/null \
+    && v=$(json_field "$tmp" "$field")
+  rm -f "$tmp"
+  printf '%s' "${v#v}"
+}
+
+outdated_report() {  # tab-separated rows on stdout, one per finding
+  local name key src ref inst latest
+  # Components that arrived since the last apply. See write_stamp for why this
+  # reads the stamp rather than the user's own config: a config that overrides
+  # four keys and defaults the rest is normal, and diffing against it would
+  # report every defaulted component as new.
+  if [ ! -f "$STAMP" ]; then
+    # No stamp and no managed block is a machine apply has never touched.
+    # Comparing versions there would report a workspace as current when none
+    # of it is installed, so say the one true thing and stop.
+    if ! grep -q "$BEGIN" "$HERDR_CFG" 2>/dev/null; then
+      printf 'missing\tworkspace\tnever applied on this machine\n'
+      return 0
+    fi
+    printf 'unknown\tcomponents\tno stamp yet, run apply once\n'
+  elif [ -f "$EXAMPLE" ]; then
+    # The row stays until apply installs the component and writes a new stamp.
+    # Only the detail moves: once upgrade has appended the block, "not in your
+    # config" is false, and a report that says it is stops being worth reading.
+    SPECHUB_STAMP="$STAMP" py "$EXAMPLE" "$CFG" <<'PY'
+import os, re, sys
+import yaml
+had = {l.strip() for l in open(os.environ["SPECHUB_STAMP"])
+       if l.strip() and not l.startswith("#")}
+mine = open(sys.argv[2]).read() if os.path.isfile(sys.argv[2]) else ""
+for k in (yaml.safe_load(open(sys.argv[1])) or {}):
+    if k in had:
+        continue
+    if re.search(r"(?m)^%s:" % re.escape(k), mine):
+        print("new\t%s\tnew component, run apply to install it" % k)
+    else:
+        print("new\t%s\tnew component, not in your config" % k)
+PY
+  fi
+
+  while IFS=$'\t' read -r name key src ref _; do
+    [ "$(cfg_get "$key.enabled" true)" = "true" ] || continue
+    # A fork build's version comes from a local checkout, so a release tag says
+    # nothing about it.
+    [ "$name" = "tuicr" ] && [ "$(cfg_get tuicr.build_from_fork false)" = "true" ] && continue
+    inst=$(installed_version "$name")
+    [ -n "$inst" ] || continue          # not installed is apply's business, not this one
+    latest=$(latest_version "$src" "$ref")
+    if [ -z "$latest" ]; then
+      [ "${SPECHUB_TW_OFFLINE:-0}" = "1" ] \
+        || printf 'unknown\t%s\tcould not reach %s\n' "$name" "$src"
+    elif [ "$inst" != "$latest" ]; then
+      printf 'stale\t%s\t%s -> %s\n' "$name" "$inst" "$latest"
+    fi
+  done < <(version_table)
+}
+
+# Reinstalls over what is there, from the coordinates the table already holds.
+# Split out so the tuicr arm can guard the fork build and still reach it,
+# rather than carrying a second copy of the repository and the asset match.
+upgrade_from_table() {  # upgrade_from_table <name>
+  local repo match
+  read -r repo match < <(version_table | awk -F'\t' -v n="$1" '$1==n{print $4, $5}')
+  [ -n "${repo:-}" ] && [ "$repo" != "-" ] \
+    || { say "$1 is not a tool this script installs"; return 1; }
+  INSTALL_FORCE=1 install_binary "$1" "$repo" "$match"
+  # yazi's archive carries ya beside it, and the two must not drift.
+  if [ "$1" = "yazi" ]; then
+    INSTALL_FORCE=1 install_binary ya sxyazi/yazi "$match"
+  fi
+}
+
+upgrade_one() {  # upgrade_one <name>
+  case "$1" in
+    herdr)     herdr update >/dev/null 2>&1 \
+                 && say "herdr updated" || say "herdr update failed" ;;
+    gh-dash)   gh extension upgrade dlvhdr/gh-dash >/dev/null 2>&1 \
+                 && say "gh-dash upgraded" || say "gh-dash upgrade failed" ;;
+    harlequin) uv tool upgrade harlequin >/dev/null 2>&1 \
+                 && say "harlequin upgraded" || say "harlequin upgrade failed" ;;
+    # Absent from the table, because it has no version flag for outdated to
+    # read. Naming it is the only way to refresh it, so the arm it needs is
+    # here rather than behind a table lookup that will never find it.
+    mermaid-ascii)
+      INSTALL_FORCE=1 install_binary mermaid-ascii AlexanderGrooff/mermaid-ascii Linux_x86_64 ;;
+    # The fork build comes from a local checkout, so a release archive would
+    # replace it with the stock binary and silently drop the patches it carries.
+    # outdated already skips it; naming it here has to skip it too.
+    tuicr)
+      if [ "$(cfg_get tuicr.build_from_fork false)" = "true" ]; then
+        say "tuicr is built from a fork here, so run apply to rebuild it"
+        return 0
+      fi
+      upgrade_from_table tuicr ;;
+    *) upgrade_from_table "$1" ;;
+  esac
+}
+
 case "$ACTION" in
   status)
     echo "config: $CFG $([ -f "$CFG" ] && echo '(found)' || echo '(missing, using defaults)')"
-    for t in herdr delta diffnav fzf lazygit tuicr yazi glow mermaid-ascii gh nvim; do
+    for t in herdr delta diffnav fzf lazygit tuicr yazi glow mermaid-ascii harlequin gh nvim; do
       d=true
       case "$t" in
         gh) k=gh_dash ;; glow|mermaid-ascii) k=markdown ;; fzf) k=diffnav ;;
@@ -2997,10 +3372,67 @@ case "$ACTION" in
     [ "$(cfg_get delta.enabled true)"   = "true" ] && apply_delta
     [ "$(cfg_get remote.enabled true)" = "true" ] && apply_remote
     [ "$(cfg_get gh_dash.enabled true)" = "true" ] && apply_ghdash
+    [ "$(cfg_get harlequin.enabled true)" = "true" ] && apply_harlequin
     echo "done. open a herdr session and press prefix+? to see the keymap"
+    # Last, so a run that died half way leaves no stamp claiming success.
+    write_stamp
+    ;;
+  outdated)
+    # Exit 2 means "cannot tell", and a missing PyYAML is exactly that.
+    # require_yaml exits 1, which every caller reads as "there is something to
+    # fetch" and acts on findings this run was never able to produce.
+    python3 -c 'import yaml' 2>/dev/null || {
+      echo "PyYAML is required to read $CFG, so nothing here can be compared" >&2
+      exit 2; }
+    [ -f "$EXAMPLE" ] || { echo "no config.example.yaml beside $0" >&2; exit 2; }
+    out=$(outdated_report)
+    [ -n "$out" ] || exit 0
+    printf '%s\n' "$out"
+    # An unknown is not a finding: nothing can be done about a tool with no
+    # version flag or a GitHub that did not answer. Only a real one exits 1.
+    printf '%s\n' "$out" | grep -qE '^(missing|new|stale)' && exit 1
+    exit 0
+    ;;
+  upgrade)
+    require_yaml
+    arch_supported || exit 1
+    shift
+    names="$*"
+    report=""
+    if [ -z "$names" ]; then
+      report=$(outdated_report)
+      names=$(printf '%s\n' "$report" | awk -F'\t' '$1=="stale"{print $2}')
+    fi
+    for n in $names; do upgrade_one "$n"; done
+
+    # A new component is a config edit, not a download. Append the block the
+    # example ships, comments and all, rather than rewriting the file through
+    # yaml - a round trip through the parser drops every comment the user has.
+    printf '%s\n' "$report" | awk -F'\t' '$1=="new"{print $2}' | while read -r comp; do
+      [ -n "$comp" ] || continue
+      SPECHUB_COMP="$comp" py "$EXAMPLE" "$CFG" <<'PY'
+import os, re, sys
+comp = os.environ["SPECHUB_COMP"]
+ship = open(sys.argv[1]).read()
+# The block runs from the component's own key to the next top-level key. A
+# top-level key is the only thing that starts in column zero and ends in a
+# colon, which is what makes a plain text slice safe here.
+m = re.search(r"(?ms)^%s:.*?(?=^\S+:|\Z)" % re.escape(comp), ship)
+if not m:
+    raise SystemExit
+block = m.group(0).rstrip() + "\n"
+mine = open(sys.argv[2]).read() if os.path.isfile(sys.argv[2]) else ""
+if re.search(r"(?m)^%s:" % re.escape(comp), mine):
+    raise SystemExit
+open(sys.argv[2], "a").write(("" if mine.endswith("\n\n") else "\n") + block)
+print("  %s added to your config, with its comments" % comp)
+PY
+    done
+
+    say "run apply to install anything new"
     ;;
   disable)
-    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|lazygit|neovim|tuicr>"
+    DISABLE_USAGE="usage: setup.sh disable <herdr|delta|diffnav|gh_dash|harlequin|lazygit|neovim|tuicr>"
     comp="${2:?$DISABLE_USAGE}"
     case "$comp" in
       delta) for k in core.pager interactive.diffFilter delta.navigate delta.line-numbers; do
@@ -3026,7 +3458,7 @@ PY
           say "neovim plugin file removed"
         fi
         say "now set neovim.enabled: false in $CFG so apply does not restore it" ;;
-      diffnav|gh_dash|lazygit|tuicr)
+      diffnav|gh_dash|harlequin|lazygit|tuicr)
         # Only this component's popup goes away. Rebuild the managed block so
         # the rest of the keymap survives.
         require_yaml
@@ -3103,7 +3535,13 @@ yaml.safe_dump(cfg, open(p, "w"), sort_keys=False, default_flow_style=False, wid
 PY
       say "gh-dash keybindings removed"
     fi
-    say "managed config and helpers removed. binaries left in place"
+    # The one tool uv owns rather than this script. Leaving it behind leaves an
+    # environment nothing on the machine points at any more.
+    if have uv && uv tool list 2>/dev/null | grep -q '^harlequin '; then
+      uv tool uninstall harlequin >/dev/null 2>&1 && say "harlequin removed"
+    fi
+    say "managed config and helpers removed. binaries left in place, except"
+    say "harlequin, which uv owns whole rather than as a file in $BIN"
     ;;
-  *) echo "usage: setup.sh [status|apply|disable <component>|uninstall]"; exit 1 ;;
+  *) echo "usage: setup.sh [status|apply|outdated|upgrade|disable <component>|uninstall]"; exit 1 ;;
 esac

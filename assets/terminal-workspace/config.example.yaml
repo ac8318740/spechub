@@ -160,6 +160,37 @@ lazygit:
   # Same tool, a new tab instead of a popup.
   tab_key: "alt+shift+g"
 
+harlequin:
+  enabled: true
+  # A SQL editor in the terminal. Write a query on the left, read the rows on
+  # the right, and browse the schema in a tree beside both.
+  #
+  # It is the one component that is not a downloaded binary. harlequin is a
+  # python program, so uv installs it into an environment of its own and puts
+  # one command on your PATH. A machine without uv skips this component and
+  # apply says so.
+  popup_key: "alt+q"
+  # Same editor, a new tab instead of a popup.
+  tab_key: "alt+shift+q"
+  # The databases harlequin can talk to. Each name here installs the
+  # harlequin-<name> package alongside it. Adding one and running apply again
+  # reinstalls harlequin with the new set.
+  adapters: [postgres, snowflake]
+  # Your connection profiles. spechub writes a starter file here the first time
+  # you press the key, and never writes it again - what is in it is yours.
+  #
+  #   default_profile = "local"
+  #
+  #   [profiles.local]
+  #   adapter = "postgres"
+  #   conn_str = "postgres://localhost:5432/postgres"
+  #
+  # A snowflake profile names an account, user, role, warehouse, database and
+  # schema, or a single connection_name pointing at a connection in
+  # ~/.snowflake/connections.toml. Prefer the second: it keeps the secret out
+  # of this file.
+  config_path: "~/.config/spechub/harlequin.toml"
+
 neovim:
   # The one component that is off by default, because it writes into a neovim
   # config you built yourself. Every other one owns its files outright.

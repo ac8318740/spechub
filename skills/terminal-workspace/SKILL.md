@@ -1,7 +1,7 @@
 ---
 name: terminal-workspace
-description: "Install and configure the optional terminal workspace, which runs several coding agents side by side in one terminal. It installs four tools the user drives – herdr, gh-dash, diffnav and lazygit – plus five that support them and two helpers of SpecHub's own. One YAML file holds every config. Use when the user asks to set up parallel agents in the terminal, or mentions herdr, gh-dash, diffnav or yazi. Use it too when the user wants agents that keep running after they close the terminal, or asks to turn any of these on or off. Every component toggles on its own, and every change is reversible."
-argument-hint: "[status | apply | disable <component> | uninstall]"
+description: "Install and configure the optional terminal workspace, which runs several coding agents side by side in one terminal. It installs five tools the user drives – herdr, gh-dash, diffnav, lazygit and harlequin – plus five that support them and two helpers of SpecHub's own. One YAML file holds every config. Use when the user asks to set up parallel agents in the terminal, or mentions herdr, gh-dash, diffnav, yazi or harlequin. Use it too when the user wants agents that keep running after they close the terminal, or asks to turn any of these on or off. Every component toggles on its own, and every change is reversible."
+argument-hint: "[status | apply | outdated | upgrade [tool...] | disable <component> | uninstall]"
 disable-model-invocation: true
 ---
 
@@ -26,7 +26,7 @@ SpecHub does not need any of this. Offer it, do not assume it.
 
 ```mermaid
 flowchart TD
-    IN["Ten components, one YAML file<br/>(machine-level, not per-project)"] --> ST["See what this machine has<br/>(setup.sh status)"]
+    IN["Eleven components, one YAML file<br/>(machine-level, not per-project)"] --> ST["See what this machine has<br/>(setup.sh status)"]
     ST --> CF["Copy the config, walk the choices<br/>(~/.config/spechub/terminal-workspace.yaml)"]
     CF --> AP["Install binaries, write the keys<br/>(setup.sh apply)"]
     AP --> Q{"How does the user reach<br/>this machine?"}
@@ -35,11 +35,13 @@ flowchart TD
     RM --> KB
     KB --> FB["Copy, open or download fails<br/>(read the last lines of status)"]
     AP --> OFF["Turn one component off<br/>(setup.sh disable, uninstall)"]
+    ST --> UP["Fetch what has moved on<br/>(setup.sh outdated, upgrade)"]
+    UP --> AP
 ```
 
 | Step in the diagram                   | Detail    |
 | ------------------------------------- | --------- |
-| Ten components, one YAML file         | section 1 |
+| Eleven components, one YAML file      | section 1 |
 | See what this machine has             | section 2 |
 | Copy the config, walk the choices     | section 3 |
 | Install binaries, write the keys      | section 4 |
@@ -48,24 +50,25 @@ flowchart TD
 | Free the keys the emulator swallows   | section 6 |
 | Copy, open or download fails          | section 7 |
 | Turn one component off                | section 8 |
+| Fetch what has moved on               | section 9 |
 
-## 1. Ten components, installed for a user account and not for a project
+## 1. Eleven components, installed for a user account and not for a project
 
-*Ten config components install eleven tools. herdr holds the terminals, and the rest read diffs, pull requests and files, and commit the result.*
+*Eleven config components install twelve tools. herdr holds the terminals, and the rest read diffs, pull requests, files and databases, and commit the result.*
 
 This is **machine-level, not per-project**. It installs binaries and writes
 keybindings for the user account, so it does not belong in
 `spechub/project.yaml`.
 
 Count components when you mean config keys, and tools when you mean binaries.
-The config holds ten component sections, plus an `enabled` master switch
-above them. Nine of those sections install eleven tools between them:
+The config holds eleven component sections, plus an `enabled` master switch
+above them. Ten of those sections install twelve tools between them:
 
-- Four tools the user drives day to day: herdr, gh-dash, diffnav and lazygit. tuicr joins them once a review starts
-- Five tools that support those three: delta, tuicr, yazi, mermaid-ascii and glow
+- Five tools the user drives day to day: herdr, gh-dash, diffnav, lazygit and harlequin. tuicr joins them once a review starts
+- Five tools that support them: delta, tuicr, yazi, mermaid-ascii and glow
 - Two helpers of SpecHub's own: spechub-md, and the spechub-clip and spechub-open pair
 
-The tenth, `neovim`, installs nothing. It writes one file into a neovim config
+The eleventh, `neovim`, installs nothing. It writes one file into a neovim config
 the user already has, and it is the only component that starts off.
 
 | Component | What it gives the user | Config key |
@@ -76,6 +79,7 @@ the user already has, and it is the only component that starts off.
 | delta | The diff renderer git pages through. | `delta.enabled` |
 | tuicr | Reviews a pull request inside the terminal. | `tuicr.enabled` |
 | lazygit | Stages, commits, amends and pushes, on one key. | `lazygit.enabled` |
+| harlequin | A SQL editor in the terminal, on one key. Installed by uv, and launched by spechub-db. | `harlequin.enabled` |
 | neovim | A dot in the LazyVim statusline for a buffer with unsaved changes. Installs nothing, writes one file, and starts off. | `neovim.enabled` |
 | yazi | A file manager, with markdown drawn live by spechub-md. One key sends the hovered file to the machine the user sits at. | `yazi.enabled` |
 | markdown | Markdown with its mermaid diagrams drawn as text, or served to a browser. Installs spechub-md, mermaid-ascii and glow. | `markdown.enabled` |
@@ -108,18 +112,24 @@ the same thing wherever the user is standing:
 
 *`status` reports what this machine already has, before anything changes it.*
 
-The script takes four commands, and this skill uses all of them.
+The script takes six commands, and this skill uses all of them.
 
-Section 2 runs `status` to report. Section 4 runs `apply` to install. Section 8
-runs `disable <component>` and `uninstall` to undo.
+Section 2 runs `status` to report, and section 4 runs `apply` to install.
+Section 8 runs `disable <component>` and `uninstall` to undo. Section 9 runs `outdated`
+and `upgrade` to fetch what has moved on.
 
 Run the script from the plugin directory. Resolve the path rather than
 guessing it:
 
 ```bash
-SETUP="$(dirname "$(find ~/.claude/plugins -path '*spechub*/assets/terminal-workspace/setup.sh' | head -1)")/setup.sh"
+PLUGIN=$(dirname "$(dirname "$(dirname "$(readlink -f ~/.claude/spechub/bin/spechub)")")")
+SETUP="$PLUGIN/assets/terminal-workspace/setup.sh"
 bash "$SETUP" status
 ```
+
+The SessionStart hook repoints that CLI symlink at every start, so it names
+the newest installed version. The `host` skill resolves its own script the
+same way.
 
 It reports three things.
 
@@ -499,15 +509,15 @@ empty.
 
 ## 8. Turning one component off, or all of them
 
-*`disable` undoes one component. `uninstall` undoes the managed config. Neither removes a binary.*
+*`disable` undoes one component. `uninstall` undoes the managed config. harlequin is the one binary either of them removes.*
 
 ```bash
-bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash, lazygit, neovim, tuicr
+bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash, harlequin, lazygit, neovim, tuicr
 ```
 
-`disable` takes those seven components and no others. For `diffnav`, `gh_dash`
-and `tuicr` it writes `<component>.enabled: false` into the config itself, then
-rebuilds the herdr keymap so the rest of it survives.
+`disable` takes those eight components and no others. For `diffnav`, `gh_dash`,
+`harlequin`, `lazygit` and `tuicr` it writes `<component>.enabled: false` into
+the config itself, then rebuilds the herdr keymap so the rest of it survives.
 
 For `herdr`, `delta` and `neovim` it does not. Set `<component>.enabled: false`
 yourself after those three, or the next `apply` restores them.
@@ -530,4 +540,49 @@ the herdr, tuicr and yazi configs. It unsets delta as the git pager.
 
 It deletes the helper scripts, the `xclip` stand-in, the neovim plugin file, and
 the keybindings it wrote into gh-dash. The user's own settings around them
-survive, and every binary stays.
+survive, and every binary stays except harlequin, which uv owns whole rather
+than as one file in `$BIN`.
+
+## 9. Keeping it current
+
+*`outdated` reports what has moved on. `upgrade` fetches it.*
+
+Run `outdated` first whenever the user invokes this skill on a machine that
+already has the workspace. It only reads, and it costs one round trip per tool.
+
+```bash
+bash "$SETUP" outdated
+```
+
+It prints one finding per line, tab-separated as kind, name and detail, and
+answers in its exit code:
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| 0 | Nothing to do | Say nothing |
+| 1 | Something is missing, new or stale | Show the findings and offer `upgrade` |
+| 2 | It cannot tell | Name the reason once and move on |
+
+Four kinds of finding:
+
+- `missing` – this machine has never applied the workspace, so run section 4 rather than `upgrade`
+- `new` – a component this plugin version ships that the user's last `apply` never saw
+- `stale` – an installed tool behind its published release
+- `unknown` – the script cannot compare, so there is nothing to act on
+
+```bash
+bash "$SETUP" upgrade              # everything reported stale
+bash "$SETUP" upgrade yazi delta   # only these
+```
+
+`upgrade` reinstalls each stale binary and appends any new component's config
+block to the user's file, comments intact. The three tools that update
+themselves go through `herdr update`, `gh extension upgrade dlvhdr/gh-dash`,
+and `uv tool upgrade harlequin`. Run `apply` afterwards to install what the new
+block turned on.
+
+Naming a tool skips the version comparison, which is the only way to refresh
+`mermaid-ascii`. It has no version flag, so nothing can read the installed version.
+
+`outdated` reads herdr's stable release manifest, so a user on the preview
+channel sees a `stale` row for herdr that is not one.

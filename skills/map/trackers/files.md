@@ -49,6 +49,9 @@ session:
   nodes with no unresolved blockers, shallowest provenance depth first.
   Provenance depth is how many `answers` links separate a node from the root.
 
+    The frontier never returns the root, the one node whose frontmatter has no
+    `answers`. The root is never work.
+
 - `spechub node walk --map <name> [--full] [--json] [--visuals]` – the
   packaging walk: the root first, then each node that hangs off it, depth
   first. The walk prints the root and pinned nodes in full.

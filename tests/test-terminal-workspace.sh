@@ -153,7 +153,7 @@ END_MARK="# <<< spechub terminal-workspace <<<"
 # empty here unless a check names it, which is the shape a config that says
 # nothing about them produces.
 args() {
-  echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|alt+g|alt+shift+g|false|${2-}|true|${3-}|${4-}|${5-true}|${6-}|$BEGIN_MARK|$END_MARK"
+  echo "$1|~/.herdr/worktrees|alt+f|alt+i|alt+y|alt+shift+y|alt+shift+f|alt+shift+i|alt+x|alt+shift+x|alt+g|alt+shift+g|alt+q|alt+shift+q|false|${2-}|true|${3-}|${4-}|${5-true}|${6-}|$BEGIN_MARK|$END_MARK"
 }
 
 cat > "$WORK/hand.toml" <<'T'
@@ -195,12 +195,19 @@ run_keymap alt "$WORK/merged.toml"
 if parses "$WORK/merged.toml"; then ok "merging onto a hand-written keymap stays valid TOML"
 else no "merging onto a hand-written keymap stays valid TOML"; fi
 
-# Ten managed blocks, plus the one hand-written binding on a key this
+# Twelve managed blocks, plus the one hand-written binding on a key this
 # script does not claim. The hand-written alt+f is dropped, because TOML
 # forbids two commands on one key and the managed one has to win.
 count=$(grep -c '^\[\[keys.command\]\]' "$WORK/merged.toml")
-if [ "$count" = "11" ]; then ok "managed custom commands replace, not duplicate ($count)"
-else no "expected 11 [[keys.command]] blocks, found $count"; fi
+if [ "$count" = "13" ]; then ok "managed custom commands replace, not duplicate ($count)"
+else no "expected 13 [[keys.command]] blocks, found $count"; fi
+
+# The newest component's two keys. A key that never reaches the merged file is
+# a component the user cannot open, however well the rest of apply ran.
+if grep -q 'key = "alt+q"' "$WORK/merged.toml" \
+   && grep -q 'spechub-herdr-tab harlequin spechub-db' "$WORK/merged.toml"
+then ok "the harlequin popup and its tab variant both reach the keymap"
+else no "the harlequin popup and its tab variant both reach the keymap"; fi
 
 if grep -q 'my-own-tool' "$WORK/merged.toml" && ! grep -q 'my-old-diff' "$WORK/merged.toml"
 then ok "a hand-written binding survives unless it collides with a managed key"
@@ -3486,27 +3493,242 @@ done
 # A name that is not a component at all takes the same silent path today.
 out=$(tw disable bogus); rc=$?
 missing=""
-for c in herdr delta diffnav gh_dash lazygit neovim tuicr; do
+for c in herdr delta diffnav gh_dash harlequin lazygit neovim tuicr; do
   printf '%s' "$out" | grep -qF "$c" || missing="$missing $c"
 done
 if [ "$rc" != "0" ] && [ -z "$missing" ]; then
-  ok "disable rejects an unknown component and lists the seven it supports"
+  ok "disable rejects an unknown component and lists the eight it supports"
 else
-  no "disable rejects an unknown component and lists the seven it supports (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
+  no "disable rejects an unknown component and lists the eight it supports (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
 fi
 
 # tuicr gained a disable branch without reaching the usage line, so the one
 # place a user goes to find out what they may type still omits it.
 out=$(tw disable); rc=$?
 missing=""
-for c in herdr delta diffnav gh_dash lazygit neovim tuicr; do
+for c in herdr delta diffnav gh_dash harlequin lazygit neovim tuicr; do
   printf '%s' "$out" | grep -qF "$c" || missing="$missing $c"
 done
 if [ "$rc" != "0" ] && [ -z "$missing" ]; then
-  ok "the usage line for disable lists all seven supported components"
+  ok "the usage line for disable lists all eight supported components"
 else
-  no "the usage line for disable lists all seven supported components (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
+  no "the usage line for disable lists all eight supported components (rc=$rc, unlisted:${missing:- none}; said: $(flat "$out"))"
 fi
+
+
+echo "outdated reports what a machine is missing"
+# Every check here is offline: SPECHUB_TW_OFFLINE=1 skips the release lookups,
+# so nothing in the suite touches the network. The version comparison itself is
+# covered by the table check below rather than by a live call, because a
+# passing suite must not depend on GitHub being up.
+OWORK="$WORK/tw-outdated"
+mkdir -p "$OWORK/home/.config/spechub" "$OWORK/home/.config/herdr"
+otw() {
+  env HOME="$OWORK/home" \
+      SPECHUB_TW_BIN="$OWORK/home/.local/bin" \
+      SPECHUB_TW_CONFIG="$OWORK/home/.config/spechub/terminal-workspace.yaml" \
+      SPECHUB_TW_OFFLINE=1 \
+      bash "$SETUP" "$@" 2>&1
+}
+cp "$ROOT/assets/terminal-workspace/config.example.yaml" \
+   "$OWORK/home/.config/spechub/terminal-workspace.yaml"
+STAMPF="$OWORK/home/.config/spechub/terminal-workspace.applied"
+OHERDR="$OWORK/home/.config/herdr/config.toml"
+
+# No stamp and no managed block: apply has never run here at all. Listing what
+# is behind would claim a workspace exists, so the one true thing is that none
+# of it is installed.
+out=$(otw outdated); rc=$?
+if [ "$rc" = "1" ] && printf '%s' "$out" | grep -q '^missing	workspace	'; then
+  ok "outdated says the workspace was never applied on a machine it has not touched"
+else
+  no "outdated with no stamp and no managed block (rc=$rc, said: $(flat "$out"))"
+fi
+
+# A managed block but no stamp: an older version applied here, before the stamp
+# existed. Nothing can be compared, and saying so beats guessing.
+printf '%s\n%s\n' "$BEGIN_MARK" "$END_MARK" > "$OHERDR"
+out=$(otw outdated); rc=$?
+if [ "$rc" = "0" ] && printf '%s' "$out" | grep -q 'no stamp'; then
+  ok "outdated says so rather than guessing when an older apply left no stamp"
+else
+  no "outdated with a managed block and no stamp (rc=$rc, said: $(flat "$out"))"
+fi
+
+# A stamp from a version that predates harlequin. That is the finding the whole
+# feature exists for.
+python3 - "$ROOT/assets/terminal-workspace/config.example.yaml" "$STAMPF" <<'PYSTAMP'
+import sys
+import yaml
+keys = [k for k in (yaml.safe_load(open(sys.argv[1])) or {}) if k != "harlequin"]
+open(sys.argv[2], "w").write("\n".join(keys) + "\n")
+PYSTAMP
+out=$(otw outdated); rc=$?
+if [ "$rc" = "1" ] && printf '%s' "$out" | grep -q '^new	harlequin	'; then
+  ok "outdated reports a component the last apply never saw"
+else
+  no "outdated does not report harlequin as new (rc=$rc, said: $(flat "$out"))"
+fi
+
+# The same stamp, but the block is now in the user's yaml, which is what
+# upgrade leaves behind. The row stays, because apply still has to install the
+# component; only the detail moves, because "not in your config" is now false.
+printf '\nharlequin:\n  enabled: true\n' \
+  >> "$OWORK/home/.config/spechub/terminal-workspace.yaml"
+out=$(otw outdated); rc=$?
+if [ "$rc" = "1" ] && printf '%s' "$out" | grep -q '^new	harlequin	new component, run apply'; then
+  ok "a new component that upgrade already added reads as one to install, not one to add"
+else
+  no "outdated still says harlequin is not in the config (rc=$rc, said: $(flat "$out"))"
+fi
+cp "$ROOT/assets/terminal-workspace/config.example.yaml" \
+   "$OWORK/home/.config/spechub/terminal-workspace.yaml"
+
+# A stamp that names every shipped component. Nothing is new, nothing is
+# reachable offline, so there is nothing to say.
+python3 - "$ROOT/assets/terminal-workspace/config.example.yaml" "$STAMPF" <<'PYSTAMP'
+import sys
+import yaml
+open(sys.argv[2], "w").write(
+    "\n".join(yaml.safe_load(open(sys.argv[1])) or {}) + "\n")
+PYSTAMP
+out=$(otw outdated); rc=$?
+if [ "$rc" = "0" ] && [ -z "$out" ]; then
+  ok "outdated says nothing when the stamp matches what ships"
+else
+  no "outdated should be silent and exit 0 (rc=$rc, said: $(flat "$out"))"
+fi
+
+# A fork build comes from a local checkout, so a release archive would replace
+# it with the stock binary and drop the patches it carries. outdated already
+# skips it, and naming it on upgrade has to skip it too.
+printf 'tuicr:\n  build_from_fork: true\n' \
+  > "$OWORK/home/.config/spechub/terminal-workspace.yaml"
+# A curl that always fails, so this check cannot reach the network even if the
+# guard it tests regresses. SPECHUB_TW_OFFLINE gates the version lookups and
+# not install_binary, which is the call a regression here would reach.
+NOCURL="$WORK/nocurl"; mkdir -p "$NOCURL"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$NOCURL/curl"; chmod +x "$NOCURL/curl"
+out=$(env HOME="$OWORK/home" \
+          SPECHUB_TW_BIN="$OWORK/home/.local/bin" \
+          SPECHUB_TW_CONFIG="$OWORK/home/.config/spechub/terminal-workspace.yaml" \
+          SPECHUB_TW_OFFLINE=1 PATH="$NOCURL:$PATH" \
+          bash "$SETUP" upgrade tuicr 2>&1); rc=$?
+cp "$ROOT/assets/terminal-workspace/config.example.yaml" \
+   "$OWORK/home/.config/spechub/terminal-workspace.yaml"
+if printf '%s' "$out" | grep -q 'fork' && ! printf '%s' "$out" | grep -q 'tuicr installed'; then
+  ok "upgrade refuses to overwrite a tuicr built from a fork"
+else
+  no "upgrade tuicr overwrote a fork build (rc=$rc, said: $(flat "$out"))"
+fi
+
+# Exit 2 is the code /spechub:setup reads as "cannot tell", and it is the only
+# one that leaves the user unbothered. Without PyYAML nothing here can be
+# compared, so exiting 1 would offer an upgrade for findings that do not exist.
+NOYAML="$WORK/noyaml"; mkdir -p "$NOYAML"
+cat > "$NOYAML/python3" <<'NOYSTUB'
+#!/usr/bin/env bash
+# A python3 that has everything except PyYAML.
+if [ "${1:-}" = "-c" ]; then
+  case "${2:-}" in *"import yaml"*) exit 1 ;; esac
+fi
+exec /usr/bin/python3 "$@"
+NOYSTUB
+chmod +x "$NOYAML/python3"
+out=$(env HOME="$OWORK/home" \
+          SPECHUB_TW_BIN="$OWORK/home/.local/bin" \
+          SPECHUB_TW_CONFIG="$OWORK/home/.config/spechub/terminal-workspace.yaml" \
+          SPECHUB_TW_OFFLINE=1 PATH="$NOYAML:$PATH" \
+          bash "$SETUP" outdated 2>&1); rc=$?
+if [ "$rc" = "2" ]; then
+  ok "outdated exits 2 rather than 1 when it cannot read the config at all"
+else
+  no "outdated should exit 2 without PyYAML (rc=$rc, said: $(flat "$out"))"
+fi
+
+# version_table lives inside setup.sh, so the rows have to be lifted out of the
+# source rather than called. Both directions of the check read this.
+TABLE_ROWS=$(sed -n '/^version_table()/,/^}/p' "$SETUP" | sed -n '/<</,/^T$/p' | grep -F '	')
+
+# Every GitHub tool in the version table has to name the same repository and the
+# same asset match as the install_binary call in apply. Two lists of the same
+# facts is exactly how hdiff and hdash outlived themselves.
+drift=""
+while IFS=$'\t' read -r name _ src repo match; do
+  [ "$src" = "github" ] || continue
+  grep -qF "install_binary $name $repo $match" "$SETUP" || drift="$drift $name"
+done <<< "$TABLE_ROWS"
+# And the reverse. A tool apply installs but neither the table nor an arm of
+# its own knows about is a tool `upgrade <name>` answers "not a tool this
+# script installs" for, however plainly the docs say it can be refreshed.
+unreachable=""
+while read -r name; do
+  [ "$name" = "ya" ] && continue        # yazi's own arm reinstalls it
+  cut -f1 <<< "$TABLE_ROWS" | grep -qx "$name" && continue
+  sed -n '/^upgrade_one()/,/^}/p' "$SETUP" | grep -qE "^ *$name\)" && continue
+  unreachable="$unreachable $name"
+done < <(grep -oE 'install_binary [a-z-]+ [A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+ ' "$SETUP" \
+         | awk '{print $2}' | sort -u)
+if [ -z "$unreachable" ]; then ok "every tool apply installs is one upgrade can reach"
+else no "upgrade cannot reach tools apply installs:$unreachable"; fi
+
+if [ -n "$drift" ]; then no "version table and install_binary disagree:$drift"
+elif [ -z "$TABLE_ROWS" ]; then
+  no "the version table has no rows to check"
+else ok "the version table matches what apply installs"; fi
+
+
+echo "spechub-db opens a profile without rewriting the user's file"
+# The profile file is the user's. Writing it once is a convenience; writing it
+# twice would silently delete a connection string they typed.
+DBHELPER="$WORK/db-helper"
+awk -v n="spechub-db" '$0 == "  cat > \"$BIN/" n "\" <<'\''H'\''" {f=1; next} f && $0 == "H" {exit} f' \
+  "$SETUP" > "$DBHELPER"
+DBH="$WORK/db-home"; DBBIN="$WORK/db-bin"
+mkdir -p "$DBH/.config/spechub" "$DBBIN"
+# A stand-in for harlequin, so the launch is observable and nothing is
+# installed to make it so. Without it the helper exits before it reads a
+# profile at all, and the check below would pass on a file nothing opened.
+cat > "$DBBIN/harlequin" <<'DBSTUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$HOME/harlequin-argv"
+DBSTUB
+chmod +x "$DBBIN/harlequin"
+printf 'default_profile = "mine"\n\n[profiles.mine]\nadapter = "postgres"\n' \
+  > "$DBH/.config/spechub/harlequin.toml"
+before=$(cat "$DBH/.config/spechub/harlequin.toml")
+env HOME="$DBH" PATH="$DBBIN:$PATH" bash "$DBHELPER" >/dev/null 2>&1
+if [ "$before" = "$(cat "$DBH/.config/spechub/harlequin.toml")" ]
+then ok "spechub-db never rewrites a profile file that already exists"
+else no "spechub-db overwrote the user's profile file"; fi
+
+# A path in the config is a path the script has to read, or the config is a
+# place a user edits a line and sees nothing happen.
+CPW="$WORK/tw-cfgpath"
+mkdir -p "$CPW/home/.config/spechub" "$CPW/home/.local/bin"
+cat > "$CPW/home/.config/spechub/terminal-workspace.yaml" <<YML
+harlequin:
+  config_path: "$CPW/home/my profiles.toml"
+YML
+# setup.sh runs an action the moment it is sourced, so take the functions above
+# the case block and leave the action behind. write_helpers writes files and
+# reaches no network, which is why it is safe to call where apply is not.
+sed '/^case "$ACTION" in$/,$d' "$SETUP" > "$WORK/setup-funcs.sh"
+(
+  HOME="$CPW/home"
+  SPECHUB_TW_BIN="$CPW/home/.local/bin"
+  SPECHUB_TW_CONFIG="$CPW/home/.config/spechub/terminal-workspace.yaml"
+  # shellcheck disable=SC1090
+  . "$WORK/setup-funcs.sh"
+  write_helpers
+) >/dev/null 2>&1
+if grep -qF "'$CPW/home/my profiles.toml'" "$CPW/home/.local/bin/spechub-db" 2>/dev/null
+then ok "spechub-db takes its profile path from harlequin.config_path"
+else no "spechub-db ignored harlequin.config_path (default line: $(grep -m1 '^DB_CFG_DEFAULT=' "$CPW/home/.local/bin/spechub-db" 2>/dev/null))"; fi
+
+if grep -qF -- '-P mine' "$DBH/harlequin-argv" 2>/dev/null
+then ok "spechub-db launches harlequin on the one profile it found"
+else no "spechub-db launches harlequin on the one profile (argv: $(cat "$DBH/harlequin-argv" 2>/dev/null))"; fi
 
 
 echo "uninstall clears every managed region"

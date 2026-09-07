@@ -561,6 +561,8 @@ export function deriveDepths(nodes: MapNode[]): Map<string, number> {
 // provenance depth first, node number only as a stable final tiebreak.
 // A blocker blocks unless it is resolved or out-of-scope – fog and
 // claimed both still block, since neither is settled.
+// The root is never on it. The root carries no status of its own – its state
+// is derived from its subtree – so nobody works it, whatever its file stores.
 export function frontier(nodes: MapNode[]): MapNode[] {
   const depths = deriveDepths(nodes);
   const byId = indexById(nodes);
@@ -572,7 +574,7 @@ export function frontier(nodes: MapNode[]): MapNode[] {
     return isSettled(blocker.status);
   };
   return nodes
-    .filter(n => n.status === 'open' && n.blockedBy.every(blockerSettled))
+    .filter(n => Boolean(n.answers) && n.status === 'open' && n.blockedBy.every(blockerSettled))
     .sort((a, b) => {
       const byDepth = (depths.get(a.id) ?? 0) - (depths.get(b.id) ?? 0);
       return byDepth !== 0 ? byDepth : compareIds(a.id, b.id);
