@@ -17,7 +17,6 @@ import {
   frontier,
   isSettled,
   rootCountError,
-  type MapNode,
   type NodeKind,
   type NodeMode,
   type NodeStatus,
@@ -346,12 +345,6 @@ function linkedId(node: DiagramNode): string {
 // behind an `n`. Both fences and every edge read the id through here.
 function mermaidId(id: string): string {
   return `n${id}`;
-}
-
-// `frontier` and `deriveDepths` take a MapNode, and a DiagramNode is one
-// without the two fields only a file on disk has.
-function asMapNodes(nodes: DiagramNode[]): MapNode[] {
-  return nodes.map(n => ({ ...n, body: '', file: '' }));
 }
 
 function resolveStart(nodes: DiagramNode[], from?: string): DiagramNode {
@@ -915,7 +908,7 @@ export function renderDiagram(input: DiagramNode[], options: RenderOptions = {})
   const start = resolveStart(nodes, options.from);
   // Validates the provenance chain and every blocking reference, then hands
   // back the nodes ready to be worked now.
-  const onFrontier = new Set(frontier(asMapNodes(nodes)).map(n => n.id));
+  const onFrontier = new Set(frontier(nodes).map(n => n.id));
   const drawn = collectDrawn(nodes, start);
   const drawnIds = new Set(drawn.map(d => d.node.id));
 

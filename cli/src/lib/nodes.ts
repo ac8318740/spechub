@@ -64,6 +64,28 @@ export function rootCountError(roots: number): string {
   return `map has ${roots} roots – expected exactly one`;
 }
 
+/**
+ * The fields every map query reads, on either backend.
+ *
+ * `frontier`, `deriveDepths` and `walkTree` are graph walks over ids and
+ * edges, so they take this rather than a stored node. A file on disk carries a
+ * body and a filename and a GitHub issue carries neither, which is why both are
+ * optional here – a github node is not a stored one with the two fields faked.
+ */
+export interface GraphNode {
+  id: string;
+  title: string;
+  status: NodeStatus;
+  mode: NodeMode;
+  kind: NodeKind;
+  label: string;
+  answers?: string;
+  blockedBy: string[];
+  pinned: boolean;
+  body?: string;
+  file?: string;
+}
+
 export interface MapNode {
   id: string; // zero-padded number, identity only – never order
   title: string;
@@ -391,7 +413,7 @@ function requireExisting(nodes: MapNode[], id: string, role: string): void {
  * The index holds the loaded objects themselves, never copies. A caller that
  * changes a node it already has changes what the index hands back.
  */
-function indexById(nodes: MapNode[]): Map<string, MapNode> {
+function indexById<T extends GraphNode>(nodes: readonly T[]): Map<string, T> {
   return new Map(nodes.map(n => [n.id, n]));
 }
 
@@ -527,7 +549,7 @@ export function updateNode(
 // Depth is derived from the answers chain, never declared. Root is 0.
 // Hand-edited maps can hold a missing parent or a cycle, so both throw
 // with the node named rather than looping or guessing.
-export function deriveDepths(nodes: MapNode[]): Map<string, number> {
+export function deriveDepths(nodes: readonly GraphNode[]): Map<string, number> {
   const byId = indexById(nodes);
   const depths = new Map<string, number>();
 
@@ -563,7 +585,7 @@ export function deriveDepths(nodes: MapNode[]): Map<string, number> {
 // claimed both still block, since neither is settled.
 // The root is never on it. The root carries no status of its own – its state
 // is derived from its subtree – so nobody works it, whatever its file stores.
-export function frontier(nodes: MapNode[]): MapNode[] {
+export function frontier<T extends GraphNode>(nodes: T[]): T[] {
   const depths = deriveDepths(nodes);
   const byId = indexById(nodes);
   const blockerSettled = (id: string): boolean => {
@@ -584,22 +606,22 @@ export function frontier(nodes: MapNode[]): MapNode[] {
 // The packaging walk: preorder over the provenance tree, children in id
 // order. The walk is the reading order and the handoff – it emits every
 // node regardless of mode or depth, never filtering on leaf position.
-export function walkTree(nodes: MapNode[]): Array<{ node: MapNode; depth: number }> {
+export function walkTree<T extends GraphNode>(nodes: T[]): Array<{ node: T; depth: number }> {
   deriveDepths(nodes); // validates parents exist and the chain is acyclic
   const roots = nodes.filter(n => !n.answers);
   if (nodes.length === 0) return [];
   if (roots.length !== 1) {
     throw new Error(rootCountError(roots.length));
   }
-  const children = new Map<string, MapNode[]>();
+  const children = new Map<string, T[]>();
   for (const node of nodes) {
     if (!node.answers) continue;
     const siblings = children.get(node.answers) ?? [];
     siblings.push(node);
     children.set(node.answers, siblings);
   }
-  const out: Array<{ node: MapNode; depth: number }> = [];
-  const visit = (node: MapNode, depth: number): void => {
+  const out: Array<{ node: T; depth: number }> = [];
+  const visit = (node: T, depth: number): void => {
     out.push({ node, depth });
     const kids = (children.get(node.id) ?? []).sort((a, b) => compareIds(a.id, b.id));
     for (const kid of kids) visit(kid, depth + 1);

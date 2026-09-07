@@ -107,6 +107,8 @@ Think freely. When insights crystallize, you might offer:
 If the user mentions a map or you detect one is relevant:
 
 1. Orient with the packaging walk (`spechub node walk --map <name>`)
+    - On GitHub, `--map` refuses – pipe `gh issue list` into `--stdin` per the
+      map skill's `trackers/github.md`
 2. Reference them naturally in conversation
 3. Offer to capture when a decision lands:
 

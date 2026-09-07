@@ -155,6 +155,18 @@ REST call for the blockers, per issue, on every round.
 
 - The tracker derives depth from the header chain and never stores it.
 
+The CLI runs both queries from one `list` pipe:
+
+```bash
+issues=$(gh issue list --label "map:<name>" --state all --limit 500 \
+  --json number,title,body,state,stateReason,labels,url)
+echo "$issues" | ~/.claude/spechub/bin/spechub node frontier --stdin [--mode hitl|afk] [--json]
+echo "$issues" | ~/.claude/spechub/bin/spechub node walk --stdin [--full] [--json] [--visuals]
+```
+
+`--map` refuses on this backend. The map is not on disk, so a `--map` read
+would answer out of an empty directory.
+
 ## Degraded remotes
 
 A degraded remote is one where GitHub's native link features are off or not

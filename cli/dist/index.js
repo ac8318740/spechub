@@ -11832,6 +11832,646 @@ var init_global_config = __esm({
   }
 });
 
+// src/lib/atomic-file.ts
+import { randomBytes } from "node:crypto";
+import { renameSync, rmSync as rmSync2, writeFileSync as writeFileSync2 } from "node:fs";
+function tempPathFor(path) {
+  return `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+}
+function replaceFileAtomically(path, text, beforeRename) {
+  const temp = tempPathFor(path);
+  try {
+    writeFileSync2(temp, text, "utf-8");
+    beforeRename?.(temp);
+    renameSync(temp, path);
+  } catch (err) {
+    try {
+      rmSync2(temp, { force: true });
+    } catch {
+    }
+    throw err;
+  }
+}
+var init_atomic_file = __esm({
+  "src/lib/atomic-file.ts"() {
+    "use strict";
+  }
+});
+
+// src/lib/host-status.ts
+function isBrowserAxis(key) {
+  return BROWSER_AXIS_KEY_SET.has(key);
+}
+function requiredHostAxisKeys({ hasFrontend }) {
+  return HOST_AXES.filter((axis) => axis.required).filter((axis) => hasFrontend || !isBrowserAxis(axis.key)).map((axis) => axis.key);
+}
+function fallbackBrowserMode(declared) {
+  return BROWSER_MODE_PRIORITY.find((mode) => declared[mode] === true);
+}
+function declaredBrowserModes(config) {
+  const declared = {};
+  for (const mode of BROWSER_MODE_PRIORITY) {
+    const result = getKey(config, BROWSER_AXIS_KEYS[mode]);
+    if (result.status === "set" && typeof result.value === "boolean") {
+      declared[mode] = result.value;
+    }
+  }
+  return declared;
+}
+function record(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return void 0;
+  return value;
+}
+function orcaRuntimeIsReady(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return false;
+  }
+  const runtime = record(record(record(parsed)?.result)?.runtime);
+  return runtime?.reachable === true && runtime?.state === "ready";
+}
+function projectHostContext(projectYaml, hasProject = true) {
+  const project = record(projectYaml);
+  const frontend = project ? project.frontend : void 0;
+  const hasFrontend = hasProject && frontend !== void 0 && frontend !== null;
+  const browser = record(frontend)?.browser;
+  const rawMode = record(browser)?.mode;
+  const preferredMode = BROWSER_MODE_PRIORITY.find((mode) => mode === rawMode);
+  const rawPort = record(browser)?.cdp_port;
+  const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : preferredMode === "remote" ? DEFAULT_REMOTE_CDP_PORT : DEFAULT_CDP_PORT;
+  const rawFallback = record(browser)?.fallback;
+  const fallback = typeof rawFallback === "string" ? rawFallback : void 0;
+  return { hasProject, hasFrontend, preferredMode, cdpPort, fallback };
+}
+function projectAllowsFallback(project) {
+  return project.fallback !== FALLBACK_FORBIDDEN;
+}
+function resolveBrowserMode(declared, project) {
+  if (!project.hasProject) return { status: "unresolved", problem: { kind: "no-project" } };
+  if (!project.hasFrontend) return { status: "unresolved", problem: { kind: "no-frontend" } };
+  const available = fallbackBrowserMode(declared);
+  if (!available) {
+    const anyDeclared = BROWSER_MODE_PRIORITY.some((mode) => declared[mode] !== void 0);
+    return {
+      status: "unresolved",
+      problem: { kind: anyDeclared ? "host-declares-none" : "host-undescribed" }
+    };
+  }
+  const preferred = project.preferredMode;
+  if (!preferred) {
+    return { status: "resolved", mode: available, fallback: false };
+  }
+  if (declared[preferred] === true) {
+    return { status: "resolved", mode: preferred, preferred, fallback: false };
+  }
+  if (!projectAllowsFallback(project)) {
+    return { status: "unresolved", problem: { kind: "fallback-forbidden", preferred, available } };
+  }
+  return { status: "resolved", mode: available, preferred, fallback: true };
+}
+function statedString(value) {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+function projectSettings(projectYaml, hasProject = true) {
+  if (!hasProject) return null;
+  const project = record(projectYaml);
+  const frontend = project?.frontend;
+  const hasFrontend = frontend !== void 0 && frontend !== null;
+  const browser = record(record(frontend)?.browser);
+  const commands2 = {};
+  for (const [name, value] of Object.entries(record(project?.commands) ?? {})) {
+    const command = statedString(value);
+    if (command !== null) commands2[name] = command;
+  }
+  const rawPort = browser?.cdp_port;
+  const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : null;
+  return {
+    profile: statedString(project?.profile),
+    commands: commands2,
+    browser: hasFrontend ? { mode: statedString(browser?.mode), cdpPort, fallback: statedString(browser?.fallback) } : null
+  };
+}
+function frontendHelpersDir(projectYaml) {
+  return statedString(record(record(projectYaml)?.frontend)?.helpers_dir);
+}
+function workflowFlag(projectYaml, flag, whenUnstated) {
+  const key = `workflow.${flag}`;
+  const fallback = whenUnstated(key);
+  const value = record(record(projectYaml)?.workflow)?.[flag];
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return fallback;
+  try {
+    return parseBooleanWord(key, value);
+  } catch {
+    return fallback;
+  }
+}
+function domainCount(domainMapYaml) {
+  const domains = record(record(domainMapYaml)?.domains);
+  return domains ? Object.keys(domains).length : null;
+}
+function agentBrowserCdpPort(agentBrowserJson) {
+  const cdp = record(agentBrowserJson)?.cdp;
+  if (typeof cdp === "number") return Number.isInteger(cdp) && cdp > 0 ? cdp : null;
+  if (typeof cdp !== "string") return null;
+  const port = Number(cdp.trim());
+  return Number.isInteger(port) && port > 0 ? port : null;
+}
+function outputStyleOf(settingsJson) {
+  return statedString(record(settingsJson)?.outputStyle);
+}
+var BROWSER_MODE_PRIORITY, BROWSER_AXIS_KEYS, BROWSER_AXIS_LIST, BROWSER_AXIS_KEY_SET, ORCHESTRATORS, ORCHESTRATOR_AXIS_KEYS, ORCHESTRATOR_PROBES, CHROMIUM_BINARIES, DEFAULT_REMOTE_CDP_PORT, DEFAULT_CDP_PORT, FALLBACK_FORBIDDEN, BROWSER_FALLBACK_VALUES;
+var init_host_status = __esm({
+  "src/lib/host-status.ts"() {
+    "use strict";
+    init_global_config();
+    BROWSER_MODE_PRIORITY = ["remote", "headless", "local"];
+    BROWSER_AXIS_KEYS = {
+      remote: "host.browser.remote",
+      headless: "host.browser.headless",
+      local: "host.browser.local"
+    };
+    BROWSER_AXIS_LIST = BROWSER_MODE_PRIORITY.map((mode) => BROWSER_AXIS_KEYS[mode]).join(", ");
+    BROWSER_AXIS_KEY_SET = new Set(Object.values(BROWSER_AXIS_KEYS));
+    ORCHESTRATORS = ["herdr", "orca"];
+    ORCHESTRATOR_AXIS_KEYS = {
+      herdr: "host.orchestrators.herdr",
+      orca: "host.orchestrators.orca"
+    };
+    ORCHESTRATOR_PROBES = {
+      // `herdr api snapshot` reads live state off the server's socket, so it fails
+      // outright when no server is behind it and its exit status is the whole
+      // answer. The subcommand is the probe: bare `herdr api` is a command group
+      // that prints its subcommands and exits 2 whether or not a server is running,
+      // so it fails a host that is working fine.
+      herdr: { binaries: ["herdr"], args: ["api", "snapshot"], answered: () => true },
+      orca: {
+        binaries: ["orca-ide", "orca"],
+        args: ["status", "--json"],
+        answered: orcaRuntimeIsReady,
+        docs: "https://github.com/stablyai/orca/blob/main/docs/reference/headless-linux-server.md"
+      }
+    };
+    CHROMIUM_BINARIES = [
+      "chromium",
+      "chromium-browser",
+      "google-chrome",
+      "google-chrome-stable"
+    ];
+    DEFAULT_REMOTE_CDP_PORT = 19988;
+    DEFAULT_CDP_PORT = 9555;
+    FALLBACK_FORBIDDEN = "none";
+    BROWSER_FALLBACK_VALUES = [
+      FALLBACK_FORBIDDEN,
+      ...BROWSER_MODE_PRIORITY
+    ];
+  }
+});
+
+// src/lib/project-config.ts
+import {
+  accessSync,
+  chmodSync,
+  constants as fsConstants,
+  existsSync as existsSync7,
+  readFileSync as readFileSync5,
+  readdirSync as readdirSync4,
+  realpathSync,
+  statSync as statSync2
+} from "node:fs";
+import { basename, dirname as dirname4, join as join8 } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+function projectKeySpec(key) {
+  return PROJECT_KEYS[key];
+}
+function profileNames() {
+  const pluginRoot = findPluginRoot();
+  if (!pluginRoot) return [];
+  const dir = join8(pluginRoot, PROFILES_DIR);
+  if (!existsSync7(dir)) return [];
+  return readdirSync4(dir).filter((name) => name.endsWith(".yaml")).map((name) => basename(name, ".yaml")).sort();
+}
+function parseEnum(key, raw, values) {
+  if (values.includes(raw)) return raw;
+  throw invalidEnumValue(key, raw, values);
+}
+function numberRange(spec) {
+  const { min, max } = spec;
+  if (min !== void 0 && max !== void 0) return ` from ${min} to ${max}`;
+  if (min !== void 0) return `, ${min} or more`;
+  if (max !== void 0) return `, ${max} or less`;
+  return "";
+}
+function numberExpectation(spec) {
+  return `Expected a ${spec.integer ? "whole number" : "number"}${numberRange(spec)}.`;
+}
+function parseNumber(key, raw, spec) {
+  const value = Number(raw);
+  const expected = numberExpectation(spec);
+  if (raw.trim() === "" || !Number.isFinite(value)) throw invalidValue(key, raw, expected);
+  if (spec.integer && !Number.isInteger(value)) throw invalidValue(key, raw, expected);
+  if (spec.min !== void 0 && value < spec.min) throw invalidValue(key, raw, expected);
+  if (spec.max !== void 0 && value > spec.max) throw invalidValue(key, raw, expected);
+  return value;
+}
+function parseThresholdEntry(key, entry) {
+  if (typeof entry === "number" && Number.isFinite(entry)) return entry;
+  if (typeof entry === "string") {
+    const text = entry.trim();
+    if (PERCENTAGE.test(text)) return text;
+    if (text !== "" && Number.isFinite(Number(text))) return Number(text);
+  }
+  throw invalidValue(
+    key,
+    typeof entry === "string" ? entry.trim() : JSON.stringify(entry) ?? "",
+    "Every entry must be a number of tokens, such as 150000, or a percentage of the context window, such as 40%."
+  );
+}
+function parseThresholds(key, raw) {
+  const trimmed = raw.trim();
+  let entries;
+  if (trimmed.startsWith("[")) {
+    let flow;
+    try {
+      flow = (0, import_yaml2.parse)(trimmed);
+    } catch (err) {
+      throw invalidValue(key, raw, `Not a YAML list: ${err.message}`);
+    }
+    if (!Array.isArray(flow)) throw invalidValue(key, raw, "Expected a YAML list.");
+    entries = flow;
+  } else {
+    entries = trimmed.split(",");
+  }
+  if (entries.length === 0) throw invalidValue(key, raw, "Expected at least one entry.");
+  return entries.map((entry) => parseThresholdEntry(key, entry));
+}
+function parseProjectValue(key, raw) {
+  const spec = projectKeySpec(key);
+  if (!spec) throw new ConfigValidationError(`Unknown config key "${key}".`);
+  switch (spec.kind) {
+    case "boolean":
+      return parseBooleanWord(key, raw);
+    case "number":
+      return parseNumber(key, raw, spec);
+    case "string":
+      return raw;
+    case "enum":
+      return parseEnum(key, raw, spec.values);
+    case "profile": {
+      const names = profileNames();
+      return names.length === 0 ? raw : parseEnum(key, raw, names);
+    }
+    case "thresholds":
+      return parseThresholds(key, raw);
+  }
+}
+function scalarSource(value) {
+  return (0, import_yaml2.stringify)(value, { lineWidth: 0 }).trimEnd();
+}
+function splicedSource(src, doc, path, value) {
+  if (value !== null && typeof value === "object") return null;
+  const node = doc.getIn(path, true);
+  if (!(0, import_yaml2.isScalar)(node) || !node.range) return null;
+  const [start, end] = node.range;
+  if (end <= start) return null;
+  const source = scalarSource(value);
+  if (source.includes("\n")) return null;
+  return src.slice(0, start) + source + src.slice(end);
+}
+function holdsSameDataAs(candidate, expected) {
+  try {
+    const parsed = (0, import_yaml2.parseDocument)(candidate);
+    if (parsed.errors.length > 0) return false;
+    return isDeepStrictEqual(parsed.toJS(), expected.toJS());
+  } catch {
+    return false;
+  }
+}
+function lineEndingOf(src) {
+  const crlf = (src.match(/\r\n/g) ?? []).length;
+  const lf = (src.match(/\n/g) ?? []).length - crlf;
+  return crlf > lf ? "\r\n" : "\n";
+}
+function withByteOrderMark(text, src) {
+  if (!src.startsWith(BYTE_ORDER_MARK) || text.startsWith(BYTE_ORDER_MARK)) return text;
+  return BYTE_ORDER_MARK + text;
+}
+function withLineEnding(text, ending) {
+  const lf = text.replace(/\r\n/g, "\n");
+  return ending === "\n" ? lf : lf.replace(/\n/g, "\r\n");
+}
+function fsReason(err) {
+  const code = typeof err === "object" && err !== null ? err.code : void 0;
+  if (code !== void 0 && FS_REASONS[code] !== void 0) return FS_REASONS[code];
+  return err instanceof Error ? err.message.split("\n")[0] : String(err);
+}
+function readSource(file) {
+  if (!existsSync7(file)) return "";
+  let bytes;
+  try {
+    bytes = readFileSync5(file);
+  } catch (err) {
+    throw new ConfigFileError(`Could not read ${file}: ${fsReason(err)}`);
+  }
+  try {
+    return UTF8.decode(bytes);
+  } catch {
+    throw new ConfigValidationError(
+      `${file} is not valid UTF-8, so it cannot be rewritten without corrupting the bytes that did not decode. Re-save the file as UTF-8 and try again.`
+    );
+  }
+}
+function replaceFile(file, text) {
+  const present = existsSync7(file);
+  const target = present ? realpathSync(file) : file;
+  const existing = present ? statSync2(target) : null;
+  if (existing) accessSync(target, fsConstants.W_OK);
+  const directory = dirname4(target);
+  try {
+    accessSync(directory, fsConstants.W_OK);
+  } catch (err) {
+    throw new ConfigFileError(
+      `Could not write ${file}: ${fsReason(err)} on ${directory}. The new file is written there and renamed over the target, so that directory has to be writable too.`
+    );
+  }
+  replaceFileAtomically(target, text, (temp) => {
+    if (existing) chmodSync(temp, existing.mode & 511);
+  });
+}
+function writeSource(file, text) {
+  try {
+    ensureDir(dirname4(file));
+    replaceFile(file, text);
+  } catch (err) {
+    if (err instanceof ConfigFileError) throw err;
+    throw new ConfigFileError(`Could not write ${file}: ${fsReason(err)}`);
+  }
+}
+function writeDocument(file, key, doc, src) {
+  const text = withByteOrderMark(withLineEnding(emitDocument(file, doc), lineEndingOf(src)), src);
+  if (!holdsSameDataAs(text, doc)) {
+    throw new ConfigValidationError(
+      `Cannot write ${key} to ${file} safely: what the writer emits reads back as a different value, so nothing was written. Change the value, or edit the key by hand.`
+    );
+  }
+  writeSource(file, text);
+}
+function emitDocument(file, doc) {
+  try {
+    return doc.toString();
+  } catch (err) {
+    throw new ConfigValidationError(
+      `Could not rewrite ${file}: ${err instanceof Error ? err.message : String(err)}. Remove the alias, or point it at a key the file still states, and try again.`
+    );
+  }
+}
+function isNullScalar(node) {
+  return (0, import_yaml2.isScalar)(node) && node.value === null;
+}
+function emptyBlockFor(node, doc) {
+  const map = new import_yaml2.YAMLMap(doc.schema);
+  if ((0, import_yaml2.isScalar)(node)) {
+    if (node.comment != null) map.comment = node.comment;
+    if (node.commentBefore != null) map.commentBefore = node.commentBefore;
+  }
+  return map;
+}
+function ensureBlocksAbove(file, doc, path) {
+  if (isNullScalar(doc.contents)) doc.contents = emptyBlockFor(doc.contents, doc);
+  if (doc.contents != null && !(0, import_yaml2.isMap)(doc.contents)) {
+    throw new ConfigValidationError(
+      `Cannot set ${path.join(".")}: ${file} holds ${(0, import_yaml2.isSeq)(doc.contents) ? "a list" : "a value"}, not a block of keys. Rewrite the file as a block of keys and try again.`
+    );
+  }
+  for (let depth = 1; depth < path.length; depth += 1) {
+    const above = path.slice(0, depth);
+    if (!doc.hasIn(above)) return;
+    const node = doc.getIn(above, true);
+    if ((0, import_yaml2.isMap)(node)) continue;
+    if (isNullScalar(node)) {
+      doc.setIn(above, emptyBlockFor(node, doc));
+      continue;
+    }
+    const blocked = above.join(".");
+    throw new ConfigValidationError(
+      `Cannot set ${path.join(".")}: ${blocked} holds ${(0, import_yaml2.isSeq)(node) ? "a list" : "a value"}, not a block. Change or remove ${blocked} first.`
+    );
+  }
+}
+function writeProjectEdit(file, key, edit) {
+  const src = readSource(file);
+  const doc = parseProjectDocument(file, src);
+  const path = key.split(".");
+  if (!edit.prepare(doc, path)) return false;
+  const candidate = edit.candidate(src, doc, path);
+  edit.apply(doc, path);
+  if (candidate !== null && holdsSameDataAs(candidate, doc)) {
+    writeSource(file, candidate);
+    return true;
+  }
+  writeDocument(file, key, doc, src);
+  return true;
+}
+function setProjectKey(file, key, value) {
+  writeProjectEdit(file, key, {
+    prepare: (doc, path) => {
+      ensureBlocksAbove(file, doc, path);
+      return true;
+    },
+    candidate: (src, doc, path) => splicedSource(src, doc, path, value),
+    apply: (doc, path) => doc.setIn(path, value)
+  });
+}
+function projectKeyDefault(key) {
+  return PROJECT_KEY_DEFAULTS[key];
+}
+function projectKeyDefaultFlag(key) {
+  const stated = projectKeyDefault(key);
+  if (stated === void 0) {
+    throw new Error(`${key} has no documented default to apply.`);
+  }
+  return parseBooleanWord(key, stated);
+}
+function parseProjectDocument(file, src) {
+  const doc = (0, import_yaml2.parseDocument)(src);
+  if (doc.errors.length > 0) {
+    throw new ConfigValidationError(`Could not parse ${file}: ${doc.errors[0].message}`);
+  }
+  return doc;
+}
+function atPath(data, path) {
+  return path.reduce((node, part) => {
+    if (typeof node !== "object" || node === null) return void 0;
+    return node[part];
+  }, data);
+}
+function getProjectKey(file, key) {
+  const doc = parseProjectDocument(file, readSource(file));
+  const path = key.split(".");
+  if (!doc.hasIn(path)) return { status: "unset" };
+  return { status: "set", value: atPath(doc.toJS(), path) };
+}
+function isBlock(node) {
+  return typeof node === "object" && node !== null && !Array.isArray(node) && Object.keys(node).length > 0;
+}
+function listProjectKeys(file) {
+  const rows = [];
+  const walk = (node, path) => {
+    if (isBlock(node)) {
+      for (const [name, child] of Object.entries(node)) walk(child, [...path, name]);
+      return;
+    }
+    if (path.length === 0) return;
+    rows.push({ key: path.join("."), value: node, known: rowIsKnown(path, node) });
+  };
+  walk(parseProjectDocument(file, readSource(file)).toJS(), []);
+  return rows;
+}
+function statesNothing(value) {
+  if (value === null) return true;
+  return typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+function knowsKeysUnder(key) {
+  return PROJECT_KEY_LIST.some((known2) => known2.startsWith(`${key}.`));
+}
+function rowIsKnown(path, value) {
+  if (path.some((part) => part.includes("."))) return false;
+  const key = path.join(".");
+  if (projectKeySpec(key) !== void 0) return true;
+  return statesNothing(value) && knowsKeysUnder(key);
+}
+function nextLineStart(src, from) {
+  const at = src.indexOf("\n", from);
+  return at === -1 ? src.length : at + 1;
+}
+function removedSource(src, doc, path) {
+  const parent = path.length > 1 ? doc.getIn(path.slice(0, -1), true) : doc.contents;
+  if (!(0, import_yaml2.isMap)(parent)) return null;
+  const leaf = path[path.length - 1];
+  const pair = parent.items.find((item) => (0, import_yaml2.isScalar)(item.key) && item.key.value === leaf);
+  if (!pair || !(0, import_yaml2.isScalar)(pair.key) || !pair.key.range) return null;
+  const value = pair.value;
+  if (value != null && !(0, import_yaml2.isScalar)(value)) return null;
+  const keyStart = pair.key.range[0];
+  const lineStart = src.lastIndexOf("\n", keyStart - 1) + 1;
+  if (src.slice(lineStart, keyStart).trim() !== "") return null;
+  const contentEnd = value?.range ? value.range[1] : pair.key.range[1];
+  const end = src[contentEnd - 1] === "\n" ? contentEnd : nextLineStart(src, contentEnd);
+  return src.slice(0, lineStart) + src.slice(end);
+}
+function collapseEmptied(doc, path) {
+  for (let depth = path.length - 1; depth > 0; depth -= 1) {
+    const parentPath = path.slice(0, depth);
+    const parent = doc.getIn(parentPath, true);
+    if (!(0, import_yaml2.isMap)(parent) || parent.items.length > 0) return;
+    doc.setIn(parentPath, null);
+  }
+  if ((0, import_yaml2.isMap)(doc.contents) && doc.contents.items.length === 0) doc.contents = null;
+}
+function unsetProjectKey(file, key) {
+  return writeProjectEdit(file, key, {
+    prepare: (doc, path) => doc.hasIn(path),
+    candidate: removedSource,
+    apply: (doc, path) => {
+      doc.deleteIn(path);
+      collapseEmptied(doc, path);
+    }
+  });
+}
+var import_yaml2, COUNT, FRONTEND_VERIFICATION_KEY, DESIGN_REVIEW_KEY, PROJECT_KEYS, PROJECT_KEY_LIST, PERCENTAGE, BYTE_ORDER_MARK, FS_REASONS, UTF8, PROJECT_KEY_DEFAULTS;
+var init_project_config = __esm({
+  "src/lib/project-config.ts"() {
+    "use strict";
+    import_yaml2 = __toESM(require_dist(), 1);
+    init_global_config();
+    init_atomic_file();
+    init_host_status();
+    init_constants();
+    init_project();
+    init_utils();
+    COUNT = { kind: "number", integer: true, min: 0 };
+    FRONTEND_VERIFICATION_KEY = "workflow.frontend_verification";
+    DESIGN_REVIEW_KEY = "workflow.design_review";
+    PROJECT_KEYS = {
+      profile: { kind: "profile" },
+      "workflow.spec_sync": { kind: "boolean" },
+      "workflow.grilling.questions": { kind: "enum", values: ["tool", "inline"] },
+      "workflow.tdd.strict": { kind: "boolean" },
+      "workflow.tdd.orchestrator_strict": { kind: "boolean" },
+      [FRONTEND_VERIFICATION_KEY]: { kind: "boolean" },
+      [DESIGN_REVIEW_KEY]: { kind: "boolean" },
+      "workflow.maps.tracker": { kind: "enum", values: ["github", "files"] },
+      "workflow.maps.persist": { kind: "boolean" },
+      "workflow.handoff.agent": { kind: "string" },
+      "workflow.handoff.ack_turns": COUNT,
+      "workflow.handoff.self_invoke": { kind: "boolean" },
+      "workflow.handoff.nudge_warn": COUNT,
+      "workflow.handoff.nudge_severe": COUNT,
+      "workflow.handoff.nudge_step": COUNT,
+      "workflow.handoff.context_thresholds": { kind: "thresholds" },
+      "workflow.handoff.context_window": { kind: "number", integer: true, min: 1 },
+      "commands.test": { kind: "string" },
+      "commands.test_collect": { kind: "string" },
+      "commands.build": { kind: "string" },
+      "commands.lint": { kind: "string" },
+      "commands.typecheck": { kind: "string" },
+      "commands.format": { kind: "string" },
+      "directories.source": { kind: "string" },
+      "directories.tests": { kind: "string" },
+      "test_markers.exclude": { kind: "string" },
+      "venv.activate": { kind: "string" },
+      "frontend.directory": { kind: "string" },
+      "frontend.dev_server_url": { kind: "string" },
+      "frontend.dev_server_check": { kind: "string" },
+      "frontend.helpers_dir": { kind: "string" },
+      "frontend.commands.dev": { kind: "string" },
+      "frontend.commands.build": { kind: "string" },
+      "frontend.commands.lint": { kind: "string" },
+      "frontend.commands.test": { kind: "string" },
+      // Both lists come from host-status.ts, which owns the mode names and reads
+      // them at run time. A schema spelling them again would be a second list to
+      // keep in step, and the file that resolves a mode would not know it existed.
+      "frontend.browser.mode": { kind: "enum", values: BROWSER_MODE_PRIORITY },
+      "frontend.browser.fallback": { kind: "enum", values: BROWSER_FALLBACK_VALUES },
+      "frontend.browser.cdp_port": { kind: "number", integer: true, min: 1, max: 65535 }
+    };
+    PROJECT_KEY_LIST = Object.keys(PROJECT_KEYS);
+    PERCENTAGE = /^\d+(\.\d+)?%$/;
+    BYTE_ORDER_MARK = "\uFEFF";
+    FS_REASONS = {
+      EACCES: "permission denied",
+      EPERM: "permission denied",
+      EROFS: "the filesystem is read-only",
+      EISDIR: "that path is a directory",
+      ENOTDIR: "a directory on that path is a file",
+      EMFILE: "too many open files",
+      ENOSPC: "the disk is full"
+    };
+    UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+    PROJECT_KEY_DEFAULTS = {
+      "workflow.spec_sync": "true",
+      "workflow.grilling.questions": "tool",
+      "workflow.tdd.strict": "true",
+      "workflow.tdd.orchestrator_strict": "true",
+      [FRONTEND_VERIFICATION_KEY]: "false",
+      [DESIGN_REVIEW_KEY]: "false",
+      "workflow.maps.persist": "false",
+      "workflow.handoff.agent": "claude",
+      "workflow.handoff.ack_turns": "5",
+      "workflow.handoff.self_invoke": "true",
+      "workflow.handoff.nudge_warn": "200000",
+      "workflow.handoff.nudge_severe": "500000",
+      "workflow.handoff.nudge_step": "100000",
+      "directories.source": "src/",
+      "directories.tests": "tests/",
+      "frontend.directory": "frontend/",
+      "frontend.dev_server_url": "http://localhost:3000"
+    };
+  }
+});
+
 // node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType;
 var init_util = __esm({
@@ -15938,35 +16578,9 @@ var init_zod = __esm({
   }
 });
 
-// src/lib/atomic-file.ts
-import { randomBytes } from "node:crypto";
-import { renameSync, rmSync as rmSync2, writeFileSync as writeFileSync2 } from "node:fs";
-function tempPathFor(path) {
-  return `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-}
-function replaceFileAtomically(path, text, beforeRename) {
-  const temp = tempPathFor(path);
-  try {
-    writeFileSync2(temp, text, "utf-8");
-    beforeRename?.(temp);
-    renameSync(temp, path);
-  } catch (err) {
-    try {
-      rmSync2(temp, { force: true });
-    } catch {
-    }
-    throw err;
-  }
-}
-var init_atomic_file = __esm({
-  "src/lib/atomic-file.ts"() {
-    "use strict";
-  }
-});
-
 // src/lib/nodes.ts
-import { existsSync as existsSync7, readFileSync as readFileSync5, readdirSync as readdirSync4 } from "node:fs";
-import { join as join8 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync6, readdirSync as readdirSync5 } from "node:fs";
+import { join as join9 } from "node:path";
 function oneOf(values) {
   return `one of: ${values.join(", ")}`;
 }
@@ -15985,7 +16599,7 @@ function bareId(reference) {
   return reference.trim().replace(/^#/, "");
 }
 function mapDir(root, map) {
-  return join8(root, SPECHUB_DIR, MAPS_DIR, map);
+  return join9(root, SPECHUB_DIR, MAPS_DIR, map);
 }
 function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/, "") || "node";
@@ -16050,14 +16664,14 @@ function frontmatterProblem(issue) {
   return `${issue.path.join(".")} ${issue.message}`;
 }
 function parseNodeFile(dir, file) {
-  const raw = readFileSync5(join8(dir, file), "utf-8").replace(/\r\n/g, "\n");
+  const raw = readFileSync6(join9(dir, file), "utf-8").replace(/\r\n/g, "\n");
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
     throw new Error(`${file}: missing frontmatter`);
   }
   let frontmatter;
   try {
-    frontmatter = (0, import_yaml2.parse)(match[1]);
+    frontmatter = (0, import_yaml3.parse)(match[1]);
   } catch (err) {
     throw new Error(`${file}: ${err.message}`);
   }
@@ -16093,8 +16707,8 @@ function parseNodeFile(dir, file) {
 }
 function loadNodes(root, map) {
   const dir = mapDir(root, map);
-  if (!existsSync7(dir)) return [];
-  const nodes = readdirSync4(dir).filter((f) => /^\d+.*\.md$/.test(f)).map((f) => parseNodeFile(dir, f)).sort((a, b) => compareIds(a.id, b.id));
+  if (!existsSync8(dir)) return [];
+  const nodes = readdirSync5(dir).filter((f) => /^\d+.*\.md$/.test(f)).map((f) => parseNodeFile(dir, f)).sort((a, b) => compareIds(a.id, b.id));
   const seen = /* @__PURE__ */ new Map();
   for (const node of nodes) {
     const other = seen.get(node.id);
@@ -16137,7 +16751,7 @@ function serializeNode(node) {
 function writeNode(root, map, node) {
   const dir = mapDir(root, map);
   ensureDir(dir);
-  replaceFileAtomically(join8(dir, node.file), serializeNode(node));
+  replaceFileAtomically(join9(dir, node.file), serializeNode(node));
 }
 function requireExisting(nodes, id, role) {
   if (!nodes.some((n) => n.id === id)) {
@@ -16307,11 +16921,11 @@ function walkTree(nodes) {
   visit(roots[0], 0);
   return out;
 }
-var import_yaml2, NODE_STATUSES, NODE_MODES, NODE_KINDS, LABEL_MAX_WORDS, LABEL_MAX_CHARS, LABEL_CAP_SENTENCE, ALLOWED_KINDS_SENTENCE, idValue, frontmatterSchema, graphemes, FIELDS_ADDED_AFTER_THE_FIRST_MAPS;
+var import_yaml3, NODE_STATUSES, NODE_MODES, NODE_KINDS, LABEL_MAX_WORDS, LABEL_MAX_CHARS, LABEL_CAP_SENTENCE, ALLOWED_KINDS_SENTENCE, idValue, frontmatterSchema, graphemes, FIELDS_ADDED_AFTER_THE_FIRST_MAPS;
 var init_nodes = __esm({
   "src/lib/nodes.ts"() {
     "use strict";
-    import_yaml2 = __toESM(require_dist(), 1);
+    import_yaml3 = __toESM(require_dist(), 1);
     init_zod();
     init_atomic_file();
     init_constants();
@@ -16446,9 +17060,6 @@ function linkedId(node) {
 }
 function mermaidId(id) {
   return `n${id}`;
-}
-function asMapNodes(nodes) {
-  return nodes.map((n) => ({ ...n, body: "", file: "" }));
 }
 function resolveStart(nodes, from) {
   if (from === void 0) {
@@ -16750,7 +17361,7 @@ function renderDiagram(input, options = {}) {
   const root = deriveRootState(input, rootId);
   const nodes = input.map((n) => n.id === rootId ? { ...n, status: root.status } : n);
   const start = resolveStart(nodes, options.from);
-  const onFrontier = new Set(frontier(asMapNodes(nodes)).map((n) => n.id));
+  const onFrontier = new Set(frontier(nodes).map((n) => n.id));
   const drawn = collectDrawn(nodes, start);
   const drawnIds = new Set(drawn.map((d) => d.node.id));
   const cueOf = (node) => ({
@@ -16941,6 +17552,11 @@ function issueLabel(named, header) {
   if (problem) throw new Error(`${named}: label "${trimmed}" ${problem}`);
   return trimmed;
 }
+function proseBody(body) {
+  const lines = body.replace(/\r\n/g, "\n").split("\n");
+  const header = lines.findIndex((line) => line.trim());
+  return lines.slice(header + 1).join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+}
 function nodeFromIssue(entry, at) {
   const where = `the issue at position ${at + 1}`;
   if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
@@ -16954,7 +17570,8 @@ function nodeFromIssue(entry, at) {
   }
   const named = `issue ${issue.number}`;
   const labels = labelsOf(named, issue.labels);
-  const header = parseHeader(firstNonBlankLine(bodyOf(named, issue.body)));
+  const body = bodyOf(named, issue.body);
+  const header = parseHeader(firstNonBlankLine(body));
   if (!header) {
     throw new Error(
       `${named}: the body does not open with the "map: ..." header line, which is where every edge and the node label live`
@@ -16971,6 +17588,7 @@ function nodeFromIssue(entry, at) {
     answers: answers ? bareId(answers) : void 0,
     blockedBy: (header.get("blocked-by") ?? "").split(",").map(bareId).filter(Boolean),
     pinned: labels.has("pinned"),
+    body: proseBody(body),
     url: typeof issue.url === "string" ? issue.url : void 0
   };
 }
@@ -17048,9 +17666,9 @@ var node_exports = {};
 __export(node_exports, {
   register: () => register4
 });
-import { existsSync as existsSync8, readFileSync as readFileSync6 } from "node:fs";
-import { join as join9 } from "node:path";
-function parseEnum(flag, values) {
+import { existsSync as existsSync9, readFileSync as readFileSync7 } from "node:fs";
+import { join as join10 } from "node:path";
+function parseEnum2(flag, values) {
   return (value) => {
     if (!values.includes(value)) {
       fail(invalidEnumValue(flag, value, values).message);
@@ -17074,7 +17692,35 @@ function readBody(body, bodyFile) {
     }
     return piped;
   }
-  return readFileSync6(bodyFile, "utf-8");
+  return readFileSync7(bodyFile, "utf-8");
+}
+function refuseGithubMap(root, map, stdinRoute) {
+  const tracked = getProjectKey(projectFile(root), TRACKER_KEY);
+  if (tracked.status !== "set" || tracked.value !== "github") return;
+  const route = stdinRoute ? `Pipe the map in instead: ${GH_ISSUE_LIST} | spechub node ${stdinRoute} --stdin.` : "Work the issue through gh, not this command.";
+  fail(`Map '${map}' lives in GitHub issues - ${TRACKER_KEY} is github. ${route}`);
+}
+function storedNodes(root, map) {
+  const dir = mapDir(root, map);
+  if (!existsSync9(dir)) {
+    fail(`Map '${map}' does not exist - there is no ${dir} directory.`);
+  }
+  return loadNodes(root, map);
+}
+function backendNodes(root, command, opts) {
+  if (opts.map && opts.stdin) {
+    fail("Use --map <name> for the files backend or --stdin for the github one, not both.");
+  }
+  if (!opts.map && !opts.stdin) {
+    fail("Name a backend: --map <name> for the files backend, or --stdin for the github one.");
+  }
+  if (opts.stdin) return nodesFromIssues(readStdin());
+  const map = opts.map;
+  refuseGithubMap(root, map, command);
+  return storedNodes(root, map);
+}
+function aboutMap(opts) {
+  return opts.map ? `map '${opts.map}'` : "the map";
 }
 function toJson(node) {
   return {
@@ -17106,6 +17752,7 @@ function printNode(node) {
 function registerCreate(nodeCmd) {
   nodeCmd.command("create").description("Create a node; the first node in a map is the root").requiredOption("--map <name>", "map name").requiredOption("--title <title>", "node title").option("--status <status>", oneOf(NODE_STATUSES), parseStatus).option("--mode <mode>", "hitl (a human settles it) or afk (an agent settles it alone)", parseMode).requiredOption("--kind <kind>", ALLOWED_KINDS_SENTENCE, parseKind).requiredOption("--label <label>", `short name for diagrams: ${LABEL_CAP_SENTENCE}`).option("--answers <id>", "the node whose resolution raised this one (its provenance parent) \u2013 required except on the root").option("--blocked-by <ids>", "comma-separated ids of nodes that must settle before this one can be worked", parseIdList).option("--pinned", "load in full every session").option("--body <text>", "markdown body").option("--body-file <path>", "read body from file, or - for stdin").option("--json", "output as JSON").action(
     inProject((root, opts) => {
+      refuseGithubMap(root, opts.map);
       const node = createNode(root, opts.map, {
         title: opts.title,
         status: opts.status,
@@ -17128,11 +17775,12 @@ function registerCreate(nodeCmd) {
 function registerRead(nodeCmd) {
   nodeCmd.command("read").description("Print one node in full").argument("<id>", "node id").requiredOption("--map <name>", "map name").option("--json", "output as JSON with body").option("--visuals", VISUALS_HELP).action(
     inProject((root, id, opts) => {
+      refuseGithubMap(root, opts.map);
       const node = getNode(root, opts.map, id);
       if (opts.json) {
         console.log(JSON.stringify({ ...toJson(node), body: node.body }, null, 2));
       } else {
-        const text = readFileSync6(join9(mapDir(root, opts.map), node.file), "utf-8");
+        const text = readFileSync7(join10(mapDir(root, opts.map), node.file), "utf-8");
         console.log(opts.visuals ? text : stripDiagrams(text));
       }
     })
@@ -17141,6 +17789,7 @@ function registerRead(nodeCmd) {
 function registerUpdate(nodeCmd) {
   nodeCmd.command("update").description("Update node fields or body").argument("<id>", "node id").requiredOption("--map <name>", "map name").option("--title <title>", "new title (the filename keeps its original slug)").option("--status <status>", oneOf(NODE_STATUSES), parseStatus).option("--mode <mode>", oneOf(NODE_MODES), parseMode).option("--kind <kind>", ALLOWED_KINDS_SENTENCE, parseKind).option("--label <label>", `new short name for diagrams: ${LABEL_CAP_SENTENCE}`).option("--answers <id>", "new provenance parent").option("--blocked-by <ids>", "comma-separated blocking ids; empty string clears", parseIdList).option("--pinned <bool>", "true or false").option("--body <text>", "replace the body").option("--body-file <path>", "replace the body from file, or - for stdin").option("--append-body <text>", "append to the body").option("--json", "output as JSON").action(
     inProject((root, id, opts) => {
+      refuseGithubMap(root, opts.map);
       if (opts.pinned !== void 0 && opts.pinned !== "true" && opts.pinned !== "false") {
         fail(`--pinned takes true or false, got '${opts.pinned}'`);
       }
@@ -17167,10 +17816,11 @@ function registerUpdate(nodeCmd) {
 }
 function registerFrontier(nodeCmd) {
   nodeCmd.command("frontier").description(
-    "Open nodes with no unresolved blockers, shallowest first (fewest answers links from the root)"
-  ).requiredOption("--map <name>", "map name").option("--mode <mode>", `filter by mode: ${NODE_MODES.join(", ")}`, parseMode).option("--json", "output as JSON").action(
+    `Open nodes with no unresolved blockers, shallowest first (fewest answers links from the root).
+Reads the files backend with --map, or a \`${GH_ISSUE_LIST}\` pipe with --stdin.`
+  ).option("--map <name>", MAP_HELP).option("--stdin", STDIN_HELP).option("--mode <mode>", `filter by mode: ${NODE_MODES.join(", ")}`, parseMode).option("--json", "output as JSON").action(
     inProject((root, opts) => {
-      const nodes = loadNodes(root, opts.map);
+      const nodes = backendNodes(root, "frontier", opts);
       const depths = deriveDepths(nodes);
       let ready = frontier(nodes);
       if (opts.mode) ready = ready.filter((n) => n.mode === opts.mode);
@@ -17185,7 +17835,7 @@ function registerFrontier(nodeCmd) {
         return;
       }
       if (ready.length === 0) {
-        console.log(source_default.dim(`Frontier of map '${opts.map}' is empty.`));
+        console.log(source_default.dim(`The frontier of ${aboutMap(opts)} is empty.`));
         return;
       }
       for (const node of ready) printNode(node);
@@ -17194,10 +17844,11 @@ function registerFrontier(nodeCmd) {
 }
 function registerWalk(nodeCmd) {
   nodeCmd.command("walk").description(
-    "Reading-order dump of the whole map for handoff \u2013 parents before children, pinned nodes and the root in full, the rest as one-line summaries"
-  ).requiredOption("--map <name>", "map name").option("--full", "emit every body, not only pinned nodes and the root").option("--json", "output as JSON").option("--visuals", VISUALS_HELP).action(
+    `Reading-order dump of the whole map for handoff \u2013 parents before children, pinned nodes and the root in full, the rest as one-line summaries.
+Reads the files backend with --map, or a \`${GH_ISSUE_LIST}\` pipe with --stdin.`
+  ).option("--map <name>", MAP_HELP).option("--stdin", STDIN_HELP).option("--full", "emit every body, not only pinned nodes and the root").option("--json", "output as JSON").option("--visuals", VISUALS_HELP).action(
     inProject((root, opts) => {
-      const entries = walkTree(loadNodes(root, opts.map));
+      const entries = walkTree(backendNodes(root, "walk", opts));
       const inFull = (node, depth) => Boolean(opts.full) || node.pinned || depth === 0;
       if (opts.json) {
         console.log(
@@ -17214,7 +17865,7 @@ function registerWalk(nodeCmd) {
         return;
       }
       if (entries.length === 0) {
-        console.log(source_default.dim(`Map '${opts.map}' has no nodes.`));
+        console.log(source_default.dim(`There are no nodes in ${aboutMap(opts)}.`));
         return;
       }
       const sections = [];
@@ -17228,12 +17879,15 @@ function registerWalk(nodeCmd) {
           node.pinned ? "pinned" : void 0,
           node.blockedBy.length > 0 ? `blocked by ${node.blockedBy.join(", ")}` : void 0
         ].filter(Boolean).join(", ");
-        const full = opts.visuals ? node.body : stripDiagrams(node.body);
-        const body = inFull(node, depth) ? full.trim() : "";
-        sections.push(`${heading} ${node.id} \u2013 ${node.title}
-(${meta})${body ? `
+        const body = node.body ?? "";
+        const full = opts.visuals ? body : stripDiagrams(body);
+        const shown = inFull(node, depth) ? full.trim() : "";
+        sections.push(
+          `${heading} ${node.id} \u2013 ${node.title}
+(${meta})${shown ? `
 
-${body}` : ""}`);
+${shown}` : ""}`
+        );
       }
       console.log(sections.join("\n\n"));
     })
@@ -17241,33 +17895,19 @@ ${body}` : ""}`);
 }
 function registerDiagram(nodeCmd) {
   nodeCmd.command("diagram").description(
-    "Render the map as mermaid, wrapped in the replaceable diagram markers.\nReads the files backend with --map, or a `gh issue list --json number,title,body,state,stateReason,labels,url` pipe with --stdin."
-  ).option("--map <name>", "map name (files backend)").option("--stdin", "read the github issue list as JSON from stdin").option("--from <id>", "draw this node and its descendants only, rather than the whole map").action(
+    `Render the map as mermaid, wrapped in the replaceable diagram markers.
+Reads the files backend with --map, or a \`${GH_ISSUE_LIST}\` pipe with --stdin.`
+  ).option("--map <name>", MAP_HELP).option("--stdin", STDIN_HELP).option("--from <id>", "draw this node and its descendants only, rather than the whole map").action(
     inProject((root, opts) => {
-      if (opts.map && opts.stdin) {
-        fail("Use --map <name> for the files backend or --stdin for the github one, not both.");
-      }
-      if (!opts.map && !opts.stdin) {
-        fail("Name a backend: --map <name> for the files backend, or --stdin for the github one.");
-      }
-      let nodes;
-      if (opts.stdin) {
-        nodes = nodesFromIssues(readStdin());
-      } else {
-        const map = opts.map;
-        if (!existsSync8(mapDir(root, map))) {
-          fail(`Map '${map}' does not exist - there is no ${mapDir(root, map)} directory.`);
-        }
-        nodes = loadNodes(root, map);
-      }
-      console.log(renderDiagram(nodes, { from: opts.from }));
+      console.log(renderDiagram(backendNodes(root, "diagram", opts), { from: opts.from }));
     })
   );
 }
 function registerList(nodeCmd) {
   nodeCmd.command("list").description("List nodes in a map").requiredOption("--map <name>", "map name").option("--status <status>", `filter by status: ${NODE_STATUSES.join(", ")}`, parseStatus).option("--json", "output as JSON").action(
     inProject((root, opts) => {
-      let nodes = loadNodes(root, opts.map);
+      refuseGithubMap(root, opts.map);
+      let nodes = storedNodes(root, opts.map);
       if (opts.status) nodes = nodes.filter((n) => n.status === opts.status);
       if (opts.json) {
         console.log(JSON.stringify(nodes.map(toJson), null, 2));
@@ -17303,635 +17943,27 @@ function register4(program3) {
   registerList(nodeCmd);
   registerKinds(nodeCmd);
 }
-var parseStatus, parseMode, parseKind, BODY_FILE_ON_TTY, VISUALS_HELP;
+var parseStatus, parseMode, parseKind, BODY_FILE_ON_TTY, TRACKER_KEY, GH_ISSUE_LIST, MAP_HELP, STDIN_HELP, VISUALS_HELP;
 var init_node = __esm({
   "src/commands/node.ts"() {
     "use strict";
     init_source();
     init_utils();
     init_global_config();
+    init_constants();
+    init_project_config();
     init_diagram();
     init_github_issues();
     init_nodes();
-    parseStatus = parseEnum("--status", NODE_STATUSES);
-    parseMode = parseEnum("--mode", NODE_MODES);
-    parseKind = parseEnum("--kind", NODE_KINDS);
+    parseStatus = parseEnum2("--status", NODE_STATUSES);
+    parseMode = parseEnum2("--mode", NODE_MODES);
+    parseKind = parseEnum2("--kind", NODE_KINDS);
     BODY_FILE_ON_TTY = "--body-file - reads piped input, and stdin is a terminal. Pipe it in, or use --body <text>.";
+    TRACKER_KEY = "workflow.maps.tracker";
+    GH_ISSUE_LIST = "gh issue list --json number,title,body,state,stateReason,labels,url";
+    MAP_HELP = "map name (files backend)";
+    STDIN_HELP = "read the github issue list as JSON from stdin";
     VISUALS_HELP = "keep the generated diagram blocks this command otherwise strips";
-  }
-});
-
-// src/lib/host-status.ts
-function isBrowserAxis(key) {
-  return BROWSER_AXIS_KEY_SET.has(key);
-}
-function requiredHostAxisKeys({ hasFrontend }) {
-  return HOST_AXES.filter((axis) => axis.required).filter((axis) => hasFrontend || !isBrowserAxis(axis.key)).map((axis) => axis.key);
-}
-function fallbackBrowserMode(declared) {
-  return BROWSER_MODE_PRIORITY.find((mode) => declared[mode] === true);
-}
-function declaredBrowserModes(config) {
-  const declared = {};
-  for (const mode of BROWSER_MODE_PRIORITY) {
-    const result = getKey(config, BROWSER_AXIS_KEYS[mode]);
-    if (result.status === "set" && typeof result.value === "boolean") {
-      declared[mode] = result.value;
-    }
-  }
-  return declared;
-}
-function record(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return void 0;
-  return value;
-}
-function orcaRuntimeIsReady(stdout) {
-  let parsed;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return false;
-  }
-  const runtime = record(record(record(parsed)?.result)?.runtime);
-  return runtime?.reachable === true && runtime?.state === "ready";
-}
-function projectHostContext(projectYaml, hasProject = true) {
-  const project = record(projectYaml);
-  const frontend = project ? project.frontend : void 0;
-  const hasFrontend = hasProject && frontend !== void 0 && frontend !== null;
-  const browser = record(frontend)?.browser;
-  const rawMode = record(browser)?.mode;
-  const preferredMode = BROWSER_MODE_PRIORITY.find((mode) => mode === rawMode);
-  const rawPort = record(browser)?.cdp_port;
-  const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : preferredMode === "remote" ? DEFAULT_REMOTE_CDP_PORT : DEFAULT_CDP_PORT;
-  const rawFallback = record(browser)?.fallback;
-  const fallback = typeof rawFallback === "string" ? rawFallback : void 0;
-  return { hasProject, hasFrontend, preferredMode, cdpPort, fallback };
-}
-function projectAllowsFallback(project) {
-  return project.fallback !== FALLBACK_FORBIDDEN;
-}
-function resolveBrowserMode(declared, project) {
-  if (!project.hasProject) return { status: "unresolved", problem: { kind: "no-project" } };
-  if (!project.hasFrontend) return { status: "unresolved", problem: { kind: "no-frontend" } };
-  const available = fallbackBrowserMode(declared);
-  if (!available) {
-    const anyDeclared = BROWSER_MODE_PRIORITY.some((mode) => declared[mode] !== void 0);
-    return {
-      status: "unresolved",
-      problem: { kind: anyDeclared ? "host-declares-none" : "host-undescribed" }
-    };
-  }
-  const preferred = project.preferredMode;
-  if (!preferred) {
-    return { status: "resolved", mode: available, fallback: false };
-  }
-  if (declared[preferred] === true) {
-    return { status: "resolved", mode: preferred, preferred, fallback: false };
-  }
-  if (!projectAllowsFallback(project)) {
-    return { status: "unresolved", problem: { kind: "fallback-forbidden", preferred, available } };
-  }
-  return { status: "resolved", mode: available, preferred, fallback: true };
-}
-function statedString(value) {
-  return typeof value === "string" && value.trim() !== "" ? value : null;
-}
-function projectSettings(projectYaml, hasProject = true) {
-  if (!hasProject) return null;
-  const project = record(projectYaml);
-  const frontend = project?.frontend;
-  const hasFrontend = frontend !== void 0 && frontend !== null;
-  const browser = record(record(frontend)?.browser);
-  const commands2 = {};
-  for (const [name, value] of Object.entries(record(project?.commands) ?? {})) {
-    const command = statedString(value);
-    if (command !== null) commands2[name] = command;
-  }
-  const rawPort = browser?.cdp_port;
-  const cdpPort = typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort > 0 ? rawPort : null;
-  return {
-    profile: statedString(project?.profile),
-    commands: commands2,
-    browser: hasFrontend ? { mode: statedString(browser?.mode), cdpPort, fallback: statedString(browser?.fallback) } : null
-  };
-}
-function frontendHelpersDir(projectYaml) {
-  return statedString(record(record(projectYaml)?.frontend)?.helpers_dir);
-}
-function workflowFlag(projectYaml, flag, whenUnstated) {
-  const key = `workflow.${flag}`;
-  const fallback = whenUnstated(key);
-  const value = record(record(projectYaml)?.workflow)?.[flag];
-  if (typeof value === "boolean") return value;
-  if (typeof value !== "string") return fallback;
-  try {
-    return parseBooleanWord(key, value);
-  } catch {
-    return fallback;
-  }
-}
-function domainCount(domainMapYaml) {
-  const domains = record(record(domainMapYaml)?.domains);
-  return domains ? Object.keys(domains).length : null;
-}
-function agentBrowserCdpPort(agentBrowserJson) {
-  const cdp = record(agentBrowserJson)?.cdp;
-  if (typeof cdp === "number") return Number.isInteger(cdp) && cdp > 0 ? cdp : null;
-  if (typeof cdp !== "string") return null;
-  const port = Number(cdp.trim());
-  return Number.isInteger(port) && port > 0 ? port : null;
-}
-function outputStyleOf(settingsJson) {
-  return statedString(record(settingsJson)?.outputStyle);
-}
-var BROWSER_MODE_PRIORITY, BROWSER_AXIS_KEYS, BROWSER_AXIS_LIST, BROWSER_AXIS_KEY_SET, ORCHESTRATORS, ORCHESTRATOR_AXIS_KEYS, ORCHESTRATOR_PROBES, CHROMIUM_BINARIES, DEFAULT_REMOTE_CDP_PORT, DEFAULT_CDP_PORT, FALLBACK_FORBIDDEN, BROWSER_FALLBACK_VALUES;
-var init_host_status = __esm({
-  "src/lib/host-status.ts"() {
-    "use strict";
-    init_global_config();
-    BROWSER_MODE_PRIORITY = ["remote", "headless", "local"];
-    BROWSER_AXIS_KEYS = {
-      remote: "host.browser.remote",
-      headless: "host.browser.headless",
-      local: "host.browser.local"
-    };
-    BROWSER_AXIS_LIST = BROWSER_MODE_PRIORITY.map((mode) => BROWSER_AXIS_KEYS[mode]).join(", ");
-    BROWSER_AXIS_KEY_SET = new Set(Object.values(BROWSER_AXIS_KEYS));
-    ORCHESTRATORS = ["herdr", "orca"];
-    ORCHESTRATOR_AXIS_KEYS = {
-      herdr: "host.orchestrators.herdr",
-      orca: "host.orchestrators.orca"
-    };
-    ORCHESTRATOR_PROBES = {
-      // `herdr api snapshot` reads live state off the server's socket, so it fails
-      // outright when no server is behind it and its exit status is the whole
-      // answer. The subcommand is the probe: bare `herdr api` is a command group
-      // that prints its subcommands and exits 2 whether or not a server is running,
-      // so it fails a host that is working fine.
-      herdr: { binaries: ["herdr"], args: ["api", "snapshot"], answered: () => true },
-      orca: {
-        binaries: ["orca-ide", "orca"],
-        args: ["status", "--json"],
-        answered: orcaRuntimeIsReady,
-        docs: "https://github.com/stablyai/orca/blob/main/docs/reference/headless-linux-server.md"
-      }
-    };
-    CHROMIUM_BINARIES = [
-      "chromium",
-      "chromium-browser",
-      "google-chrome",
-      "google-chrome-stable"
-    ];
-    DEFAULT_REMOTE_CDP_PORT = 19988;
-    DEFAULT_CDP_PORT = 9555;
-    FALLBACK_FORBIDDEN = "none";
-    BROWSER_FALLBACK_VALUES = [
-      FALLBACK_FORBIDDEN,
-      ...BROWSER_MODE_PRIORITY
-    ];
-  }
-});
-
-// src/lib/project-config.ts
-import {
-  accessSync,
-  chmodSync,
-  constants as fsConstants,
-  existsSync as existsSync9,
-  readFileSync as readFileSync7,
-  readdirSync as readdirSync5,
-  realpathSync,
-  statSync as statSync2
-} from "node:fs";
-import { basename, dirname as dirname4, join as join10 } from "node:path";
-import { isDeepStrictEqual } from "node:util";
-function projectKeySpec(key) {
-  return PROJECT_KEYS[key];
-}
-function profileNames() {
-  const pluginRoot = findPluginRoot();
-  if (!pluginRoot) return [];
-  const dir = join10(pluginRoot, PROFILES_DIR);
-  if (!existsSync9(dir)) return [];
-  return readdirSync5(dir).filter((name) => name.endsWith(".yaml")).map((name) => basename(name, ".yaml")).sort();
-}
-function parseEnum2(key, raw, values) {
-  if (values.includes(raw)) return raw;
-  throw invalidEnumValue(key, raw, values);
-}
-function numberRange(spec) {
-  const { min, max } = spec;
-  if (min !== void 0 && max !== void 0) return ` from ${min} to ${max}`;
-  if (min !== void 0) return `, ${min} or more`;
-  if (max !== void 0) return `, ${max} or less`;
-  return "";
-}
-function numberExpectation(spec) {
-  return `Expected a ${spec.integer ? "whole number" : "number"}${numberRange(spec)}.`;
-}
-function parseNumber(key, raw, spec) {
-  const value = Number(raw);
-  const expected = numberExpectation(spec);
-  if (raw.trim() === "" || !Number.isFinite(value)) throw invalidValue(key, raw, expected);
-  if (spec.integer && !Number.isInteger(value)) throw invalidValue(key, raw, expected);
-  if (spec.min !== void 0 && value < spec.min) throw invalidValue(key, raw, expected);
-  if (spec.max !== void 0 && value > spec.max) throw invalidValue(key, raw, expected);
-  return value;
-}
-function parseThresholdEntry(key, entry) {
-  if (typeof entry === "number" && Number.isFinite(entry)) return entry;
-  if (typeof entry === "string") {
-    const text = entry.trim();
-    if (PERCENTAGE.test(text)) return text;
-    if (text !== "" && Number.isFinite(Number(text))) return Number(text);
-  }
-  throw invalidValue(
-    key,
-    typeof entry === "string" ? entry.trim() : JSON.stringify(entry) ?? "",
-    "Every entry must be a number of tokens, such as 150000, or a percentage of the context window, such as 40%."
-  );
-}
-function parseThresholds(key, raw) {
-  const trimmed = raw.trim();
-  let entries;
-  if (trimmed.startsWith("[")) {
-    let flow;
-    try {
-      flow = (0, import_yaml3.parse)(trimmed);
-    } catch (err) {
-      throw invalidValue(key, raw, `Not a YAML list: ${err.message}`);
-    }
-    if (!Array.isArray(flow)) throw invalidValue(key, raw, "Expected a YAML list.");
-    entries = flow;
-  } else {
-    entries = trimmed.split(",");
-  }
-  if (entries.length === 0) throw invalidValue(key, raw, "Expected at least one entry.");
-  return entries.map((entry) => parseThresholdEntry(key, entry));
-}
-function parseProjectValue(key, raw) {
-  const spec = projectKeySpec(key);
-  if (!spec) throw new ConfigValidationError(`Unknown config key "${key}".`);
-  switch (spec.kind) {
-    case "boolean":
-      return parseBooleanWord(key, raw);
-    case "number":
-      return parseNumber(key, raw, spec);
-    case "string":
-      return raw;
-    case "enum":
-      return parseEnum2(key, raw, spec.values);
-    case "profile": {
-      const names = profileNames();
-      return names.length === 0 ? raw : parseEnum2(key, raw, names);
-    }
-    case "thresholds":
-      return parseThresholds(key, raw);
-  }
-}
-function scalarSource(value) {
-  return (0, import_yaml3.stringify)(value, { lineWidth: 0 }).trimEnd();
-}
-function splicedSource(src, doc, path, value) {
-  if (value !== null && typeof value === "object") return null;
-  const node = doc.getIn(path, true);
-  if (!(0, import_yaml3.isScalar)(node) || !node.range) return null;
-  const [start, end] = node.range;
-  if (end <= start) return null;
-  const source = scalarSource(value);
-  if (source.includes("\n")) return null;
-  return src.slice(0, start) + source + src.slice(end);
-}
-function holdsSameDataAs(candidate, expected) {
-  try {
-    const parsed = (0, import_yaml3.parseDocument)(candidate);
-    if (parsed.errors.length > 0) return false;
-    return isDeepStrictEqual(parsed.toJS(), expected.toJS());
-  } catch {
-    return false;
-  }
-}
-function lineEndingOf(src) {
-  const crlf = (src.match(/\r\n/g) ?? []).length;
-  const lf = (src.match(/\n/g) ?? []).length - crlf;
-  return crlf > lf ? "\r\n" : "\n";
-}
-function withByteOrderMark(text, src) {
-  if (!src.startsWith(BYTE_ORDER_MARK) || text.startsWith(BYTE_ORDER_MARK)) return text;
-  return BYTE_ORDER_MARK + text;
-}
-function withLineEnding(text, ending) {
-  const lf = text.replace(/\r\n/g, "\n");
-  return ending === "\n" ? lf : lf.replace(/\n/g, "\r\n");
-}
-function fsReason(err) {
-  const code = typeof err === "object" && err !== null ? err.code : void 0;
-  if (code !== void 0 && FS_REASONS[code] !== void 0) return FS_REASONS[code];
-  return err instanceof Error ? err.message.split("\n")[0] : String(err);
-}
-function readSource(file) {
-  if (!existsSync9(file)) return "";
-  let bytes;
-  try {
-    bytes = readFileSync7(file);
-  } catch (err) {
-    throw new ConfigFileError(`Could not read ${file}: ${fsReason(err)}`);
-  }
-  try {
-    return UTF8.decode(bytes);
-  } catch {
-    throw new ConfigValidationError(
-      `${file} is not valid UTF-8, so it cannot be rewritten without corrupting the bytes that did not decode. Re-save the file as UTF-8 and try again.`
-    );
-  }
-}
-function replaceFile(file, text) {
-  const present = existsSync9(file);
-  const target = present ? realpathSync(file) : file;
-  const existing = present ? statSync2(target) : null;
-  if (existing) accessSync(target, fsConstants.W_OK);
-  const directory = dirname4(target);
-  try {
-    accessSync(directory, fsConstants.W_OK);
-  } catch (err) {
-    throw new ConfigFileError(
-      `Could not write ${file}: ${fsReason(err)} on ${directory}. The new file is written there and renamed over the target, so that directory has to be writable too.`
-    );
-  }
-  replaceFileAtomically(target, text, (temp) => {
-    if (existing) chmodSync(temp, existing.mode & 511);
-  });
-}
-function writeSource(file, text) {
-  try {
-    ensureDir(dirname4(file));
-    replaceFile(file, text);
-  } catch (err) {
-    if (err instanceof ConfigFileError) throw err;
-    throw new ConfigFileError(`Could not write ${file}: ${fsReason(err)}`);
-  }
-}
-function writeDocument(file, key, doc, src) {
-  const text = withByteOrderMark(withLineEnding(emitDocument(file, doc), lineEndingOf(src)), src);
-  if (!holdsSameDataAs(text, doc)) {
-    throw new ConfigValidationError(
-      `Cannot write ${key} to ${file} safely: what the writer emits reads back as a different value, so nothing was written. Change the value, or edit the key by hand.`
-    );
-  }
-  writeSource(file, text);
-}
-function emitDocument(file, doc) {
-  try {
-    return doc.toString();
-  } catch (err) {
-    throw new ConfigValidationError(
-      `Could not rewrite ${file}: ${err instanceof Error ? err.message : String(err)}. Remove the alias, or point it at a key the file still states, and try again.`
-    );
-  }
-}
-function isNullScalar(node) {
-  return (0, import_yaml3.isScalar)(node) && node.value === null;
-}
-function emptyBlockFor(node, doc) {
-  const map = new import_yaml3.YAMLMap(doc.schema);
-  if ((0, import_yaml3.isScalar)(node)) {
-    if (node.comment != null) map.comment = node.comment;
-    if (node.commentBefore != null) map.commentBefore = node.commentBefore;
-  }
-  return map;
-}
-function ensureBlocksAbove(file, doc, path) {
-  if (isNullScalar(doc.contents)) doc.contents = emptyBlockFor(doc.contents, doc);
-  if (doc.contents != null && !(0, import_yaml3.isMap)(doc.contents)) {
-    throw new ConfigValidationError(
-      `Cannot set ${path.join(".")}: ${file} holds ${(0, import_yaml3.isSeq)(doc.contents) ? "a list" : "a value"}, not a block of keys. Rewrite the file as a block of keys and try again.`
-    );
-  }
-  for (let depth = 1; depth < path.length; depth += 1) {
-    const above = path.slice(0, depth);
-    if (!doc.hasIn(above)) return;
-    const node = doc.getIn(above, true);
-    if ((0, import_yaml3.isMap)(node)) continue;
-    if (isNullScalar(node)) {
-      doc.setIn(above, emptyBlockFor(node, doc));
-      continue;
-    }
-    const blocked = above.join(".");
-    throw new ConfigValidationError(
-      `Cannot set ${path.join(".")}: ${blocked} holds ${(0, import_yaml3.isSeq)(node) ? "a list" : "a value"}, not a block. Change or remove ${blocked} first.`
-    );
-  }
-}
-function writeProjectEdit(file, key, edit) {
-  const src = readSource(file);
-  const doc = parseProjectDocument(file, src);
-  const path = key.split(".");
-  if (!edit.prepare(doc, path)) return false;
-  const candidate = edit.candidate(src, doc, path);
-  edit.apply(doc, path);
-  if (candidate !== null && holdsSameDataAs(candidate, doc)) {
-    writeSource(file, candidate);
-    return true;
-  }
-  writeDocument(file, key, doc, src);
-  return true;
-}
-function setProjectKey(file, key, value) {
-  writeProjectEdit(file, key, {
-    prepare: (doc, path) => {
-      ensureBlocksAbove(file, doc, path);
-      return true;
-    },
-    candidate: (src, doc, path) => splicedSource(src, doc, path, value),
-    apply: (doc, path) => doc.setIn(path, value)
-  });
-}
-function projectKeyDefault(key) {
-  return PROJECT_KEY_DEFAULTS[key];
-}
-function projectKeyDefaultFlag(key) {
-  const stated = projectKeyDefault(key);
-  if (stated === void 0) {
-    throw new Error(`${key} has no documented default to apply.`);
-  }
-  return parseBooleanWord(key, stated);
-}
-function parseProjectDocument(file, src) {
-  const doc = (0, import_yaml3.parseDocument)(src);
-  if (doc.errors.length > 0) {
-    throw new ConfigValidationError(`Could not parse ${file}: ${doc.errors[0].message}`);
-  }
-  return doc;
-}
-function atPath(data, path) {
-  return path.reduce((node, part) => {
-    if (typeof node !== "object" || node === null) return void 0;
-    return node[part];
-  }, data);
-}
-function getProjectKey(file, key) {
-  const doc = parseProjectDocument(file, readSource(file));
-  const path = key.split(".");
-  if (!doc.hasIn(path)) return { status: "unset" };
-  return { status: "set", value: atPath(doc.toJS(), path) };
-}
-function isBlock(node) {
-  return typeof node === "object" && node !== null && !Array.isArray(node) && Object.keys(node).length > 0;
-}
-function listProjectKeys(file) {
-  const rows = [];
-  const walk = (node, path) => {
-    if (isBlock(node)) {
-      for (const [name, child] of Object.entries(node)) walk(child, [...path, name]);
-      return;
-    }
-    if (path.length === 0) return;
-    rows.push({ key: path.join("."), value: node, known: rowIsKnown(path, node) });
-  };
-  walk(parseProjectDocument(file, readSource(file)).toJS(), []);
-  return rows;
-}
-function statesNothing(value) {
-  if (value === null) return true;
-  return typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
-}
-function knowsKeysUnder(key) {
-  return PROJECT_KEY_LIST.some((known2) => known2.startsWith(`${key}.`));
-}
-function rowIsKnown(path, value) {
-  if (path.some((part) => part.includes("."))) return false;
-  const key = path.join(".");
-  if (projectKeySpec(key) !== void 0) return true;
-  return statesNothing(value) && knowsKeysUnder(key);
-}
-function nextLineStart(src, from) {
-  const at = src.indexOf("\n", from);
-  return at === -1 ? src.length : at + 1;
-}
-function removedSource(src, doc, path) {
-  const parent = path.length > 1 ? doc.getIn(path.slice(0, -1), true) : doc.contents;
-  if (!(0, import_yaml3.isMap)(parent)) return null;
-  const leaf = path[path.length - 1];
-  const pair = parent.items.find((item) => (0, import_yaml3.isScalar)(item.key) && item.key.value === leaf);
-  if (!pair || !(0, import_yaml3.isScalar)(pair.key) || !pair.key.range) return null;
-  const value = pair.value;
-  if (value != null && !(0, import_yaml3.isScalar)(value)) return null;
-  const keyStart = pair.key.range[0];
-  const lineStart = src.lastIndexOf("\n", keyStart - 1) + 1;
-  if (src.slice(lineStart, keyStart).trim() !== "") return null;
-  const contentEnd = value?.range ? value.range[1] : pair.key.range[1];
-  const end = src[contentEnd - 1] === "\n" ? contentEnd : nextLineStart(src, contentEnd);
-  return src.slice(0, lineStart) + src.slice(end);
-}
-function collapseEmptied(doc, path) {
-  for (let depth = path.length - 1; depth > 0; depth -= 1) {
-    const parentPath = path.slice(0, depth);
-    const parent = doc.getIn(parentPath, true);
-    if (!(0, import_yaml3.isMap)(parent) || parent.items.length > 0) return;
-    doc.setIn(parentPath, null);
-  }
-  if ((0, import_yaml3.isMap)(doc.contents) && doc.contents.items.length === 0) doc.contents = null;
-}
-function unsetProjectKey(file, key) {
-  return writeProjectEdit(file, key, {
-    prepare: (doc, path) => doc.hasIn(path),
-    candidate: removedSource,
-    apply: (doc, path) => {
-      doc.deleteIn(path);
-      collapseEmptied(doc, path);
-    }
-  });
-}
-var import_yaml3, COUNT, FRONTEND_VERIFICATION_KEY, DESIGN_REVIEW_KEY, PROJECT_KEYS, PROJECT_KEY_LIST, PERCENTAGE, BYTE_ORDER_MARK, FS_REASONS, UTF8, PROJECT_KEY_DEFAULTS;
-var init_project_config = __esm({
-  "src/lib/project-config.ts"() {
-    "use strict";
-    import_yaml3 = __toESM(require_dist(), 1);
-    init_global_config();
-    init_atomic_file();
-    init_host_status();
-    init_constants();
-    init_project();
-    init_utils();
-    COUNT = { kind: "number", integer: true, min: 0 };
-    FRONTEND_VERIFICATION_KEY = "workflow.frontend_verification";
-    DESIGN_REVIEW_KEY = "workflow.design_review";
-    PROJECT_KEYS = {
-      profile: { kind: "profile" },
-      "workflow.spec_sync": { kind: "boolean" },
-      "workflow.grilling.questions": { kind: "enum", values: ["tool", "inline"] },
-      "workflow.tdd.strict": { kind: "boolean" },
-      "workflow.tdd.orchestrator_strict": { kind: "boolean" },
-      [FRONTEND_VERIFICATION_KEY]: { kind: "boolean" },
-      [DESIGN_REVIEW_KEY]: { kind: "boolean" },
-      "workflow.maps.tracker": { kind: "enum", values: ["github", "files"] },
-      "workflow.maps.persist": { kind: "boolean" },
-      "workflow.handoff.agent": { kind: "string" },
-      "workflow.handoff.ack_turns": COUNT,
-      "workflow.handoff.self_invoke": { kind: "boolean" },
-      "workflow.handoff.nudge_warn": COUNT,
-      "workflow.handoff.nudge_severe": COUNT,
-      "workflow.handoff.nudge_step": COUNT,
-      "workflow.handoff.context_thresholds": { kind: "thresholds" },
-      "workflow.handoff.context_window": { kind: "number", integer: true, min: 1 },
-      "commands.test": { kind: "string" },
-      "commands.test_collect": { kind: "string" },
-      "commands.build": { kind: "string" },
-      "commands.lint": { kind: "string" },
-      "commands.typecheck": { kind: "string" },
-      "commands.format": { kind: "string" },
-      "directories.source": { kind: "string" },
-      "directories.tests": { kind: "string" },
-      "test_markers.exclude": { kind: "string" },
-      "venv.activate": { kind: "string" },
-      "frontend.directory": { kind: "string" },
-      "frontend.dev_server_url": { kind: "string" },
-      "frontend.dev_server_check": { kind: "string" },
-      "frontend.helpers_dir": { kind: "string" },
-      "frontend.commands.dev": { kind: "string" },
-      "frontend.commands.build": { kind: "string" },
-      "frontend.commands.lint": { kind: "string" },
-      "frontend.commands.test": { kind: "string" },
-      // Both lists come from host-status.ts, which owns the mode names and reads
-      // them at run time. A schema spelling them again would be a second list to
-      // keep in step, and the file that resolves a mode would not know it existed.
-      "frontend.browser.mode": { kind: "enum", values: BROWSER_MODE_PRIORITY },
-      "frontend.browser.fallback": { kind: "enum", values: BROWSER_FALLBACK_VALUES },
-      "frontend.browser.cdp_port": { kind: "number", integer: true, min: 1, max: 65535 }
-    };
-    PROJECT_KEY_LIST = Object.keys(PROJECT_KEYS);
-    PERCENTAGE = /^\d+(\.\d+)?%$/;
-    BYTE_ORDER_MARK = "\uFEFF";
-    FS_REASONS = {
-      EACCES: "permission denied",
-      EPERM: "permission denied",
-      EROFS: "the filesystem is read-only",
-      EISDIR: "that path is a directory",
-      ENOTDIR: "a directory on that path is a file",
-      EMFILE: "too many open files",
-      ENOSPC: "the disk is full"
-    };
-    UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-    PROJECT_KEY_DEFAULTS = {
-      "workflow.spec_sync": "true",
-      "workflow.grilling.questions": "tool",
-      "workflow.tdd.strict": "true",
-      "workflow.tdd.orchestrator_strict": "true",
-      [FRONTEND_VERIFICATION_KEY]: "false",
-      [DESIGN_REVIEW_KEY]: "false",
-      "workflow.maps.persist": "false",
-      "workflow.handoff.agent": "claude",
-      "workflow.handoff.ack_turns": "5",
-      "workflow.handoff.self_invoke": "true",
-      "workflow.handoff.nudge_warn": "200000",
-      "workflow.handoff.nudge_severe": "500000",
-      "workflow.handoff.nudge_step": "100000",
-      "directories.source": "src/",
-      "directories.tests": "tests/",
-      "frontend.directory": "frontend/",
-      "frontend.dev_server_url": "http://localhost:3000"
-    };
   }
 });
 
