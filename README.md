@@ -249,8 +249,7 @@ What an effort leaves behind is what matters: updated specs, decision notes, and
 - It applies the `writing` skill's plain-language rules and the `visual-docs` skill's Minto pyramid and bullet discipline
 - A reply leads with the answer and puts 90% or more of what follows in bullets
 - Each bullet holds one sentence and ends without a period
-- Sub-bullets nest as far as the point needs, indented eight spaces at the first level and four more at each level below
-    - A markdown file indents four per level instead, because GitHub reads a wider step as run-on text
+- Sub-bullets nest as far as the point needs, indented four spaces per level
 - Every word has to earn its place: no em dash, no emoji, no puffery, and no contrast clause that does no work
 
 How to turn it on:
