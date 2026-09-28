@@ -109,7 +109,11 @@ For each new/modified test file:
 
 2. **Circular assertion check**: If any test has the circular pattern -> FAIL
 
-3. **Mutation spot-check**: Pick one or two implemented functions. Add an early return to each. Run the tests.
+3. **Undefined-imports check**: For each new test, ask whether it would still pass if every function it imports returned `undefined`.
+
+    If yes -> FAIL. The test observes no behaviour. Typical causes are a weak assertion (`toBeDefined`, `is not None`), a bare `toHaveBeenCalled`, a restated constant, or an expected value computed by the code under test.
+
+4. **Mutation spot-check**: Pick one or two implemented functions. Add an early return to each. Run the tests.
 
     If tests still pass -> FAIL. Revert the change after the check.
 

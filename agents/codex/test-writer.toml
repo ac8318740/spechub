@@ -72,6 +72,16 @@ A test that passes against any implementation is not narrower. It is absent, and
 
 So check the floor yourself, whichever order you ran in. Ask what an implementation would have to get wrong for this test to fail. If you cannot name that, the test is vacuous.
 
+The quickest form of that check: would this test still pass if every function it imports returned `undefined`? If yes, it is vacuous. Five shapes fail it:
+
+- **Weak assertion only** – `is not None`, `toBeDefined`, `toBeTruthy`, `not.toThrow`, `toBeGreaterThan(0)`
+- **Mock only** – `toHaveBeenCalled` with no check of the payload the mock received
+- **Self-referential** – the expected value comes from the code under test, as in `expect(f(a)).toBe(f(a))`
+- **Constant pin** – the assertion restates a constant, as in `expect(MAX_TOOLS).toBe(8)`
+- **Fixture asserts fixture** – the assertion reads data the test built, and the subject never runs in the test body
+
+The fix is one concrete input and its literal expected output: `expect(slugify("Hello, World!")).toBe("hello-world")`.
+
 Rewrite it before you report.
 
 Report what you did not test. A criterion you could not test without picking an answer goes in your report, with the question that settles it. So does a criterion you could not test for another reason, such as one needing a live external service.
