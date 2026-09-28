@@ -48,7 +48,7 @@ with a value already used in this session:
 ```bash
 n=spechub-whoami-<nonce>
 s="${CLAUDE_CODE_SESSION_ID:-none}"
-p="$HOME/.claude/projects"
+p="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
 for _ in $(seq 1 20); do
   m=$(grep -lF "$n" "$p"/*/"$s"/subagents/agent-*.jsonl 2>/dev/null </dev/null | head -1)
   [ -n "$m" ] && { echo "child: $m"; exit 0; }
