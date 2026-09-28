@@ -121,12 +121,12 @@ record() {
 }
 
 # Run an extracted check with HOME and CLAUDE_CODE_SESSION_ID pointed at a
-# fixture, and with the sleep stub ahead of the real one. Sets OUT to its
+# fixture, CLAUDE_CONFIG_DIR set to $CFG_DIR (empty unless a case sets it), and with the sleep stub ahead of the real one. Sets OUT to its
 # stdout, with trailing newlines stripped by the command substitution, and RC
 # to its exit status.
 run_check() {
   local script="$1" home="$2" session="$3"
-  OUT="$(PATH="$STUB:$PATH" HOME="$home" CLAUDE_CODE_SESSION_ID="$session" bash "$script" 2>/dev/null)"
+  OUT="$(PATH="$STUB:$PATH" HOME="$home" CLAUDE_CONFIG_DIR="${CFG_DIR:-}" CLAUDE_CODE_SESSION_ID="$session" bash "$script" 2>/dev/null)"
   RC="$?"
 }
 
@@ -355,6 +355,24 @@ for pair in "handoff:$HANDOFF" "compact:$COMPACT"; do
   check "$label keys the marker on the session id"     'grep -q "CLAUDE_CODE_SESSION_ID}.quiet" "$f"'
   check "$label reads SPECHUB_CONTEXT_PRESSURE_DIR"    'grep -q SPECHUB_CONTEXT_PRESSURE_DIR "$f"'
 done
+
+# ---------------------------------------------------------------------------
+# Case 11: a moved config folder
+# ---------------------------------------------------------------------------
+# CLAUDE_CONFIG_DIR moves Claude Code's whole config folder, transcripts
+# included. A check that only searched $HOME/.claude found nothing there and
+# fell back to "lead", so a teammate ran a lead-only skill.
+echo "Case 11: the check follows CLAUDE_CONFIG_DIR"
+SESS="sess-cfgdir"
+make_home "$WORK/cfg-root" "$SESS" -fixture-repo agent:ccc
+mkdir -p "$WORK/h-cfg-home"
+CFG_DIR="$WORK/cfg-root/.claude"
+for pair in $(every_check); do
+  label="${pair%%:*}"; script="${pair#*:}"
+  run_check "$script" "$WORK/h-cfg-home" "$SESS"
+  check "$label finds the child under CLAUDE_CONFIG_DIR"  'case "$OUT" in child:*) true ;; *) false ;; esac'
+done
+CFG_DIR=""
 
 printf '\nResult: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
