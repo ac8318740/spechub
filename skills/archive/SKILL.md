@@ -85,6 +85,14 @@ Check each resolution left what it should have:
 3. **Out-of-scope nodes** – report them. A scope boundary is worth the user
    hearing once more before the map disappears.
 
+4. **The decision log** – read `<main checkout>/spechub/.decisions/<name>.tsv`
+   if it exists. The main checkout is `dirname` of `git rev-parse
+   --path-format=absolute --git-common-dir`.
+
+    afk runs append one row per decision an agent made alone. Hand each
+    lasting decision to `record-context`. A later row supersedes an earlier
+    one it contradicts.
+
 ## Step 4: Close the root
 
 The root carries no status of its own – it stays open while any node below it
@@ -123,12 +131,18 @@ dispose – closed issues are already the archive.
 Also dispose of `spechub/handoffs/<name>/` if it exists. Consumed handoffs
 hold conversation content and should not outlive the map they served.
 
+Delete the map's decision log, `<main checkout>/spechub/.decisions/<name>.tsv`,
+on either tracker. Step 3 already extracted what it held. Leave the directory
+and its `.gitignore` for the next map.
+
 ## Step 6: Report
 
 - Nodes resolved / out-of-scope counts
 - Residue: domains spot-checked, ADRs and glossary entries written
 - Disposal: deleted, or archive path
 - Reminder: commit with `/spechub:commit`
+- Suggestion: run `/spechub:reflect` to turn this session's lessons into skill
+  edits, records, or issues
 
 ## Legacy: archiving a `spechub/changes/` directory
 

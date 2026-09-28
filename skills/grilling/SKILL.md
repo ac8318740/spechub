@@ -33,17 +33,32 @@ session.
    per distinct place to look, not a fixed count. Fold what they find into
    the round.
 
-3. **Number the questions.** Attach a recommended answer to each, with one
+3. **Run it before you ask it.** Check whether running something could answer
+   the question – behaviour, timing, output, or performance. If it could,
+   dispatch a subagent to build a throwaway prototype instead of asking the
+   user:
+    - The subagent builds it in `/tmp/spechub-proto/<node-id>/`, or
+      `/tmp/spechub-proto/<short-slug>/` with no map
+    - It imports repo code by absolute path, and never creates a prototype
+      file inside the repo
+    - It returns the answer and its evidence, then deletes the folder
+    - You record both on the node, or in the conversation with no map
+
+    Questions of taste, product, or preference still go to the user. No
+    prototype code is ever copied into the repo – the real build goes
+    through the normal TDD pipeline.
+
+4. **Number the questions.** Attach a recommended answer to each, with one
    line of reasoning. A question you cannot recommend an answer for is usually
    two questions.
 
-4. **Present the whole round at once** (see Presentation). One round, one
+5. **Present the whole round at once** (see Presentation). One round, one
    message. Never trickle questions one at a time.
 
-5. **Record each answer.** If no option matches, the reply itself is the
+6. **Record each answer.** If no option matches, the reply itself is the
    answer, never the nearest option.
 
-6. **Recompute the frontier.** Answers surface new questions and unblock old
+7. **Recompute the frontier.** Answers surface new questions and unblock old
    ones. Derive the next round fresh. Never continue down a list planned in
    advance.
 
@@ -99,7 +114,7 @@ the tracker's `update` and `create` operations:
 
 4. Redraw the resolved node's own diagram to mark the path you chose, then
    regenerate its parent's. The map skill's `visuals.md` holds the rules and
-   its `SKILL.md` holds the command.
+   the command.
 
 5. Recompute the frontier with the tracker's query and present the next
    round.

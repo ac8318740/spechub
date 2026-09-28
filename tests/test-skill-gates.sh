@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Guards the lead-session check that opens the handoff and compact-and-continue
-# skills.
+# Guards the lead-session check that opens the handoff, compact-and-continue and
+# reflect skills.
 #
-# Both skills refuse to run outside the lead session, because both write state
-# the lead alone owns: the context-pressure quiet marker, keyed on
-# CLAUDE_CODE_SESSION_ID, and the shared spechub/HANDOFF.md anchor.
+# Handoff and compact-and-continue refuse to run outside the lead session,
+# because both write state the lead alone owns: the context-pressure quiet
+# marker, keyed on CLAUDE_CODE_SESSION_ID, and the shared spechub/HANDOFF.md
+# anchor. Reflect refuses because a teammate shares the lead's session id, so
+# it would review the lead's transcript instead of its own.
 #
 # The first version of that check read an environment variable, and the variable
 # does not mean what it looked like it meant (#146). Claude Code sets
@@ -37,8 +39,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${SCRIPT_DIR}/.."
 HANDOFF="${ROOT}/skills/handoff/SKILL.md"
 COMPACT="${ROOT}/skills/compact-and-continue/SKILL.md"
+REFLECT="${ROOT}/skills/reflect/SKILL.md"
 
-for f in "$HANDOFF" "$COMPACT"; do
+for f in "$HANDOFF" "$COMPACT" "$REFLECT"; do
   [ -f "$f" ] || { echo "FATAL: missing $f" >&2; exit 1; }
 done
 
@@ -127,12 +130,12 @@ run_check() {
   RC="$?"
 }
 
-# Cases 3 onward run BOTH extracted blocks even though Case 2 asserts they are
+# Cases 3 onward run EVERY extracted block even though Case 2 asserts they are
 # byte-identical. The assertion is what makes that redundant, and the assertion
 # is the thing most likely to be deleted by someone who decides the two skills
-# should diverge. Running both means the behavioural cases keep their meaning
+# should diverge. Running every block means the behavioural cases keep their meaning
 # on that day.
-both() { echo "handoff:$H_CHECK compact:$C_CHECK"; }
+every_check() { echo "handoff:$H_CHECK compact:$C_CHECK reflect:$R_CHECK"; }
 
 # ---------------------------------------------------------------------------
 # Case 1: no skill BRANCHES on CLAUDE_CODE_CHILD_SESSION
@@ -171,16 +174,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Case 2: both skills carry an extractable lead check
+# Case 2: every gated skill carries an extractable lead check
 # ---------------------------------------------------------------------------
-echo "Case 2: both skills carry a runnable lead check"
+echo "Case 2: every gated skill carries a runnable lead check"
 H_CHECK="$WORK/handoff-check.sh"
 C_CHECK="$WORK/compact-check.sh"
+R_CHECK="$WORK/reflect-check.sh"
 extract_check "$HANDOFF" > "$H_CHECK"
 extract_check "$COMPACT" > "$C_CHECK"
+extract_check "$REFLECT" > "$R_CHECK"
 check "handoff carries a <!-- lead-check --> block"           '[ -s "$H_CHECK" ]'
 check "compact-and-continue carries one too"                  '[ -s "$C_CHECK" ]'
-check "the two blocks are the same check"                     'diff -q "$H_CHECK" "$C_CHECK" >/dev/null'
+check "reflect carries one too"                               '[ -s "$R_CHECK" ]'
+check "handoff and compact carry the same check"              'diff -q "$H_CHECK" "$C_CHECK" >/dev/null'
+check "handoff and reflect carry the same check"              'diff -q "$H_CHECK" "$R_CHECK" >/dev/null'
 # Without this, a renamed placeholder makes sed a no-op, Case 3 still passes
 # for the wrong reason and Case 4 fails pointing at the wrong thing.
 check "the <nonce> placeholder was substituted"               'grep -q "$MARK" "$H_CHECK"'
@@ -189,7 +196,7 @@ check "the block names the session-id variable"               'grep -q CLAUDE_CO
 # Nothing below can mean anything if the blocks did not extract. This fatal
 # path prints a Result line, unlike the missing-file one at the top of the
 # file, so run-all.sh reports a failed check rather than a broken suite.
-if [ ! -s "$H_CHECK" ] || [ ! -s "$C_CHECK" ]; then
+if [ ! -s "$H_CHECK" ] || [ ! -s "$C_CHECK" ] || [ ! -s "$R_CHECK" ]; then
   printf '\nResult: %d passed, %d failed\n' "$pass" "$((fail + 1))"
   echo "FATAL: no lead-check block to run; skipping the behavioural cases" >&2
   exit 1
@@ -233,6 +240,7 @@ extract_check_raw() {
 }
 check "the handoff nonce placeholder is angle-bracketed"  '[ "$(raw_block "$HANDOFF")" = "n=spechub-whoami-<nonce>" ]'
 check "the compact nonce placeholder matches"             '[ "$(raw_block "$COMPACT")" = "n=spechub-whoami-<nonce>" ]'
+check "the reflect nonce placeholder matches"             '[ "$(raw_block "$REFLECT")" = "n=spechub-whoami-<nonce>" ]'
 check "an unsubstituted block is a bash syntax error"     '! bash -n <(extract_check_raw "$HANDOFF") 2>/dev/null'
 
 # ---------------------------------------------------------------------------
@@ -244,7 +252,7 @@ check "an unsubstituted block is a bash syntax error"     '! bash -n <(extract_c
 echo "Case 4: a lead session is recognised as the lead"
 SESS="sess-lead"
 make_home "$WORK/h-lead" "$SESS" -fixture-repo lead decoy:aaa decoy:bbb
-for pair in $(both); do
+for pair in $(every_check); do
   label="${pair%%:*}"; script="${pair#*:}"
   run_check "$script" "$WORK/h-lead" "$SESS"
   check "$label reports lead for a lead session"       '[ "$OUT" = "lead" ]'
@@ -257,7 +265,7 @@ done
 echo "Case 5: a subagent or teammate is recognised as a child"
 SESS="sess-child"
 make_home "$WORK/h-child" "$SESS" -fixture-repo agent:ce443a decoy:aaa
-for pair in $(both); do
+for pair in $(every_check); do
   label="${pair%%:*}"; script="${pair#*:}"
   run_check "$script" "$WORK/h-child" "$SESS"
   check "$label reports child for an agent transcript"  'case "$OUT" in child:*) true ;; *) false ;; esac'
@@ -273,7 +281,7 @@ done
 echo "Case 6: the verdict comes from the agent transcripts"
 SESS="sess-both"
 make_home "$WORK/h-both" "$SESS" -fixture-repo lead agent:ce443a
-for pair in $(both); do
+for pair in $(every_check); do
   label="${pair%%:*}"; script="${pair#*:}"
   run_check "$script" "$WORK/h-both" "$SESS"
   check "$label still reports child when both hold the mark"  'case "$OUT" in child:*) true ;; *) false ;; esac'
@@ -323,7 +331,7 @@ check "the child is found in the later project directory" \
 # unrunnable everywhere - so absence of evidence must read as "lead".
 echo "Case 9: with no transcript on disk, the check says lead"
 mkdir -p "$WORK/h-empty"
-for pair in $(both); do
+for pair in $(every_check); do
   label="${pair%%:*}"; script="${pair#*:}"
   run_check "$script" "$WORK/h-empty" "sess-missing"
   check "$label reports lead when no project tree exists"  '[ "$OUT" = "lead" ]'

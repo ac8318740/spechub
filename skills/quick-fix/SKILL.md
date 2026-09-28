@@ -16,6 +16,12 @@ $ARGUMENTS
 
 If `$ARGUMENTS` is empty, ask the user to describe what's broken.
 
+## Before you start
+
+Copy the seven step headings below into your todo list word for word. They go ahead of any task-specific items. A step you skip stays in the list, marked `skip: <reason>`.
+
+When Step 5 runs, copy its four numbered steps the same way.
+
 ## Step 1: Understand the problem
 
 Before touching any code:
@@ -33,9 +39,9 @@ If the user provided an error message or stack trace, note the key details (file
 
 **Do NOT skip this step.** Delegate exploration to subagents:
 
-1. **Locate the code**: Find the file(s) involved. Use Grep and Glob to search for relevant functions, classes, and modules. Launch an Explore subagent if the scope is unclear.
+1. **Locate the code**: Launch an Explore subagent to find the files involved. Read only a file you can already name.
 
-2. **Read the integration points**: Don't just read the broken function – read its callers and callees. Understand:
+2. **Read the integration points**: Have the subagent read the broken function's callers and callees, not just the function. Understand:
     - What calls this code? (upstream)
     - What does this code call? (downstream)
     - What data flows through it? (inputs/outputs)

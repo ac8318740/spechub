@@ -63,7 +63,8 @@ effort. Nothing declares which.
 
 3. **Open with a breadth-first grill.** Work the conversation frontier in
    rounds per the grilling skill. Explore the codebase for facts as you go –
-   facts are your job, never the user's.
+   facts are your job, never the user's. Try a throwaway prototype before you
+   ask the user anything (grilling's "Run it before you ask it").
 
 4. **Apply the fog test to what surfaced.** A question you can state precisely
    now is `open`. One you cannot state is `fog` – record it without forcing it
@@ -103,17 +104,12 @@ operation. First the root:
     it is open, fog or claimed. `archive` resolves it when the map clears.
     Nothing else writes the root's status, and the frontier never returns it.
 
-- The root counts as pinned without the flag. At the start of every session,
-  `node walk` returns pinned nodes in full, so every session orients to the root.
-  On GitHub it also carries the `root-node` label, which is how a query finds
-  the entry point without walking parent links.
+- The root counts as pinned without the flag, and on GitHub it carries the
+  `root-node` label. The walk returns pinned nodes in full at the start of
+  every session, so every session orients to the root.
 
-- On GitHub, every node body opens with a header line declaring its map, its
-  root, its `answers` parent, its `blocked-by` ids, and its short `label`.
-  `trackers/github.md` holds the format. It is the authoritative edge
-  encoding there, so one `list` call returns the whole graph. The files
-  backend writes no header, because frontmatter already holds `answers` and
-  `blocked-by`, and the directory name is the map.
+- On GitHub, every node body opens with a header line that encodes its edges.
+  `trackers/github.md` holds the format. The files backend writes none.
 
 - Every node carries a `kind` and a `label`, both required. A `label` is the
   node's short name for a diagram. `trackers/files.md` holds the kinds, the
@@ -152,15 +148,17 @@ operation. First the root:
   diagrams below. A parent draws its subtree, so nothing can draw one earlier.
   The root is a parent too, and it draws the whole map.
 
-- On the files backend, suggest adding `spechub/maps/` to `.gitignore`. Nodes
-  are transient working state – scratch you throw away once the map clears,
-  like `spechub/HANDOFF.md`. The durable output is specs, architecture decision
-  records (ADRs) and glossary entries, which you extract as nodes resolve.
+- On the files backend, suggest adding `spechub/maps/` to `.gitignore`
+  (`trackers/files.md` gives the reason).
 
 ## Working the frontier
 
 All commands below are the files backend's shape – on GitHub, compose the
 same queries per `trackers/github.md`.
+
+Before step 1, copy the bold title of each numbered step below into your todo
+list word for word, ahead of any task-specific items. A step you skip stays in
+the list, marked `skip: <reason>`.
 
 1. **Orient.** The packaging walk (`spechub node walk --map <name>`) – the root
    and pinned nodes in full, everything else gisted, meaning title and status
@@ -233,37 +231,10 @@ no question above it.
 ## Regenerating diagrams
 
 A parent's diagram draws its subtree, so any status change below it leaves
-that diagram wrong. A parent is any node another node's `answers` names, and
-the root is always one.
-
-Regenerate at two moments: on the resolved node's parent after every
-resolution, and on every parent at each frontier recompute. The second sweep
-catches a claim or a release, which changes a node's fill without resolving
-anything.
-
-```bash
-# files backend
-~/.claude/spechub/bin/spechub node diagram --map <name> --from <parent id>
-
-# github backend – one list call feeds every parent's render
-gh issue list --label "map:<name>" --state all --limit 500 \
-  --json number,title,body,state,stateReason,labels,url > /tmp/<name>.json
-~/.claude/spechub/bin/spechub node diagram --stdin --from <parent id> < /tmp/<name>.json
-```
-
-The renderer prints the two markers itself, so its output is the whole block.
-Replace the parent's existing block, markers included, and leave every word
-around it untouched. Skip any marker inside a fenced code block – that pair is
-an example, and `visuals.md` gives the rule.
-
-- **Skip the write when the rendered block matches the body's block byte for
-  byte**, so a quiet round costs no write at all
-- **Never write the output between the existing markers**, since that nests one
-  pair inside another and leaves two top-level pairs behind
-- **Render every parent from one `list` call**, since the renderer reads
-  nothing but the JSON you hand it
-- `visuals.md` holds the rest – the markers, the body template, and the cue
-  vocabulary every diagram draws with
+that diagram wrong. Regenerate on the resolved node's parent after every
+resolution, and on every parent at each frontier recompute. The map skill's
+`visuals.md` holds the commands and the write rules (Regenerating a parent's
+diagram).
 
 ## Done
 
