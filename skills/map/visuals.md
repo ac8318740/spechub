@@ -3,9 +3,10 @@
 Every map node explains itself with a diagram, two at most. A childless
 `notes` node is the one exception.
 
-Read this file at three moments: when you materialise a map, when a `fog` node
-graduates to `open`, and at every resolution. `SKILL.md` owns the map. This file
-owns what sits in a node body below the node's statement.
+Read this file when you materialise a map, when a `fog` node graduates to
+`open`, at every resolution, and at every frontier recompute. `SKILL.md` owns
+the map. This file owns what sits in a node body below the node's statement,
+and how you regenerate a parent's diagram.
 
 ## Which visual a node gets
 
@@ -271,6 +272,41 @@ The files backend emits plain ids, since a node on disk has no URL.
   the answer appended after it
 - **Skip the write when the rendered block matches the body byte for byte**, so
   a quiet round costs no API call
+
+## Regenerating a parent's diagram
+
+A parent's diagram draws its subtree, so any status change below it leaves
+that diagram wrong. A parent is any node another node's `answers` names, and
+the root is always one.
+
+Regenerate at two moments: on the resolved node's parent after every
+resolution, and on every parent at each frontier recompute. The second sweep
+catches a claim or a release, which changes a node's fill without resolving
+anything.
+
+```bash
+# files backend
+~/.claude/spechub/bin/spechub node diagram --map <name> --from <parent id>
+
+# github backend – one list call feeds every parent's render
+gh issue list --label "map:<name>" --state all --limit 500 \
+  --json number,title,body,state,stateReason,labels,url > /tmp/<name>.json
+~/.claude/spechub/bin/spechub node diagram --stdin --from <parent id> < /tmp/<name>.json
+```
+
+The renderer prints the two markers itself, so its output is the whole block.
+Replace the parent's existing block, markers included, and leave every word
+around it untouched. Skip any marker inside a fenced code block – that pair is
+an example, and Where visuals sit in the body gives the rule.
+
+- **Skip the write when the rendered block matches the body's block byte for
+  byte**, so a quiet round costs no write at all
+- **Never write the output between the existing markers**, since that nests one
+  pair inside another and leaves two top-level pairs behind
+- **Render every parent from one `list` call**, since the renderer reads
+  nothing but the JSON you hand it
+- The rest of this file holds the markers, the body template, and the cue
+  vocabulary every diagram draws with
 
 ## A worked body
 

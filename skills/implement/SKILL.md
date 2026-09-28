@@ -19,6 +19,12 @@ checkbox file to maintain.
 
 ## Steps
 
+Before step 1, copy the eight step headings below into your todo list word
+for word. They go ahead of any task-specific items. A step you skip stays in
+the list, marked `skip: <reason>`.
+
+When step 5 runs on a node, copy its eight numbered steps the same way.
+
 ### 1. Find the work
 
 Check the configured tracker for maps (`workflow.maps.tracker` in
@@ -124,68 +130,37 @@ completion:
     tests.
 
 5. **`/impeccable audit`** – report design findings on the changed frontend
-   files. The audit edits nothing. It needs no browser.
+   files. Steps 5 to 7 run only when three conditions hold: the design gate
+   is on, `spechub/project.yaml` configures `frontend`, and frontend files
+   changed.
 
-    You type the command yourself. impeccable's plugin loads it into your chat
-    as a markdown playbook.
+6. **`/impeccable polish`** – fix the same files, from the audit findings.
 
-    The audit runs only when the design gate is on, `spechub/project.yaml`
-    configures `frontend`, and frontend files changed. Read the gate with
-    `~/.claude/spechub/bin/spechub design-gate`.
+7. **task-checker subagent, second run** – verify the code polish changed.
 
-    The file list is the one the checker derived in its section 5.5, from
-    `git status --porcelain -- <frontend.directory>`.
-
-6. **`/impeccable polish`** – fix the same files. Polish reads the audit
-   findings as its backlog. It edits source.
-
-    You type this command yourself too, and the same three conditions gate it.
-
-    Tell polish to leave a factual claim in copy untouched. Tell it to list
-    every such claim in its report.
-
-    Only `polish` runs from the audit's "Recommended Actions". Tell the audit
-    to name each other command against the finding that earned it.
-
-    Name `harden`, `clarify`, `adapt`, `optimize`, and `onboard` in your
-    completion report, so the user can pick one later.
-
-7. **task-checker subagent, second run** – polish changed the code, so verify
-   it again. This run happens only when polish ran.
+    Read `design-pass.md` before steps 5 to 7. It holds who types the
+    commands, how to read the gate, and what polish must leave alone.
 
 8. **frontend-verifier subagent** – verify the UI in a browser. The
    verifier runs after the second checker passes, only when
    `spechub/project.yaml` configures `frontend`, frontend files changed,
    and `workflow.frontend_verification` is true.
 
-`workflow.tdd.strict: false`, relaxed TDD, runs step 2 before step 1. It
-skips nothing. Relaxed TDD means nobody writes the tests first, and the
-first three subagents still run.
-
-The frontend-verifier's gate is the same under either setting.
-
-The format step stays immediately before the checker, so under relaxed
-it formats the new tests as well.
-
-Relaxed costs the test-writer some of its independence, and you state that
-cost rather than hide it. The implementation already sits in the working
-tree when the test-writer runs. Tell it to write the tests from the node's
-requirements, and to leave the implementation unread.
-
-Under strict there is no implementation for it to read, which is the
-stronger guarantee.
-
-The checker's gate moves with the setting. Under `true` the new tests failed
-before the executor and pass after it.
-
-Under `false` nothing can show them failing without the implementation. The
-checker then holds the new tests to existing and passing. It holds the full
-suite to passing, and the test count to not dropping.
+`workflow.tdd.strict: false`, relaxed TDD, runs step 2 before step 1 and
+skips nothing. Read `relaxed-tdd.md` when the project sets it. It holds how
+the test-writer and the checker's gate change.
 
 If either checker run fails, route back to the executor with the feedback.
 If the work stalls or the session must stop mid-node, release the claim
 (`--status open`). The node is plainly open again, and you need no phase
 breadcrumb.
+
+**Decision log**: on afk nodes, append one row per decision point to
+`<main checkout>/spechub/.decisions/<name>.tsv`. A decision point is a fork chosen, a
+unit verified, a revert, or a blocker.
+
+Read `decision-log.md` before the first row. It holds how to find the main
+checkout, the columns, and the `.gitignore` the directory needs.
 
 **Parallelism**: afk nodes run unlimited and in parallel. When 2+ frontier
 nodes touch non-overlapping files, launch an Agent Team where each teammate
