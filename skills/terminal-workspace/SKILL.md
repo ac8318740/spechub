@@ -71,23 +71,7 @@ above them. Ten of those sections install twelve tools between them:
 The eleventh, `neovim`, installs nothing. It writes one file into a neovim config
 the user already has, and it is the only component that starts off.
 
-| Component | What it gives the user | Config key |
-|---|---|---|
-| herdr | A terminal multiplexer. It holds many terminal sessions and keeps them running after the user disconnects. | `herdr.enabled` |
-| gh-dash | A pull request dashboard, in the terminal. | `gh_dash.enabled` |
-| diffnav | A diff viewer with a file tree, on one key. | `diffnav.enabled` |
-| delta | The diff renderer git pages through. | `delta.enabled` |
-| tuicr | Reviews a pull request inside the terminal. | `tuicr.enabled` |
-| lazygit | Stages, commits, amends and pushes, on one key. | `lazygit.enabled` |
-| harlequin | A SQL editor in the terminal, on one key. Installed by uv, and launched by spechub-db. | `harlequin.enabled` |
-| neovim | A dot in the LazyVim statusline for a buffer with unsaved changes. Installs nothing, writes one file, and starts off. | `neovim.enabled` |
-| yazi | A file manager, with markdown drawn live by spechub-md. One key sends the hovered file to the machine the user sits at. | `yazi.enabled` |
-| markdown | Markdown with its mermaid diagrams drawn as text, or served to a browser. Installs spechub-md, mermaid-ascii and glow. | `markdown.enabled` |
-| remote | Copy and open, on a machine with no display of its own. Installs spechub-clip and spechub-open. | `remote.enabled` |
-
-A config key never carries a hyphen, so gh-dash is `gh_dash`. The last two rows
-name a feature rather than a binary, so each of those cells names its tools.
-The `neovim` row names an editor this setup never installs, and only configures.
+Read [`components.md`](components.md) when the user asks what a component does, which key turns it on, or why a key sits where it does. It holds the table of all eleven and the two letters the setup reserves.
 
 The two files this skill works with:
 
@@ -98,15 +82,6 @@ The keys, on one page: [docs/terminal-workspace-keys.md](../../docs/terminal-wor
 
 Background and why each piece is there:
 [docs/terminal-workspace.md](../../docs/terminal-workspace.md).
-
-### 1.1. `g` belongs to git, and `e` means edit
-
-The setup reserves two letters across the whole workspace, so the same key does
-the same thing wherever the user is standing:
-
-- `alt+g` opens lazygit and `alt+shift+g` opens it in a tab, so herdr's `goto` sits on `prefix+t` and `new_worktree` keeps only its chord
-- `e` opens `$EDITOR` in yazi and in both of tuicr's panels, which is why tuicr's file tree filters are `x` and `X`
-- diffnav is the exception, because it spends `e` on its file tree and puts the editor on `o`
 
 ## 2. Run `status` first, always
 
@@ -151,55 +126,7 @@ Copy the example config before the first `apply`:
 cp "$(dirname "$SETUP")/config.example.yaml" ~/.config/spechub/terminal-workspace.yaml
 ```
 
-Then ask about these settings, in this order:
-
-- **`herdr.integration`**: which agent reports its state to herdr. Set it to the agent the user actually runs, or `none`. Without it, herdr infers state by reading the screen
-- **`gh_dash.repo_paths`**: map each repository to its local clone. Without it, checkout fails. So does any keybinding using `{{.RepoPath}}`, the placeholder gh-dash fills in with that clone's path
-- **`herdr.chord_modifier`**: `alt` (default), `ctrl+alt`, or `none`. A chord is one key combination, such as `alt+f`
-    - Recommend `alt`. It is the only family measured to work whichever way the user connects
-    - The herdr documentation recommends `ctrl+alt`. That does reach herdr over a plain SSH shell
-    - A Windows client attaching with `herdr --remote` never delivers `ctrl+alt`. Every such chord goes silently dead
-    - Suggest `ctrl+alt` only to a user who attaches exactly one way and has tested it
-    - `none` keeps herdr's prefix-only keymap. The user presses a prefix key first
-- **`herdr.worktrees_directory`**: keep it absolute. A worktree is a second checkout of the same repository on its own branch.
-
-    A relative value resolves against the herdr session's base directory, not the repository you point at. Worktrees for a second repository then land inside the first
-
-- **`herdr.theme.name`**: leave it empty unless the user asks for a theme, and `apply` then writes none
-    - Set `herdr.theme.light` too for a user who attaches from two devices with different backgrounds, such as a dark terminal and an e-ink panel
-    - `auto_switch` asks each attached client for its background colour over OSC 11, an escape sequence a terminal answers with the colour it paints
-    - herdr then picks the dark or the light theme from that answer
-    - Without a light theme there is nothing to switch to, so `apply` writes the name alone
-- **`herdr.toast_delivery`** and **`herdr.agent_panel_sort`**: empty by default, and `apply` writes neither
-    - Set `toast_delivery` to `herdr` on a machine reached over SSH, where the terminal is the only surface herdr can draw a message on
-    - Set `agent_panel_sort` to `priority` to put the agents waiting on the user at the top
-- **`herdr.agent_labels_on_pane_borders`**: leave it `true`. Several agents in several panes is what this workspace is for, and an unlabelled pane does not say which agent it holds
-- **`tuicr.build_from_fork`**: leave it `false`
-    - Set it `true` for the two unmerged upstream pull requests, #607 stats and #633 resize
-    - Set it `true` also for the fork's own fix for blank `+N -N` counts in pull request review mode
-    - `true` needs cargo, the Rust build tool, and takes a few minutes to build
-    - Tell the user it is temporary. `status` tracks the two upstream pull requests, not the local fix
-- **`tuicr.appearance`**: pin it to `dark` or `light` on any machine the user reaches over the network
-    - Detection asks the terminal for its background colour over OSC 11, and nothing answers under `herdr --remote`
-    - tuicr then falls back to a desktop setting that a headless machine reports as light, and paints dark text on a black terminal
-    - Empty leaves the detection in place, which is right on a machine the user sits at
-- **`gh_dash.keybindings.agent_review`**: hands the selected pull request to an agent. Leave it empty if the user does not want that key. Avoid `R`, which is gh-dash's built-in refresh-all
-- **`yazi.download_target`**: the Tailscale node name of the machine the user sits at. Setting it puts a download key in yazi. Leave it empty for a user who does not run Tailscale, and `apply` writes no key
-    - Ask for the name `tailscale status` prints on **this** machine, not the name the user calls their laptop
-    - Taildrop sends only between devices one Tailscale account owns on one tailnet, so confirm both ends match before setting it
-    - Tell them to run `sudo tailscale set --operator=$USER` once on this machine, because `tailscale file cp` refuses a non-root caller without it
-- **`neovim.enabled`**: off by default, and the only component that is. Turn it on for a user who edits in LazyVim and wants a visible mark on a buffer with unsaved changes
-    - LazyVim recolours the filename and shows no sign of its own, so a modified buffer is easy to miss
-    - `apply` writes `~/.config/nvim/lua/plugins/spechub.lua` and edits nothing the user wrote
-    - `apply` skips the file when a lualine override the user wrote already marks a modified buffer, and names that file
-        - The statusline would otherwise carry two dots side by side
-    - Tell such a user to delete their own file to hand the dot to this component
-- **`remote.clipboard_shim`**: leave it `true` on any machine reached over SSH. It puts an `xclip` on `$PATH`, backed by `spechub-clip`. That stand-in is the only reason gh-dash's `y` and `Y` work there. `apply` skips it when the machine has a real `xclip` or a display
-
-One setting sits outside the config. `spechub-md --serve` takes its port from
-`$SPECHUB_MD_PORT` and falls back to 6419. Tell the user to forward whichever
-port they serve on, or the link `--serve` prints is unreachable from their
-laptop.
+Then read [`config-choices.md`](config-choices.md) and ask about the settings it lists, in its order.
 
 ## 4. `apply` installs the binaries and writes the keys
 
@@ -297,251 +224,19 @@ same way section 6 hands them a prompt.
 
 *`apply` binds keys on this machine. The emulator the user types in may claim the same ones first.*
 
-`apply` binds the keymap on **this** machine. The terminal emulator on the
-machine the user types on intercepts the chords first.
-
-Windows Terminal binds `alt+shift+d` to "duplicate pane" by default and never
-forwards it, so a binding on that chord does nothing here. The diff keys avoid
-it by sitting on `alt+f` and `alt+shift+f`. Other emulators claim other chords.
-
-When the user reports a key doing nothing, have them run `cat -v` in any pane
-and press it. A chord that arrives prints an escape sequence. One that prints
-nothing never left their machine, so the fix belongs in the emulator.
-
-After `apply`, work out which case you are in.
-
-**Running on the user's own desktop**, meaning macOS, or Linux with a desktop
-session. The terminal emulator is right here. Read
-[assets/terminal-workspace/client-keybindings.md](../../assets/terminal-workspace/client-keybindings.md)
-and do the work yourself.
-
-Find the emulator's config, and back it up. Unbind only the chords the emulator
-actually holds. Show the diff, and verify.
-
-**Running on a remote or headless host**, meaning no `DISPLAY`, or an
-`SSH_CONNECTION` in the environment. You cannot reach the emulator from here.
-Ask first:
-
-> Do you SSH into this machine from a Windows, macOS, or Linux desktop? If so
-> I can give you a prompt to hand to an agent there, which frees the keys their
-> terminal is swallowing.
-
-Only if they say yes, print the contents of `client-keybindings.md` verbatim for
-them to paste. Do not summarise it. Do not rewrite it for their emulator.
-
-It already covers the common ones. The agent on that machine can see which
-emulator the user actually runs.
-
-If they say no, or the terminal is on this machine, say nothing further about
-it. A user on a plain Linux console has nothing to fix.
-
-**Never** try to edit a client-side terminal config from a remote host. Never
-ask the user to paste their local config here so you can rewrite it.
+Read [`emulator-keys.md`](emulator-keys.md) after `apply`, and whenever the user reports a key doing nothing.
 
 ## 7. Copy, open and download, on a machine with no display
 
 *Three gh-dash keys break there, and a file has no way off the machine at all. `apply` writes a route for each. The last lines of `status` say where a copy and an open will land.*
 
-The dev machine – the remote machine the user's agents run on, a virtual machine
-in this setup – has no display and no clipboard. Two gaps, and three gh-dash
-keys fall into them.
-
-The `o` key fails with `exit status 1`, because `xdg-open` has no display. The
-`y` and `Y` keys fail with `Failed copying to clipboard`, because gh-dash shells
-out to `xclip`, `xsel` or `wl-copy`, and the machine has none of them.
-
-`apply` closes both gaps. Setting a second machine up needs nothing extra:
-
-```bash
-bash "$SETUP" apply
-bash "$SETUP" status     # read the last lines
-```
-
-`y` and `Y` keep gh-dash's own behaviour, backed by an `xclip` stand-in that
-copies over OSC 52. OSC 52 is an escape sequence a terminal reads as "put this
-text on the clipboard of the machine I am running on".
-
-The `o` key becomes a keybinding running `spechub-open`, because gh-dash runs
-`$BROWSER` with its output discarded and the dashboard still drawn. A route that
-must hand you a link then has nowhere to draw it.
-
-The last lines of `status` say where a copy and an open will actually land on
-**this** machine:
-
-```
-clipboard: xclip stand-in, copying to your terminal over OSC 52
-browser: none - o hands you a ctrl+clickable link and copies it
-last open: 2026-08-21T03:23:07+00:00 link: https://github.com/owner/repo/pull/30
-```
-
-Read them before debugging anything else. What each means:
-
-Every line `status` can print is here, in the order the code tries the routes:
-
-| Line | What happened | What to do |
-|---|---|---|
-| `clipboard: this machine has a display` | It has a real clipboard | Nothing |
-| `clipboard: xclip stand-in` | Copy reaches your terminal over OSC 52 | Nothing |
-| `clipboard: none` | `apply` has not run, or `remote.clipboard_shim` is false | Run `apply` |
-| `browser: $SPECHUB_OPEN_CMD = ...` | The user set an override, and it wins over every route below | Nothing |
-| `browser: xdg-open on this machine` | The machine has a desktop of its own | Nothing |
-| `browser: the Windows side of this machine` | This is WSL, and Windows opens the page | Nothing |
-| `browser: your default browser on your laptop` | The opener is up and holds the token | Nothing |
-| `browser: Chrome on your laptop` | The Playwriter bridge is up and proven attached | Nothing |
-| `browser: none - o hands you a link` | The normal case over SSH. ctrl+click it | Nothing |
-| `browser: none, and no terminal either` | `o` copies and reports failure | Below |
-| `browser: unknown` | `spechub-open` did not answer, so it is missing or broken | Run `apply` |
-
-Two of those rows name services this skill does not install. The opener is a
-small service on the user's laptop that opens a page in their default browser.
-The Playwriter bridge lets this machine drive Chrome on that same laptop, and
-the `bridge` skill covers it.
-
-Each runs on its own reverse tunnel, port 19988 for the bridge and port 19989
-for the opener. One can be up while the other is down.
-
-The opener has no key in this config, so do not invent one. `spechub-open` takes
-that route only when two things hold. A token file sits at
-`~/.config/spechub/opener.token`. The service answers on
-`http://127.0.0.1:19989` with that token.
-
-Setting `SPECHUB_OPEN_OPENER=off` in the environment skips the route.
-
-`browser: none` is not a fault. Nothing on that machine can open a page, so `o`
-hands the terminal a link instead. That link is the one route that works over
-any number of SSH hops.
-
-To make it a real one-key open, give it a command that can:
-
-```bash
-export SPECHUB_OPEN_CMD="ssh laptop open"   # any command taking a URL
-```
-
-Do not suggest installing a browser or an X server on the dev machine to fix
-this. The browser belongs on the machine the user is sitting at.
-
-Under `herdr --remote`, panes run on the remote host, so `spechub-open` looks
-for a browser there and normally finds none. That is normal, not a fault. It
-falls to the link route, which the client draws.
-
-Do not add per-host browser configuration to "fix" it.
-
-One thing to check rather than assume. We measured on herdr 0.8.2 that a pane's
-OSC 52 write crosses the remote link. A copy on the dev machine then reaches the
-clipboard the user attached from.
-
-The herdr documentation never promises this, and terminals differ in whether
-they act on OSC 52 at all.
-
-So have the user run `spechub-clip test-string` after the first attach, then
-paste on the client. Believe that test over the measurement.
-
-If it does not cross, say so plainly. The link is still on screen, and herdr's
-own drag-select copies it.
-
-### 7.1. When `o` claims it opened something nobody saw
-
-*A successful open proves nothing. Ask what sits on the other end of the endpoint.*
-
-`agent-browser` launches a headless Chrome on the local machine when it cannot
-attach to the Chrome DevTools Protocol (CDP) endpoint the caller named. That
-Chrome navigates, reports success, and shows nobody anything.
-
-A bridge relay answering on its HTTP port does not rule this out. Ours answered
-`/json/version` while refusing every CDP connection with
-`Multiple extensions connected. Specify extensionId.`
-
-Diagnose it by asking what is really on the other end, never by trusting a
-successful open. Port 9555 below is the CDP port SpecHub defaults to for a
-headless or local browser, so a stray Chrome on this machine answers there:
-
-```bash
-agent-browser get cdp-url          # the endpoint actually attached to
-curl -s 127.0.0.1:9555/json/list   # the tabs a headless Chrome here holds
-```
-
-`spechub-open` runs that check itself before taking the bridge route. If you
-find a stray headless Chrome holding pages, say so. It is a leftover, and
-killing it is the user's call, not yours.
-
-Detail, and why OSC 52 rather than a clipboard daemon:
-[docs/terminal-workspace.md](../../docs/terminal-workspace.md).
-
-### 7.2. Getting a file off the machine
-
-*A third gap has nothing to do with gh-dash. OSC 52 carries text, and a file needs Taildrop.*
-
-The clipboard route above carries text. A screenshot, a build artifact or a log
-has no route at all. The user's own SSH client pulls one down only when they
-type the path by hand.
-
-Set `yazi.download_target` and `apply` binds one key in yazi, `D` by default. It
-runs Taildrop, Tailscale's file send, on the hovered file:
-
-```toml
-run = 'shell --block -- tailscale file cp "%h" <target>:'
-```
-
-Recommend Taildrop over `scp` back to the user's machine. That route needs
-three things on their machine, and Taildrop needs none of them:
-
-- an SSH server running there
-- a reverse tunnel raised on every connection
-- this machine's key in their `authorized_keys`
-
-Taildrop needs no inbound port on their machine either.
-
-Three things break it, and `apply` names whichever one holds:
-
-| What the user sees | What it means | What to do |
-|---|---|---|
-| `Access denied: file access denied` | The account does not own the local Tailscale daemon | Run `sudo tailscale set --operator=$USER` once |
-| `502 Bad Gateway`, or the target reported offline | The two machines sit on different tailnets or under different accounts | Compare `tailscale status` on both ends |
-| `open %*: no such file or directory` | A binding used `%*`, which yazi never expands in a keymap | Use `%h`, the hovered file |
-
-The last row is why the key takes one file at a time. `%*` belongs to yazi's
-`[opener]` table. A keybinding passes the two characters through untouched,
-measured on yazi 26.8.15.
-
-Do not offer to install an SSH server on the user's own machine to work around
-a Taildrop failure. Fix the tailnet instead, or leave `yazi.download_target`
-empty.
+Read [`headless-clipboard.md`](headless-clipboard.md) when the user asks how to copy, open or download from this machine, or `o`, `y` or `Y` fails. It covers sections 7, 7.1 and 7.2.
 
 ## 8. Turning one component off, or all of them
 
 *`disable` undoes one component. `uninstall` undoes the managed config. harlequin is the one binary either of them removes.*
 
-```bash
-bash "$SETUP" disable herdr     # or delta, diffnav, gh_dash, harlequin, lazygit, neovim, tuicr
-```
-
-`disable` takes those eight components and no others. For `diffnav`, `gh_dash`,
-`harlequin`, `lazygit` and `tuicr` it writes `<component>.enabled: false` into
-the config itself, then rebuilds the herdr keymap so the rest of it survives.
-
-For `herdr`, `delta` and `neovim` it does not. Set `<component>.enabled: false`
-yourself after those three, or the next `apply` restores them.
-
-`neovim` is the one whose undo is a deletion. The component writes a whole file
-of SpecHub's own, so `disable` removes `~/.config/nvim/lua/plugins/spechub.lua`
-and leaves the rest of the user's neovim config alone. Neither `disable` nor
-`uninstall` touches a `spechub.lua` the user wrote by hand.
-
-`yazi`, `markdown` and `remote` have no `disable` path. `disable` refuses for
-those three and names the edit that turns one off. Set the component's
-`enabled` key to `false` in the config, then run `apply` again.
-
-```bash
-bash "$SETUP" uninstall
-```
-
-`uninstall` removes everything `apply` wrote. It strips the managed blocks from
-the herdr, tuicr and yazi configs. It unsets delta as the git pager.
-
-It deletes the helper scripts, the `xclip` stand-in, the neovim plugin file, and
-the keybindings it wrote into gh-dash. The user's own settings around them
-survive, and every binary stays except harlequin, which uv owns whole rather
-than as one file in `$BIN`.
+Read [`turn-off-and-update.md`](turn-off-and-update.md) when the user asks to turn a component off or uninstall.
 
 ## 9. Keeping it current
 
@@ -550,39 +245,4 @@ than as one file in `$BIN`.
 Run `outdated` first whenever the user invokes this skill on a machine that
 already has the workspace. It only reads, and it costs one round trip per tool.
 
-```bash
-bash "$SETUP" outdated
-```
-
-It prints one finding per line, tab-separated as kind, name and detail, and
-answers in its exit code:
-
-| Exit | Meaning | What to do |
-|---|---|---|
-| 0 | Nothing to do | Say nothing |
-| 1 | Something is missing, new or stale | Show the findings and offer `upgrade` |
-| 2 | It cannot tell | Name the reason once and move on |
-
-Four kinds of finding:
-
-- `missing` – this machine has never applied the workspace, so run section 4 rather than `upgrade`
-- `new` – a component this plugin version ships that the user's last `apply` never saw
-- `stale` – an installed tool behind its published release
-- `unknown` – the script cannot compare, so there is nothing to act on
-
-```bash
-bash "$SETUP" upgrade              # everything reported stale
-bash "$SETUP" upgrade yazi delta   # only these
-```
-
-`upgrade` reinstalls each stale binary and appends any new component's config
-block to the user's file, comments intact. The three tools that update
-themselves go through `herdr update`, `gh extension upgrade dlvhdr/gh-dash`,
-and `uv tool upgrade harlequin`. Run `apply` afterwards to install what the new
-block turned on.
-
-Naming a tool skips the version comparison, which is the only way to refresh
-`mermaid-ascii`. It has no version flag, so nothing can read the installed version.
-
-`outdated` reads herdr's stable release manifest, so a user on the preview
-channel sees a `stale` row for herdr that is not one.
+Then read [`turn-off-and-update.md`](turn-off-and-update.md) for the command, the exit codes, the four kinds of finding, and `upgrade`.

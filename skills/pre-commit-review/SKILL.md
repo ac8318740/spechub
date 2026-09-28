@@ -220,57 +220,8 @@ Consider: does a fix here require changes in other files? What's the minimal cha
 
 ## Step 6: FIX – Auto-fix or interactive waves
 
-### Auto-fix mode
-
-For each finding (MUST first, then SHOULD, then CONSIDER):
-
-1. Launch a **task-executor subagent** with the finding + suggested fix
-2. Verify the fix doesn't break anything (run lint, typecheck, and test commands from project.yaml)
-3. If fix breaks something, revert and try alternate approach
-4. Move to next finding
-
-After all fixes, run full verification using commands from `spechub/project.yaml`:
-
-```bash
-# Run the project's configured test, lint, and typecheck commands
-# Read these from project.yaml – do not hardcode
-```
-
-Report a summary of the fixes.
-
-### Interactive mode (default)
-
-Present findings in **waves of up to 4** using AskUserQuestion. Group related findings together.
-
-Format each wave like:
-
-```
-I found these issues in your changes. For each, choose: FIX / SKIP / DISCUSS
-
-1. [MUST | HARDCODE] `path/to/file.py:42`
-   Hardcoded timeout value `30` – should use config constant.
-   Suggested fix: Move to config, reference from there.
-
-2. [SHOULD | SSOT] `path/to/api/client.ts:15`
-   Duplicated error handling pattern – same try/catch in 3 functions.
-   Suggested fix: Extract shared wrapper function.
-
-3. [CONSIDER | ADJACENT] `path/to/component.tsx:88`
-   Existing code (not your change) has a magic string – should use constant.
-   Suggested fix: Add constant, use in both places.
-
-4. [SHOULD | EDGE-CASE] `path/to/manager.py:120`
-   No null check on response before accessing `.status`.
-   Suggested fix: Add guard clause with appropriate error.
-
-Reply with numbers to fix (e.g., "1,2,4") or "all" or "skip all", and any notes on approach.
-```
-
-After user responds:
-
-- Fix selected items via task-executor subagents (parallelize independent fixes)
-- Present next wave if more findings remain
-- Continue until all findings addressed or user says "done" / "skip the rest"
+- **Auto-fix mode**: read `auto-fix.md` and follow it.
+- **Interactive mode** (default): read `interactive.md` and follow it.
 
 ## Severity guide
 

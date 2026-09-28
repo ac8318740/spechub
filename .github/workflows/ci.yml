@@ -127,6 +127,20 @@ jobs:
           sys.exit(1 if failed else 0)
           PY
 
+      # A harness loads the whole SKILL.md every time the skill runs. Detail
+      # needed only on some runs belongs in a sibling file the skill links to.
+      - name: Every SKILL.md is 250 lines or fewer
+        run: |
+          failed=0
+          for f in skills/*/SKILL.md; do
+            n=$(wc -l < "$f")
+            if [ "$n" -gt 250 ]; then
+              echo "::error file=$f::$n lines, over the 250-line cap. Move detail into a sibling file and link it."
+              failed=1
+            fi
+          done
+          exit $failed
+
       - name: Plugin manifest version is valid semver
         run: |
           v=$(python3 -c "import json;print(json.load(open('.claude-plugin/plugin.json'))['version'])")

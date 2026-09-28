@@ -65,39 +65,13 @@ SPECHUB_ROOT=$(cd -- "$(dirname -- "$(readlink -f "$HOME/.claude/spechub/bin/spe
 "$SPECHUB_ROOT/skills/new-worktree/detect-orchestrator.sh" <path>   # one checkout's owner
 ```
 
-The path goes through `~/.claude/spechub/bin/spechub`, the invariant symlink the SessionStart hook maintains. The plugin re-creates that symlink every time Claude Code starts. It is the only reliable way to find the plugin's own root.
-
-Do not invent a shorter path, and do not reach for `$CLAUDE_PLUGIN_ROOT` – the plugin deliberately does not depend on that variable reaching a fresh subshell.
+Read `detector.md` before you run the detector for the first time in a session. It explains the path, the six output lines, and the case where the script does not run.
 
 Run the script once with no argument to read `active`. Then run it once per worktree in the plan, passing that worktree's path, and read `owner` from each run.
 
-The script always exits 0 and prints exactly six lines:
-
-- `declared_herdr` – whether the user has herdr installed on this host, recorded in the SpecHub global config under `host.orchestrators.herdr`. One of `true`, `false`, `unset`.
-- `declared_orca` – the same yes-or-no answer for Orca, recorded under `host.orchestrators.orca`. One of `true`, `false`, `unset`. The two are independent: a host can have both installed, one, or neither, so one answer says nothing about the other.
-- `detected` – which orchestrator is actually hosting this session, read from the environment markers an orchestrator injects into the terminals it opens. One of `herdr`, `orca`, `none`.
-- `active` – the branch to run for this session. One of `herdr`, `orca`, `none`.
-- `owner` – which orchestrator owns the checkout the script examined. One of `herdr`, `orca`, `none`.
-
-    The path settles it: a checkout under `~/orca/workspaces/` belongs to Orca, and a checkout under herdr's worktree root belongs to herdr. herdr's config names that root. Anything else is plain git.
-
-- `warning` – one line written for a human, empty when there is nothing to say.
-
-Declared means installed. Detected means hosting.
-
-Detected wins, so `active` always equals `detected`. This session cannot drive an installed orchestrator that does not host it.
-
-A marker for an orchestrator the host never declared earns a warning, not a refusal.
-
 Repeat a non-empty `warning` to the user verbatim, before anything else happens. Then let `active` decide how this session moves itself out in step 2. Let each checkout's `owner` decide how step 3 removes it.
 
-The script sometimes does not run at all: no output, and a non-zero exit from the invocation itself. Then there is no `active` and no `owner` to read.
-
-Do not guess either one. Say so to the user. Then treat every worktree as plain git, the branch that touches nothing an orchestrator holds.
-
-A missing or non-executable script looks like this, and a plugin older than the script is the usual cause.
-
-This is the same detector `new-worktree` runs, so both skills always give the same answer on the same host.
+The script sometimes does not run at all. Then follow `detector.md`, and treat every worktree as plain git.
 
 ### Owner
 
@@ -153,91 +127,7 @@ Skip a tool only when this host does not have it. Read that from the detector's 
 
 Say in the plan which checks ran and which did not, once per worktree, so nobody reads a missing check as a passed check.
 
-#### herdr's answer
-
-A herdr workspace holds tabs, and each tab holds panes. One status for the whole workspace therefore says nothing about the other tabs in it. So enumerate the panes before every removable verdict.
-
-Start with the cheap hint:
-
-```bash
-herdr worktree list
-herdr workspace list
-```
-
-Treat `working`, `blocked`, `idle` and `done` as a live agent. Skip the worktree, and run no further check on it.
-
-`idle` does not mean empty. In herdr it means an agent is present and waiting for input, which is exactly the state a session someone left open sits in. Reading `idle` as nobody home is the quickest way to destroy a running session.
-
-`unknown` never makes a worktree removable on its own. It summarises a whole workspace, and a second tab running an agent hides behind that one word.
-
-So list every pane of the workspace holding the worktree:
-
-```bash
-herdr pane list --workspace <workspace-id>
-```
-
-The listing covers every tab, not only the focused one. Each entry carries `pane_id`, `tab_id`, `agent`, `agent_status`, `cwd` and `foreground_cwd`.
-
-Exclude this session's own pane by identifier, never by status. The own pane is the one whose `pane_id` equals `$HERDR_PANE_ID`. Every other pane still counts, whatever the workspace `agent_status` said.
-
-The `w26` teardown skipped this step. It read its own workspace's `done` as its own verdict, removed the workspace, and killed a live session in the second tab.
-
-Excluding by `pane_id` keeps every other pane inside the check. The step 3 rules then stop the removal.
-
-Then read what actually runs in each remaining pane:
-
-```bash
-herdr pane process-info --pane <pane-id>
-```
-
-Any one of these three makes the worktree a skip:
-
-- The pane's `agent_status` is `working`, `blocked`, `idle` or `done`.
-- `foreground_processes` holds an agent, `claude` or `codex` for example.
-- A foreground process has a `cwd` inside the worktree's checkout path.
-
-The third case is not an agent. An editor or `gh dash` counts here. Deleting the directory under it still breaks it.
-
-Close it deliberately, or leave the worktree alone.
-
-One `cwd` never blocks: a path carrying the `(deleted)` marker. That shell sits in a directory somebody already removed, as step 2 describes. It holds nothing.
-
-Cross-check the pane count against the tabs, every time:
-
-```bash
-herdr tab list --workspace <workspace-id>
-```
-
-Sum `pane_count` across the tabs. A sum above the number of rows `pane list` returned means the enumeration missed something. Skip the worktree and report it.
-
-Name every blocking pane in the plan, so the user can close it deliberately.
-
-#### Orca's answer
-
-Resolve Orca's executable before you call it. The Linux binary is `orca-ide`, and some installs put it on PATH as plain `orca`. Never hard-code either name.
-
-This listing reads state and changes nothing. Step 3 runs the removal separately, and only against a checkout Orca owns.
-
-```bash
-ORCA_BIN="$(command -v orca-ide || command -v orca)"
-"$ORCA_BIN" worktree ps --json
-```
-
-Match each entry to a candidate on `.result.worktrees[].path`. Then read `agents`, `liveTerminalCount`, `hasAttachedPty` and `status` from that entry.
-
-Skip the worktree while `agents[]` holds anything, or while `liveTerminalCount` is above zero. Orca does not guard this itself on the command-line path. Someone watched a live check remove a worktree whose agent was mid-tool-call.
-
-An empty `agents` with a live terminal count is the common case, not a live agent. `orca worktree create` spawns a shell in every checkout it makes. That one shell holds the count at one.
-
-Skip it anyway. Then name the terminals, so the user can decide:
-
-```bash
-"$ORCA_BIN" terminal list --worktree path:<path> --json
-```
-
-Tell them what clears an idle shell: `"$ORCA_BIN" terminal stop --worktree path:<path> --json`. A later run then removes the worktree.
-
-This skill never stops a terminal. Only the user knows what a shell was holding, so the call is theirs.
+Ask herdr the way `herdr.md` step 1 says, and Orca the way `orca.md` step 1 says, whoever owns the checkout.
 
 #### When the host has neither tool
 
@@ -268,37 +158,9 @@ The harness then resets the session cwd to the main checkout on its own. Confirm
 
 That much is the same everywhere. What follows depends on the branch `active` names. This step is the one place `active` still decides anything: how this session moves itself.
 
-### Host: herdr
+When `active` is `herdr`, follow `herdr.md` step 2 before you remove anything.
 
-When `active` is `herdr`, move the pane out first, or step 3 deletes the worktree under a pane still sitting in that workspace.
-
-The move needs this pane's own identifier, and `active` being `herdr` does not guarantee it. The detector reports `herdr` when either of herdr's two environment markers holds a value, and only one of them names the pane. So if `$HERDR_PANE_ID` is empty, herdr's markers are incomplete – say so and stop, rather than issuing a pane move against a blank target.
-
-Find the main repo's workspace in `herdr workspace list`: `worktree.repo_root` is the main checkout and `worktree.is_linked_worktree` is `false`. More than one workspace can match, since any pane opened at the repo root qualifies. Prefer the one whose label is the repo name, and ask when it stays ambiguous.
-
-Then:
-
-```bash
-herdr pane move "$HERDR_PANE_ID" --new-tab --workspace <main-workspace-id> --focus
-```
-
-If no such workspace exists because it closed earlier, create one first:
-
-```bash
-herdr workspace create --cwd <main-root> --label <repo-name> --no-focus
-```
-
-The pane's own shell keeps the deleted directory as its cwd, which `herdr pane process-info` reports as `(deleted)`. That is cosmetic, and only visible once the agent exits and hands the prompt back.
-
-### Host: orca
-
-Orca has no command that moves a running terminal into another worktree. The `herdr pane move` step above has no Orca equivalent, so the cwd move is all this session can do.
-
-That is not enough for the checkout this session stands in. The Orca terminal keeps its shell inside that directory, and Orca keeps a row bound to it. Removing it breaks both.
-
-So leave that one checkout in place. Name it to the user, and say why it stayed. Suggest they run the teardown again from a different Orca terminal.
-
-Every other worktree in the plan goes as normal. This session stands outside them, so nothing has to move.
+When `active` is `orca`, follow `orca.md` step 2. It leaves this session's own checkout in place.
 
 ### Host: none
 
@@ -306,7 +168,7 @@ There is no pane and no workspace, so the cwd move described above is the whole 
 
 ## 3. Remove the worktrees
 
-Every removal through herdr or plain git passes `--force`. Orca is the exception, and its own branch below says why. `--force` is necessary here, not a shortcut.
+Every removal through herdr or plain git passes `--force`. Orca is the exception, and `orca.md` step 3 says why. `--force` is necessary here, not a shortcut.
 
 Plain `git worktree remove` refuses on any worktree containing submodules with "working trees containing submodules cannot be moved or removed". That refusal hits every worktree in a repo that has them.
 
@@ -320,55 +182,9 @@ Take the branch each checkout's `owner` names, not the branch `active` names. De
 
 Before each removal, confirm the live-agent checks from step 1 still hold. Both tools, every time, because neither sees the other's sessions. A pane can open between the plan and the removal, so re-read the panes rather than trusting the plan.
 
-### Owner: herdr
+For a checkout whose `owner` is `herdr`, follow `herdr.md` step 3.
 
-Which command to use depends on whether herdr still holds a workspace for the worktree. Read `open_workspace_id` from `herdr worktree list`.
-
-With a workspace, enumerate its panes first:
-
-```bash
-herdr pane list --workspace <workspace-id>
-```
-
-Exclude the pane whose `pane_id` equals `$HERDR_PANE_ID`. Refuse the removal while any other pane remains. Name those pane ids to the user and move to the next worktree.
-
-With the workspace clear, let herdr do it, so the sidebar row goes with the worktree:
-
-```bash
-herdr worktree remove --workspace <workspace-id> --force
-```
-
-Without a workspace, plain git:
-
-```bash
-git -C <main-root> worktree remove --force <path>
-git -C <main-root> worktree prune
-```
-
-The worktree this session just left may still have a workspace. Moving the last pane out closes the workspace, and a pane in a second tab keeps it open.
-
-So read `open_workspace_id` from `herdr worktree list` again after step 2. A workspace id still set means the pane enumeration above runs on that workspace too, before you remove anything.
-
-### Owner: orca
-
-Orca holds this checkout, so Orca removes it. Resolve the executable the same way step 1 did:
-
-```bash
-ORCA_BIN="$(command -v orca-ide || command -v orca)"
-"$ORCA_BIN" worktree rm --worktree path:<path> --json
-```
-
-Never pass `--force`. It waives Orca's own safety checks, and those checks are the only ones left at this point.
-
-Orca refuses two cases by itself. It refuses a dirty tree, and it refuses a path outside `~/orca/workspaces`.
-
-Read either refusal rather than overriding it. Step 1 proved the tree clean, so a dirty-tree refusal means somebody changed the tree since.
-
-`orca worktree rm` deletes the local branch itself, and it has no keep-branch flag. So decide keep-or-delete before you call it, using the merge result from step 1.
-
-Never call it on an unmerged branch: the branch goes with the checkout, and nothing asks first. Leave the checkout in place instead and report it.
-
-Step 4 then skips `git branch -d` for this checkout. Orca already deleted that branch. The remote branch is still step 4's job.
+For a checkout whose `owner` is `orca`, follow `orca.md` step 3. It never passes `--force`, and never removes an unmerged branch.
 
 ### Owner: none
 
