@@ -1271,6 +1271,23 @@ exec ${PAGER:-less -R} "$FILE"
 H
   chmod +x "$BIN/spechub-view"
 
+  cat > "$BIN/spechub-popup" <<'H'
+#!/bin/sh
+# Run a herdr popup's command with this folder first on PATH.
+#
+#   spechub-popup <command> [args...]
+#
+# herdr runs a popup with its server's environment, not a login shell. A
+# server started by `herdr --remote` has the sshd default PATH, which lacks
+# this folder, so a bare popup target exits 127. apply calls this helper by
+# absolute path, and it finds its folder from $0. herdr and harlequin always
+# link into ~/.local/bin, so that goes on PATH too. The target and every tool
+# it starts then resolve whatever PATH the server has. Installed by spechub.
+PATH="$(dirname "$0"):$HOME/.local/bin:$PATH"; export PATH
+exec "$@"
+H
+  chmod +x "$BIN/spechub-popup"
+
   cat > "$BIN/spechub-herdr-tab" <<'H'
 #!/usr/bin/env bash
 # Run a command in a new herdr tab, beside the pane the key was pressed in.
@@ -1954,11 +1971,14 @@ H
 
   say "helpers written: spechub-diff, spechub-dash, spechub-db, spechub-md, spechub-view"
   say "remote helpers written: spechub-clip, spechub-open, spechub-bridge"
-  say "herdr helpers written: spechub-herdr-tab, spechub-herdr-renumber, spechub-edit"
+  say "herdr helpers written: spechub-popup, spechub-herdr-tab, spechub-herdr-renumber, spechub-edit"
 }
 
 apply_herdr() {
   have herdr || { say "herdr not installed, skipping keymap"; return 0; }
+  # Every popup runs through spechub-popup. disable reaches here without
+  # apply, so after an upgrade the helper may not exist yet.
+  [ -x "$BIN/spechub-popup" ] || write_helpers
   mkdir -p "$(dirname "$HERDR_CFG")"; touch "$HERDR_CFG"
   local mod wt diffkey dashkey filekey filetabkey difftabkey dashtabkey
   local pickkey picktabkey gitkey gittabkey dbkey dbtabkey scrollbars
@@ -2002,9 +2022,12 @@ apply_herdr() {
   [ "$(cfg_get lazygit.enabled true)" = "true" ] || { gitkey=""; gittabkey=""; }
   [ "$(cfg_get harlequin.enabled true)" = "true" ] || { dbkey=""; dbtabkey=""; }
 
-  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$dbkey|$dbtabkey|$scrollbars|$theme|$themeauto|$themelight|$toast|$labels|$panelsort|$BEGIN|$END" py "$HERDR_CFG" <<'PY'
+  SPECHUB_ARGS="$mod|$wt|$diffkey|$dashkey|$filekey|$filetabkey|$difftabkey|$dashtabkey|$pickkey|$picktabkey|$gitkey|$gittabkey|$dbkey|$dbtabkey|$scrollbars|$theme|$themeauto|$themelight|$toast|$labels|$panelsort|$BEGIN|$END" SPECHUB_BIN="$BIN" py "$HERDR_CFG" <<'PY'
 import os, re, sys
 path = sys.argv[1]
+# herdr runs a popup with its server's PATH, which can lack $BIN. Each popup
+# goes through spechub-popup by absolute path, which puts $BIN back on PATH.
+popup = os.path.join(os.environ["SPECHUB_BIN"], "spechub-popup")
 (mod, wt, diffkey, dashkey, filekey, filetabkey, difftabkey, dashtabkey,
  pickkey, picktabkey, gitkey, gittabkey, dbkey, dbtabkey, scrollbars,
  theme, themeauto, themelight, toast, labels, panelsort,
@@ -2035,6 +2058,8 @@ def custom_blocks():
     for key, cmd, desc, typ, size in CUSTOM:
         if not key:
             continue
+        if typ == "popup":
+            cmd = f"{popup} {cmd}"
         out += ["", "[[keys.command]]", f'key = "{key}"', f'type = "{typ}"',
                 f'command = "{cmd}"', f'description = "{desc}"']
         if size:
