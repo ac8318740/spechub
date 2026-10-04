@@ -143,7 +143,7 @@ Set `yazi.download_target` and `apply` binds one key in yazi, `D` by default. It
 runs Taildrop, Tailscale's file send, on the hovered file:
 
 ```toml
-run = 'shell --block -- tailscale file cp "%h" <target>:'
+run = 'shell --block -- tailscale file cp %h <target>:'
 ```
 
 Recommend Taildrop over `scp` back to the user's machine. That route needs

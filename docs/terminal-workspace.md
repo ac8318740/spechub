@@ -569,10 +569,12 @@ split_horizontal = ["prefix+minus", "alt+minus"]
 
 # A popup floats over the layout and returns you where you were. Each one has
 # a tab variant on the shift chord, which goes through spechub-herdr-tab.
+# herdr runs a popup with its server's PATH. That PATH may lack ~/.local/bin.
+# Each popup goes through spechub-popup, which puts that folder back.
 [[keys.command]]
 key = "alt+f"
 type = "popup"
-command = "spechub-diff"
+command = "/home/you/.local/bin/spechub-popup spechub-diff"
 description = "diff: branch vs dev"
 width = "90%"
 height = "90%"
@@ -586,7 +588,7 @@ description = "diff: branch vs dev (tab)"
 [[keys.command]]
 key = "alt+g"
 type = "popup"
-command = "lazygit"
+command = "/home/you/.local/bin/spechub-popup lazygit"
 description = "git: stage, commit, push"
 width = "90%"
 height = "90%"
@@ -600,7 +602,7 @@ description = "git: stage, commit, push (tab)"
 [[keys.command]]
 key = "alt+x"
 type = "popup"
-command = "spechub-diff pick"
+command = "/home/you/.local/bin/spechub-popup spechub-diff pick"
 description = "diff: pick what to compare"
 width = "90%"
 height = "90%"
@@ -614,7 +616,7 @@ description = "diff: pick what to compare (tab)"
 [[keys.command]]
 key = "alt+i"
 type = "popup"
-command = "spechub-dash"
+command = "/home/you/.local/bin/spechub-popup spechub-dash"
 description = "PR dashboard"
 width = "95%"
 height = "95%"
@@ -628,7 +630,7 @@ description = "PR dashboard (tab)"
 [[keys.command]]
 key = "alt+y"
 type = "popup"
-command = "yazi"
+command = "/home/you/.local/bin/spechub-popup yazi"
 description = "file tree"
 width = "95%"
 height = "95%"
@@ -1577,6 +1579,7 @@ The opener rides the same machinery as the bridge.
 - Measured on yazi 26.8.15
 - The `keymap.toml` bindings say `%h` for the same reason, and never `%*`
     - `%h` is the hovered file
+    - yazi quotes `%h` itself, so write it bare. Quotes around it end up inside the path.
     - `%*` belongs to `[opener]`, and a keybinding never expands it
         - The two characters go through untouched
         - The command reports them back as a filename, such as `open %*: no such file or directory`

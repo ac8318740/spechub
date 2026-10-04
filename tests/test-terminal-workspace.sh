@@ -126,13 +126,50 @@ fi
 # check the config example the way a reader uses it: every command it binds
 # must be something this machine will actually have.
 externals="yazi diffnav delta glow tuicr gh lazygit"
+# A command is judged by what it names, not how it spells the path: a popup
+# runs with the herdr server's PATH, so a doc may well show
+# /home/you/.local/bin/spechub-diff rather than a bare spechub-diff. The
+# basename of the first word must resolve. So must every later word that is
+# plainly a command - an absolute path, or a spechub-* name - which is what a
+# wrapper helper followed by its real target looks like. Labels such as the
+# "diff" in "spechub-herdr-tab diff spechub-diff" are neither, so they pass.
+resolves() {
+  local base=${1##*/}
+  echo "$installed" | grep -qx "$base" && return 0
+  echo "$externals" | grep -qw "$base" && return 0
+  return 1
+}
+# Prints every word of one bound command that names nothing setup.sh installs.
+dangling_words() {
+  local first=1 w
+  set -f
+  for w in $1; do
+    if [ "$first" = "1" ] || [ "${w#/}" != "$w" ] || [ "${w#spechub-}" != "$w" ]; then
+      resolves "$w" || printf ' %s' "$w"
+    fi
+    first=0
+  done
+  set +f
+}
+# The judge itself, on shapes the docs do not happen to use today. Without
+# these the check below could only ever prove the spellings it already sees.
+if [ -z "$(dangling_words '/home/you/.local/bin/spechub-diff pick')" ] \
+   && [ -z "$(dangling_words 'spechub-herdr-tab diff /home/you/.local/bin/spechub-diff')" ]; then
+  ok "the docs command check accepts a helper named by absolute path"
+else
+  no "the docs command check accepts a helper named by absolute path"
+fi
+if [ -n "$(dangling_words '/home/you/.local/bin/spechub-dif')" ] \
+   && [ -n "$(dangling_words 'spechub-herdr-tab diff /home/you/.local/bin/spechub-dif')" ] \
+   && [ -n "$(dangling_words 'spechub-herdr-tab diff spechub-dif')" ]; then
+  ok "the docs command check still rejects a typo'd helper, wherever it sits"
+else
+  no "the docs command check still rejects a typo'd helper, wherever it sits"
+fi
 dangling=""
 while read -r cmd; do
   [ -n "$cmd" ] || continue
-  first=${cmd%% *}
-  echo "$installed" | grep -qx "$first" && continue
-  echo "$externals" | grep -qw "$first" && continue
-  dangling="$dangling $first"
+  dangling="$dangling$(dangling_words "$cmd")"
 done < <(grep -oE '^command = "[^"]+"' "$DOCS" | sed 's/^command = "//; s/"$//')
 if [ -z "$dangling" ]; then ok "every command the docs bind resolves to a real binary"
 else no "docs bind commands nothing installs:$dangling"; fi
@@ -186,7 +223,8 @@ T
 
 run_keymap() {
   local mod="$1" file="$2"; shift 2
-  SPECHUB_ARGS="$(args "$mod" "$@")" python3 "$HERDR_KEYMAP" "$file" 2>/dev/null
+  SPECHUB_ARGS="$(args "$mod" "$@")" SPECHUB_BIN="$WORK/bin" \
+    python3 "$HERDR_KEYMAP" "$file" 2>/dev/null
 }
 parses() { python3 -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "$1" 2>/dev/null; }
 
@@ -2490,6 +2528,113 @@ else
 fi
 
 
+# yazi 26.x shell-quotes %h itself: it expands to '/path/to/file'. Wrapping it
+# in double quotes as well makes the single quotes part of the path, so the
+# command is handed a file name that does not exist. Issue #265.
+rm -f "$WORK/km-bare.toml"
+run_keymap b "#" "$WORK/km-bare.toml" my-laptop
+if parses "$WORK/km-bare.toml" && python3 - "$WORK/km-bare.toml" <<'PYBARE'
+import re, sys, tomllib
+binds = tomllib.load(open(sys.argv[1], "rb")).get("mgr", {}).get("prepend_keymap", [])
+for key in ("b", "e", "D"):
+    hit = [x for x in binds if x.get("on") == key]
+    if len(hit) != 1:
+        sys.exit(f"{len(hit)} bindings on {key}, expected exactly 1")
+    run = hit[0].get("run", "")
+    if "%h" not in run:
+        sys.exit(f"{key} does not pass the hovered file: {run!r}")
+    if re.search(r"""["']%h|%h["']""", run):
+        sys.exit(f"{key} quotes %h, which yazi already quotes: {run!r}")
+PYBARE
+then
+  ok "the b, e and D bindings pass a bare %h"
+else
+  no "the b, e and D bindings pass a bare %h"
+fi
+
+# An install from before the fix carries the quoted form inside its managed
+# block. Re-running has to rewrite it, and leave the user's own bindings -
+# quoted %h and all - exactly as they wrote them.
+python3 - "$WORK/km-bare.toml" "$WORK/km-oldquote.toml" "$BEGIN_MARK" "$END_MARK" <<'PYOLD'
+import sys
+src, dst, begin, end = sys.argv[1:5]
+raw = open(src).read()
+a, b = raw.index(begin), raw.index(end)
+managed = raw[a:b].replace('"%h"', "%h").replace("%h", '"%h"')
+user_before = (
+    "[[mgr.prepend_keymap]]\n"
+    "on = \"<C-y>\"\n"
+    "run = 'shell --block -- my-own-tool \"%h\"'\n"
+    "desc = \"Mine, before the managed block\"\n\n"
+)
+user_after = (
+    "\n[[mgr.prepend_keymap]]\n"
+    "on = \"<C-u>\"\n"
+    "run = 'shell --block -- my-other-tool \"%h\"'\n"
+    "desc = \"Mine, after the managed block\"\n"
+)
+open(dst, "w").write(user_before + raw[:a] + managed + raw[b:] + user_after)
+open(dst + ".before", "w").write(user_before)
+open(dst + ".after", "w").write(user_after)
+PYOLD
+km_old_quoted=$(sed -n "/$BEGIN_MARK/,/$END_MARK/p" "$WORK/km-oldquote.toml" | grep -c '"%h"')
+run_keymap b "#" "$WORK/km-oldquote.toml" my-laptop
+if [ "$km_old_quoted" -ge 3 ] \
+   && parses "$WORK/km-oldquote.toml" \
+   && ! sed -n "/$BEGIN_MARK/,/$END_MARK/p" "$WORK/km-oldquote.toml" | grep -q '"%h"' \
+   && sed -n "/$BEGIN_MARK/,/$END_MARK/p" "$WORK/km-oldquote.toml" | grep -q '%h'
+then
+  ok "re-running rewrites a quoted %h in the managed block to a bare one"
+else
+  no "re-running rewrites a quoted %h in the managed block to a bare one ($km_old_quoted quoted before; after: $(flat "$(grep '%h' "$WORK/km-oldquote.toml")"))"
+fi
+
+if python3 - "$WORK/km-oldquote.toml" <<'PYKEEP'
+import sys
+out = open(sys.argv[1]).read()
+for part in ("before", "after"):
+    mine = open(f"{sys.argv[1]}.{part}").read()
+    if mine not in out:
+        sys.exit(f"the user's binding {part} the managed block changed")
+PYKEEP
+then
+  ok "the migration leaves the user's own quoted %h bindings byte-for-byte"
+else
+  no "the migration leaves the user's own quoted %h bindings byte-for-byte"
+fi
+
+# What yazi actually does: substitute %h with the path, already single-quoted,
+# and hand the rest to a shell. The command must receive the bare path.
+mkdir -p "$WORK/stubs265"
+for s in spechub-md editor265 tailscale; do
+  printf '#!/bin/sh\nfor a in "$@"; do printf "%%s\\n" "$a"; done > "%s/%s.argv"\n' \
+    "$WORK/stubs265" "$s" > "$WORK/stubs265/$s"
+  chmod +x "$WORK/stubs265/$s"
+done
+hovered="$WORK/x y/f.md"
+for pair in b:spechub-md e:editor265 D:tailscale; do
+  key=${pair%%:*}; stub=${pair#*:}
+  rm -f "$WORK/stubs265/$stub.argv"
+  cmd=$(python3 - "$WORK/km-bare.toml" "$key" "'$hovered'" <<'PYCMD'
+import re, sys, tomllib
+binds = tomllib.load(open(sys.argv[1], "rb")).get("mgr", {}).get("prepend_keymap", [])
+hit = [x for x in binds if x.get("on") == sys.argv[2]]
+run = hit[0]["run"] if hit else ""
+run = re.sub(r"^shell\s+(--?[a-z-]+\s+)*--\s+", "", run)
+print(run.replace("%h", sys.argv[3]))
+PYCMD
+)
+  PATH="$WORK/stubs265:$PATH" EDITOR="$WORK/stubs265/editor265" sh -c "$cmd" >/dev/null 2>&1
+  if [ -f "$WORK/stubs265/$stub.argv" ] \
+     && grep -qxF "$hovered" "$WORK/stubs265/$stub.argv" \
+     && ! grep -q "[\"']" "$WORK/stubs265/$stub.argv"
+  then
+    ok "$key hands its command the hovered path with no quote marks in it"
+  else
+    no "$key hands its command the hovered path with no quote marks in it (got: $(flat "$(cat "$WORK/stubs265/$stub.argv" 2>/dev/null)"))"
+  fi
+done
+
 echo "tuicr config merge safety"
 # tuicr's config is flat, so every key this script writes is top level and a
 # value the user set by hand before the script managed it is a duplicate. TOML
@@ -3795,6 +3940,7 @@ GHUSER
 mkdir -p "$UWORK/home/.config/herdr"
 : > "$UWORK/home/.config/herdr/config.toml"
 SPECHUB_ARGS="$(args alt catppuccin catppuccin-latte herdr true priority)" \
+SPECHUB_BIN="$UWORK/home/.local/bin" \
   python3 "$HERDR_KEYMAP" "$UWORK/home/.config/herdr/config.toml"
 
 if grep -qF "$BEGIN_MARK" "$UWORK/home/.config/yazi/yazi.toml" \
@@ -3955,6 +4101,158 @@ await_pane_run
 if grep -q 'pane run 42 spechub-diff pick' "$EDITHOME/calls" 2>/dev/null
 then ok "spechub-herdr-tab leaves an unquoted command untouched"
 else no "spechub-herdr-tab leaves an unquoted command untouched"; fi
+
+
+echo "herdr popups run without \$BIN on PATH"
+# herdr runs a popup command with its server's environment, and a server
+# started over ssh has the sshd default PATH: no ~/.local/bin. Every popup
+# target lives in $BIN, and so do the tools those targets start in turn
+# (spechub-db wants harlequin and fzf, spechub-diff pipes into diffnav), so a
+# popup that only works with $BIN on PATH exits 127 on exactly the machines
+# this workspace is for.
+#
+# The check is behavioural and says nothing about how the command gets there.
+# apply runs sandboxed against a stub herdr, then every popup target in $BIN
+# is swapped for a stub that needs a child tool which also lives only in $BIN.
+# Each popup command is run under env -i with PATH=/usr/bin:/bin twice: split
+# on whitespace the way a launcher execs argv, and through sh -c, since
+# nothing here says which one herdr does. $BIN sits outside HOME on purpose,
+# so a command that guesses ~/.local/bin rather than honouring
+# SPECHUB_TW_BIN cannot pass.
+PWORK="$WORK/popup-run"
+PHOME="$PWORK/home"
+PBIN="$PWORK/bin"
+PSTUB="$PWORK/stubbin"
+PLOG="$PWORK/ran.log"
+PCFG="$PHOME/.config/spechub/terminal-workspace.yaml"
+mkdir -p "$PHOME/.config/spechub" "$PBIN" "$PSTUB" "$PWORK/cwd"
+cat > "$PCFG" <<'PCFGEOF'
+enabled: true
+herdr: {enabled: true, renumber_plugin: false}
+gh_dash: {enabled: true}
+diffnav: {enabled: true}
+lazygit: {enabled: true}
+yazi: {enabled: true}
+harlequin: {enabled: true}
+delta: {enabled: false}
+tuicr: {enabled: false}
+markdown: {enabled: false}
+remote: {enabled: false}
+neovim: {enabled: false}
+PCFGEOF
+
+# herdr only has to exist and pass its own config check for apply to write
+# the keymap. gh, ya and uv are no-ops so nothing reaches the network. The tools
+# install_binary would fetch sit in $BIN already, where it would put them, so
+# apply leaves them be.
+cat > "$PSTUB/herdr" <<'STUB'
+#!/bin/sh
+case "$1 $2" in "config check") echo "config: ok" ;; esac
+exit 0
+STUB
+printf '#!/bin/sh\nexit 0\n' > "$PSTUB/gh"
+printf '#!/bin/sh\nexit 0\n' > "$PSTUB/ya"
+printf '#!/bin/sh\nexit 0\n' > "$PSTUB/uv"
+for t in yazi lazygit diffnav fzf; do printf '#!/bin/sh\nexit 0\n' > "$PBIN/$t"; done
+chmod +x "$PSTUB"/* "$PBIN"/*
+
+pw() {
+  env HOME="$PHOME" \
+      PATH="$PSTUB:$PBIN:/usr/bin:/bin" \
+      SPECHUB_TW_BIN="$PBIN" \
+      SPECHUB_TW_CONFIG="$PCFG" \
+      GIT_CONFIG_GLOBAL="$PWORK/gitconfig" \
+      bash "$SETUP" "$@" 2>&1
+}
+
+POPUP_APPLY=1
+case "$(uname -m)" in x86_64|amd64) ;; *) POPUP_APPLY=0 ;; esac
+python3 -c 'import tomllib' 2>/dev/null || POPUP_APPLY=0
+python3 -c 'import yaml' 2>/dev/null || POPUP_APPLY=0
+if [ "$POPUP_APPLY" = "1" ]; then
+  papply=$(pw apply)
+  PHCFG="$PHOME/.config/herdr/config.toml"
+  popups=$(python3 - "$PHCFG" <<'PYPOP' 2>/dev/null
+import sys, tomllib
+cfg = tomllib.load(open(sys.argv[1], "rb"))
+for c in cfg.get("keys", {}).get("command", []):
+    if c.get("type") == "popup":
+        print(c["command"])
+PYPOP
+)
+  # Only now does each target become a stub: apply may rewrite anything in
+  # $BIN, and the targets have to be the ones the popups actually reach.
+  for t in spechub-diff spechub-dash spechub-db yazi lazygit; do
+    cat > "$PBIN/$t" <<STUB
+#!/bin/sh
+echo "$t \$*" >> "$PLOG"
+command -v spechub-test-child >/dev/null 2>&1 \\
+  || { echo "$t: spechub-test-child not on PATH=\$PATH" >&2; exit 42; }
+exec spechub-test-child
+STUB
+    chmod +x "$PBIN/$t"
+  done
+  printf '#!/bin/sh\nexit 0\n' > "$PBIN/spechub-test-child"
+  chmod +x "$PBIN/spechub-test-child"
+
+  n=$(printf '%s\n' "$popups" | grep -c .)
+  if [ "$n" -ge 6 ]; then
+    ok "apply writes at least six herdr popup bindings to check"
+  else
+    no "apply writes at least six herdr popup bindings to check (found $n; apply said: $(flat "$papply"))"
+  fi
+
+  split_bad="" shell_bad="" reached=""
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] || continue
+    : > "$PLOG"
+    err=$(cd "$PWORK/cwd" && set -f && read -ra argv <<< "$cmd" \
+          && env -i HOME="$PHOME" PATH=/usr/bin:/bin "${argv[@]}" 2>&1 </dev/null)
+    rc=$?
+    if [ "$rc" -ne 0 ] || [ ! -s "$PLOG" ]; then
+      split_bad="$split_bad [$cmd: rc=$rc $(flat "$err")]"
+    fi
+    reached="$reached$(cat "$PLOG")"$'\n'
+    : > "$PLOG"
+    err=$(cd "$PWORK/cwd" && env -i HOME="$PHOME" PATH=/usr/bin:/bin sh -c "$cmd" 2>&1 </dev/null)
+    rc=$?
+    if [ "$rc" -ne 0 ] || [ ! -s "$PLOG" ]; then
+      shell_bad="$shell_bad [$cmd: rc=$rc $(flat "$err")]"
+    fi
+  done <<< "$popups"
+
+  if [ "$n" -ge 6 ] && [ -z "$split_bad" ]; then
+    ok "every herdr popup runs as argv with PATH=/usr/bin:/bin, and its target finds tools in \$BIN"
+  else
+    no "every herdr popup runs as argv with PATH=/usr/bin:/bin, and its target finds tools in \$BIN:${split_bad:- no popups found}"
+  fi
+  if [ "$n" -ge 6 ] && [ -z "$shell_bad" ]; then
+    ok "every herdr popup runs through sh -c with PATH=/usr/bin:/bin, and its target finds tools in \$BIN"
+  else
+    no "every herdr popup runs through sh -c with PATH=/usr/bin:/bin, and its target finds tools in \$BIN:${shell_bad:- no popups found}"
+  fi
+
+  # Running is not enough: each popup has to reach the thing its key names,
+  # and the pick popup has to hand spechub-diff its mode.
+  missed=""
+  for t in spechub-diff spechub-dash spechub-db yazi lazygit; do
+    printf '%s' "$reached" | grep -q "^$t\\b" || missed="$missed $t"
+  done
+  printf '%s' "$reached" | grep -qx 'spechub-diff pick' || missed="$missed spechub-diff-pick"
+  if [ -z "$missed" ]; then
+    ok "the herdr popups reach every target they name, arguments intact"
+  else
+    no "the herdr popups reach every target they name, arguments intact (never reached:$missed)"
+  fi
+else
+  printf '  note: apply installs x86_64 binaries only, reads its config with\n'
+  printf '        PyYAML, and the check reads TOML with python 3.11 tomllib, so\n'
+  printf '        the popup PATH checks are skipped\n'
+  skip "apply writes at least six herdr popup bindings to check"
+  skip "every herdr popup runs as argv with PATH=/usr/bin:/bin, and its target finds tools in \$BIN"
+  skip "every herdr popup runs through sh -c with PATH=/usr/bin:/bin, and its target finds tools in \$BIN"
+  skip "the herdr popups reach every target they name, arguments intact"
+fi
 
 
 echo "the config example only documents keys setup.sh reads"
