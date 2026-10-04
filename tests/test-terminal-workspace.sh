@@ -2528,6 +2528,113 @@ else
 fi
 
 
+# yazi 26.x shell-quotes %h itself: it expands to '/path/to/file'. Wrapping it
+# in double quotes as well makes the single quotes part of the path, so the
+# command is handed a file name that does not exist. Issue #265.
+rm -f "$WORK/km-bare.toml"
+run_keymap b "#" "$WORK/km-bare.toml" my-laptop
+if parses "$WORK/km-bare.toml" && python3 - "$WORK/km-bare.toml" <<'PYBARE'
+import re, sys, tomllib
+binds = tomllib.load(open(sys.argv[1], "rb")).get("mgr", {}).get("prepend_keymap", [])
+for key in ("b", "e", "D"):
+    hit = [x for x in binds if x.get("on") == key]
+    if len(hit) != 1:
+        sys.exit(f"{len(hit)} bindings on {key}, expected exactly 1")
+    run = hit[0].get("run", "")
+    if "%h" not in run:
+        sys.exit(f"{key} does not pass the hovered file: {run!r}")
+    if re.search(r"""["']%h|%h["']""", run):
+        sys.exit(f"{key} quotes %h, which yazi already quotes: {run!r}")
+PYBARE
+then
+  ok "the b, e and D bindings pass a bare %h"
+else
+  no "the b, e and D bindings pass a bare %h"
+fi
+
+# An install from before the fix carries the quoted form inside its managed
+# block. Re-running has to rewrite it, and leave the user's own bindings -
+# quoted %h and all - exactly as they wrote them.
+python3 - "$WORK/km-bare.toml" "$WORK/km-oldquote.toml" "$BEGIN_MARK" "$END_MARK" <<'PYOLD'
+import sys
+src, dst, begin, end = sys.argv[1:5]
+raw = open(src).read()
+a, b = raw.index(begin), raw.index(end)
+managed = raw[a:b].replace('"%h"', "%h").replace("%h", '"%h"')
+user_before = (
+    "[[mgr.prepend_keymap]]\n"
+    "on = \"<C-y>\"\n"
+    "run = 'shell --block -- my-own-tool \"%h\"'\n"
+    "desc = \"Mine, before the managed block\"\n\n"
+)
+user_after = (
+    "\n[[mgr.prepend_keymap]]\n"
+    "on = \"<C-u>\"\n"
+    "run = 'shell --block -- my-other-tool \"%h\"'\n"
+    "desc = \"Mine, after the managed block\"\n"
+)
+open(dst, "w").write(user_before + raw[:a] + managed + raw[b:] + user_after)
+open(dst + ".before", "w").write(user_before)
+open(dst + ".after", "w").write(user_after)
+PYOLD
+km_old_quoted=$(sed -n "/$BEGIN_MARK/,/$END_MARK/p" "$WORK/km-oldquote.toml" | grep -c '"%h"')
+run_keymap b "#" "$WORK/km-oldquote.toml" my-laptop
+if [ "$km_old_quoted" -ge 3 ] \
+   && parses "$WORK/km-oldquote.toml" \
+   && ! sed -n "/$BEGIN_MARK/,/$END_MARK/p" "$WORK/km-oldquote.toml" | grep -q '"%h"' \
+   && sed -n "/$BEGIN_MARK/,/$END_MARK/p" "$WORK/km-oldquote.toml" | grep -q '%h'
+then
+  ok "re-running rewrites a quoted %h in the managed block to a bare one"
+else
+  no "re-running rewrites a quoted %h in the managed block to a bare one ($km_old_quoted quoted before; after: $(flat "$(grep '%h' "$WORK/km-oldquote.toml")"))"
+fi
+
+if python3 - "$WORK/km-oldquote.toml" <<'PYKEEP'
+import sys
+out = open(sys.argv[1]).read()
+for part in ("before", "after"):
+    mine = open(f"{sys.argv[1]}.{part}").read()
+    if mine not in out:
+        sys.exit(f"the user's binding {part} the managed block changed")
+PYKEEP
+then
+  ok "the migration leaves the user's own quoted %h bindings byte-for-byte"
+else
+  no "the migration leaves the user's own quoted %h bindings byte-for-byte"
+fi
+
+# What yazi actually does: substitute %h with the path, already single-quoted,
+# and hand the rest to a shell. The command must receive the bare path.
+mkdir -p "$WORK/stubs265"
+for s in spechub-md editor265 tailscale; do
+  printf '#!/bin/sh\nfor a in "$@"; do printf "%%s\\n" "$a"; done > "%s/%s.argv"\n' \
+    "$WORK/stubs265" "$s" > "$WORK/stubs265/$s"
+  chmod +x "$WORK/stubs265/$s"
+done
+hovered="$WORK/x y/f.md"
+for pair in b:spechub-md e:editor265 D:tailscale; do
+  key=${pair%%:*}; stub=${pair#*:}
+  rm -f "$WORK/stubs265/$stub.argv"
+  cmd=$(python3 - "$WORK/km-bare.toml" "$key" "'$hovered'" <<'PYCMD'
+import re, sys, tomllib
+binds = tomllib.load(open(sys.argv[1], "rb")).get("mgr", {}).get("prepend_keymap", [])
+hit = [x for x in binds if x.get("on") == sys.argv[2]]
+run = hit[0]["run"] if hit else ""
+run = re.sub(r"^shell\s+(--?[a-z-]+\s+)*--\s+", "", run)
+print(run.replace("%h", sys.argv[3]))
+PYCMD
+)
+  PATH="$WORK/stubs265:$PATH" EDITOR="$WORK/stubs265/editor265" sh -c "$cmd" >/dev/null 2>&1
+  if [ -f "$WORK/stubs265/$stub.argv" ] \
+     && grep -qxF "$hovered" "$WORK/stubs265/$stub.argv" \
+     && ! grep -q "[\"']" "$WORK/stubs265/$stub.argv"
+  then
+    ok "$key hands its command the hovered path with no quote marks in it"
+  else
+    no "$key hands its command the hovered path with no quote marks in it (got: $(flat "$(cat "$WORK/stubs265/$stub.argv" 2>/dev/null)"))"
+  fi
+done
+
 echo "tuicr config merge safety"
 # tuicr's config is flat, so every key this script writes is top level and a
 # value the user set by hand before the script managed it is a duplicate. TOML

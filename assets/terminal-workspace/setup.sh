@@ -2765,13 +2765,16 @@ if not claimed(text):
     # a shell, where $0 names the shell itself and $@ is empty - both measured,
     # and both would open the browser on nothing at all.
     #
+    # %h stays bare, here and in every binding below. yazi shell-quotes it
+    # itself, so quotes around it end up inside the path and nothing is found.
+    #
     # --block because the delivery has something to say. On the bridge it is a
     # line of confirmation; on every other route it is a link, and a served
     # page that has to stay up. Detached, all of that goes nowhere.
     parts.append(
         "[[mgr.prepend_keymap]]\n"
         f'on = "{key}"\n'
-        """run = 'shell --block -- spechub-md --browser "%h"'\n"""
+        """run = 'shell --block -- spechub-md --browser %h'\n"""
         'desc = "Open in the browser you are sitting at"'
     )
     # Flipping the flag changes nothing a reader can see: the pane already
@@ -2797,7 +2800,7 @@ if not claimed(text):
     parts.append(
         "[[mgr.prepend_keymap]]\n"
         f'on = "{editkey}"\n'
-        """run = 'shell --block -- ${EDITOR:-vi} "%h"'\n"""
+        """run = 'shell --block -- ${EDITOR:-vi} %h'\n"""
         'desc = "Edit in $EDITOR"'
     )
     # Taildrop is Tailscale's file send. It is the one route off a headless
@@ -2814,7 +2817,7 @@ if not claimed(text):
         parts.append(
             "[[mgr.prepend_keymap]]\n"
             f'on = "{dlkey}"\n'
-            f"""run = 'shell --block -- tailscale file cp "%h" {dltarget}:'\n"""
+            f"""run = 'shell --block -- tailscale file cp %h {dltarget}:'\n"""
             f'desc = "Send this file to {dltarget} over Taildrop"'
         )
 
@@ -2828,9 +2831,9 @@ PY
   case "$kmwritten" in *prepend_keymap*) ;; *)
     say "yazi: your keymap.toml already sets mgr.prepend_keymap as an inline"
     say "     array, which these bindings cannot sit beside. Add them there"
-    say "     yourself:  shell --block -- spechub-md --browser \"%h\""
+    say "     yourself:  shell --block -- spechub-md --browser %h"
     say "     and:       [ 'shell --block -- spechub-md --toggle-line-numbers', 'peek --force' ]"
-    say "     and:       shell --block -- \${EDITOR:-vi} \"%h\"" ;;
+    say "     and:       shell --block -- \${EDITOR:-vi} %h" ;;
   esac
   # The download key is written from the config alone, so it can be wrong in
   # three ways the config cannot see. Name whichever one holds, rather than

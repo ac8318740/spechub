@@ -1579,6 +1579,7 @@ The opener rides the same machinery as the bridge.
 - Measured on yazi 26.8.15
 - The `keymap.toml` bindings say `%h` for the same reason, and never `%*`
     - `%h` is the hovered file
+    - yazi quotes `%h` itself, so write it bare. Quotes around it end up inside the path.
     - `%*` belongs to `[opener]`, and a keybinding never expands it
         - The two characters go through untouched
         - The command reports them back as a filename, such as `open %*: no such file or directory`
