@@ -47,6 +47,9 @@ Every line `status` can print is here, in the order the code tries the routes:
 | `clipboard: this machine has a display` | It has a real clipboard | Nothing |
 | `clipboard: xclip stand-in` | Copy reaches your terminal over OSC 52 | Nothing |
 | `clipboard: none` | `apply` has not run, or `remote.clipboard_shim` is false | Run `apply` |
+| `neovim clipboard: OSC 52, written by this setup` | neovim copies to your terminal over OSC 52 | Nothing |
+| `neovim clipboard: set by <file>` | The user's own lua sets `vim.g.clipboard` | Nothing |
+| `neovim clipboard: none` | `neovim.enabled` is true and the file lacks the clipboard | Run `apply` |
 | `browser: $SPECHUB_OPEN_CMD = ...` | The user set an override, and it wins over every route below | Nothing |
 | `browser: xdg-open on this machine` | The machine has a desktop of its own | Nothing |
 | `browser: the Windows side of this machine` | This is WSL, and Windows opens the page | Nothing |

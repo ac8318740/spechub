@@ -303,9 +303,9 @@ On a machine where you did set it true:
 - Set `tuicr.appearance` to `dark` or `light`, and tuicr skips the whole detection path
 - Leave it empty on a machine you sit at, where the terminal answers for itself
 
-### 3.5. A dot for unsaved changes in LazyVim
+### 3.5. LazyVim: a dot for unsaved changes, and copy over SSH
 
-*LazyVim marks a modified buffer by recolouring the filename and nothing else. Set `neovim.enabled: true` to append a dot to the statusline instead.*
+*Set `neovim.enabled: true` to get both. LazyVim hides unsaved changes, and over SSH it cannot copy to your clipboard.*
 
 - LazyVim's `pretty_path` component sets `modified_sign = ""`, so the only signal is colour
     - It sets `modified_hl = "MatchParen"`, which recolours the filename you are already looking at
@@ -318,13 +318,27 @@ On a machine where you did set it true:
 - It writes one whole file and never edits one of yours
     - `setup.sh disable neovim` deletes that file, and so does `uninstall`
     - Neither one touches a `spechub.lua` you wrote by hand
-- `apply` skips a machine with no LazyVim config, because the dot goes into LazyVim's own lualine section
+- `apply` skips a machine with no LazyVim config, because both parts of the file rely on LazyVim
     - `apply` says so rather than writing a file that does nothing
-- `apply` also skips a config where a lualine override you wrote already marks a modified buffer, and names that file
+- `apply` leaves the dot out when a lualine override you wrote already marks a modified buffer, and names that file
     - LazyVim loads every file under `lua/plugins`, so yours does exactly what this component does
     - The statusline would then carry two dots side by side
     - Neither file looks wrong on its own, and the only place the collision shows is the statusline
     - Delete your own file to hand the dot to this component
+
+Copy over SSH:
+
+- Over SSH, LazyVim sets `clipboard` empty and neovim finds no provider, so `:%y+` fails with `clipboard: No provider`
+- The same file sets `vim.g.clipboard` to send every copy over OSC 52, which reaches the clipboard of the machine you sit at (section 10.1)
+    - It also sets `clipboard=unnamedplus` after LazyVim's own `VeryLazy` restore, so a plain `y` copies too
+    - `apply` leaves that option alone when a file of yours sets `clipboard`
+- `p` pastes what neovim copied last, and never asks the terminal
+    - Windows Terminal refuses OSC 52 reads, and neovim's own OSC 52 paste then waits ten seconds
+    - Paste text copied elsewhere with your terminal's paste key, `ctrl+shift+v` in Windows Terminal
+- The file does nothing on a machine with a display, or inside tmux, which each have a clipboard of their own
+- `apply` leaves the clipboard out when a file of yours already sets `vim.g.clipboard`, and names that file
+- `neovim.osc52_clipboard: false` turns it off
+- `setup.sh status` prints a `neovim clipboard:` line naming which provider neovim uses
 
 ## 4. How you attach
 

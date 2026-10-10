@@ -3383,7 +3383,7 @@ wait "$NODE_PID" 2>/dev/null
 fi
 
 
-echo "the neovim unsaved-changes dot"
+echo "the neovim unsaved-changes dot and OSC 52 copy"
 # The one component that writes into a config directory the user built, so
 # every guard around that matters more here than anywhere else: it starts off,
 # it writes a whole file of its own rather than editing one of theirs, it
@@ -3450,6 +3450,19 @@ if [ -f "$NPLUG" ] \
 else
   non "apply writes the lualine dot once LazyVim is present (said: $(flat "$out"))" \
       "apply writes the lualine dot once LazyVim is present"
+fi
+
+# Over SSH, LazyVim turns clipboard sync off and neovim finds no provider, so
+# :%y+ fails. Paste must not ask the terminal: Windows Terminal never answers
+# an OSC 52 read, and neovim's own paste waits ten seconds for one.
+if [ "$NVIM_APPLY" != "1" ] \
+   || { grep -q 'vim.g.clipboard' "$NPLUG" \
+        && grep -q 'vim.ui.clipboard.osc52' "$NPLUG" \
+        && grep -q 'unnamedplus' "$NPLUG" \
+        && ! grep -q 'osc52.paste' "$NPLUG"; }; then
+  okn "apply writes OSC 52 copy with a paste that never asks the terminal"
+else
+  non "apply writes OSC 52 copy with a paste that never asks the terminal"
 fi
 
 # Every other writer in this script is idempotent, and a plugin spec appended
@@ -3551,7 +3564,8 @@ return {
 }
 NLUA
 out=$(nw apply)
-if [ ! -e "$NPLUG" ] && printf '%s' "$out" | grep -qF "mine.lua"; then
+if [ -f "$NPLUG" ] && ! grep -q 'vim.bo.modified' "$NPLUG" \
+   && grep -q 'vim.g.clipboard' "$NPLUG" && printf '%s' "$out" | grep -qF "mine.lua"; then
   okn "apply writes no dot when the user's own lualine override already draws one, and names the file"
 else
   non "apply writes no dot when the user's own lualine override already draws one, and names the file (said: $(flat "$out"))" \
@@ -3564,7 +3578,7 @@ cat > "$NWORK/home/.config/nvim/lua/plugins/mine.lua" <<'NLUA'
 return { { "nvim-lualine/lualine.nvim", opts = { options = { globalstatus = true } } } }
 NLUA
 out=$(nw apply)
-if [ -f "$NPLUG" ]; then
+if grep -q 'vim.bo.modified' "$NPLUG" 2>/dev/null; then
   okn "an unrelated lualine override does not block the dot"
 else
   non "an unrelated lualine override does not block the dot (said: $(flat "$out"))" \
@@ -3588,11 +3602,59 @@ return {
 }
 NLUA
 out=$(nw apply)
-if [ ! -e "$NPLUG" ] && printf '%s' "$out" | grep -qF "was removed"; then
+if ! grep -q 'vim.bo.modified' "$NPLUG" 2>/dev/null && printf '%s' "$out" | grep -qF "was removed"; then
   okn "apply removes the dot it wrote earlier once the user's own override appears"
 else
   non "apply removes the dot it wrote earlier once the user's own override appears (said: $(flat "$out"))" \
       "apply removes the dot it wrote earlier once the user's own override appears"
+fi
+
+# The last file to set vim.g.clipboard wins, so a provider the user set up
+# themselves must not be silently replaced by ours.
+rm -f "$NWORK/home/.config/nvim/lua/plugins/mine.lua" "$NPLUG"
+echo 'vim.g.clipboard = "osc52"' > "$NWORK/home/.config/nvim/lua/config/options.lua"
+out=$(nw apply)
+if [ -f "$NPLUG" ] && ! grep -q 'vim.g.clipboard' "$NPLUG" \
+   && printf '%s' "$out" | grep -qF "options.lua"; then
+  okn "apply leaves a clipboard the user set up alone, and names the file"
+else
+  non "apply leaves a clipboard the user set up alone, and names the file (said: $(flat "$out"))" \
+      "apply leaves a clipboard the user set up alone, and names the file"
+fi
+rm -f "$NWORK/home/.config/nvim/lua/config/options.lua"
+
+# A provider tried and commented out decides nothing.
+echo '-- vim.g.clipboard = "osc52"' > "$NWORK/home/.config/nvim/lua/config/options.lua"
+nw apply >/dev/null
+if [ "$NVIM_APPLY" != "1" ] || grep -q 'vim.g.clipboard' "$NPLUG"; then
+  okn "a commented-out vim.g.clipboard does not block the OSC 52 copy"
+else
+  non "a commented-out vim.g.clipboard does not block the OSC 52 copy"
+fi
+
+# A clipboard option the user chose stays theirs.
+echo 'vim.opt.clipboard = ""' > "$NWORK/home/.config/nvim/lua/config/options.lua"
+nw apply >/dev/null
+if [ "$NVIM_APPLY" != "1" ] \
+   || { grep -q 'vim.g.clipboard' "$NPLUG" && ! grep -q 'unnamedplus' "$NPLUG"; }; then
+  okn "a clipboard option the user set is left alone"
+else
+  non "a clipboard option the user set is left alone"
+fi
+rm -f "$NWORK/home/.config/nvim/lua/config/options.lua"
+
+python3 - "$NWORK/home/.config/spechub/terminal-workspace.yaml" <<'PYCLIP'
+import sys, yaml
+p = sys.argv[1]
+c = yaml.safe_load(open(p))
+c["neovim"]["osc52_clipboard"] = False
+yaml.safe_dump(c, open(p, "w"), sort_keys=False)
+PYCLIP
+nw apply >/dev/null
+if [ "$NVIM_APPLY" != "1" ] || { [ -f "$NPLUG" ] && ! grep -q 'vim.g.clipboard' "$NPLUG"; }; then
+  okn "osc52_clipboard: false leaves the clipboard out"
+else
+  non "osc52_clipboard: false leaves the clipboard out"
 fi
 
 rm -f "$NWORK/home/.config/nvim/lua/plugins/mine.lua" "$NPLUG"
