@@ -230,7 +230,7 @@ Read [`emulator-keys.md`](emulator-keys.md) after `apply`, and whenever the user
 
 *Three gh-dash keys break there, and a file has no way off the machine at all. `apply` writes a route for each. The last lines of `status` say where a copy and an open will land.*
 
-Read [`headless-clipboard.md`](headless-clipboard.md) when the user asks how to copy, open or download from this machine, or `o`, `y` or `Y` fails. It covers sections 7, 7.1 and 7.2.
+Read [`headless-clipboard.md`](headless-clipboard.md) when the user asks how to copy, open or download from this machine, or `o`, `y` or `Y` fails. It covers sections 7, 7.1 and 7.2. When neovim's `:%y+` fails, read section 3.5 of `docs/terminal-workspace.md` instead.
 
 ## 8. Turning one component off, or all of them
 

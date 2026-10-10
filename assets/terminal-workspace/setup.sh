@@ -2906,39 +2906,96 @@ nvim_dot_elsewhere() {
   return 1
 }
 
+# Print the first lua file of the user's own that sets a pattern, ignoring
+# comment lines, since a setting tried and commented out decides nothing.
+nvim_user_sets() {
+  local f
+  while IFS= read -r f; do
+    grep -v '^[[:space:]]*--' "$f" 2>/dev/null | grep -q "$1" || continue
+    printf '%s\n' "$f"
+    return 0
+  done < <(find "$HOME/.config/nvim" -name '*.lua' ! -path "$NVIM_PLUGIN" 2>/dev/null | sort)
+  return 1
+}
+
+# The clipboard part of the plugin file. The comment inside it says why.
+NVIM_CLIPBOARD_LUA='
+-- Over SSH, neovim finds no clipboard and :%y+ fails. Copy goes out over
+-- OSC 52, which asks the terminal you sit at to put the text on its own
+-- clipboard. Paste replays what this neovim copied last, because Windows
+-- Terminal refuses OSC 52 reads. Use the terminal paste key for anything else.
+local function set(v)
+  return v ~= nil and v ~= ""
+end
+if not (set(vim.env.DISPLAY) or set(vim.env.WAYLAND_DISPLAY) or set(vim.env.TMUX)
+    or vim.fn.has("mac") == 1 or vim.fn.has("wsl") == 1) then
+  local osc52 = require("vim.ui.clipboard.osc52")
+  local last = {}
+  local function copy(reg)
+    local send = osc52.copy(reg)
+    return function(lines, regtype)
+      last[reg] = { lines, regtype }
+      send(lines)
+    end
+  end
+  local function paste(reg)
+    return function()
+      return last[reg] or { { "" }, "v" }
+    end
+  end
+  vim.g.clipboard = {
+    name = "OSC 52 (spechub)",
+    copy = { ["+"] = copy("+"), ["*"] = copy("*") },
+    paste = { ["+"] = paste("+"), ["*"] = paste("*") },
+  }
+'
+# LazyVim empties clipboard over SSH, then restores that value on VeryLazy.
+# Scheduled, this runs after the restore, so a plain y copies too. It is left
+# out when the user sets clipboard themselves.
+NVIM_UNNAMEDPLUS_LUA='  vim.api.nvim_create_autocmd("User", {
+    pattern = "VeryLazy",
+    once = true,
+    callback = function()
+      vim.schedule(function()
+        if vim.o.clipboard == "" then
+          vim.opt.clipboard = "unnamedplus"
+        end
+      end)
+    end,
+  })
+'
+
 apply_neovim() {
   # The one component that is off unless asked for. Every other one writes
   # files this setup owns end to end, or a marked region inside a config that
   # invites one. A neovim config is neither: the user built it, so this waits.
   [ "$(cfg_get neovim.enabled false)" = "true" ] || return 0
-  # The override appends to LazyVim's own lualine section, so it means nothing
-  # on a neovim config that is not LazyVim. Two markers, because a LazyVim
-  # config that has never been opened has downloaded no plugins yet.
+  # The dot appends to LazyVim's own lualine section, and the clipboard undoes
+  # a LazyVim default, so both mean nothing on a config that is not LazyVim.
+  # Two markers, because a LazyVim config never opened has no plugins yet.
   if ! grep -q LazyVim "$HOME/.config/nvim/lua/config/lazy.lua" 2>/dev/null \
      && [ ! -d "$HOME/.local/share/nvim/lazy/LazyVim" ]; then
-    say "neovim: no LazyVim config on this machine, unsaved dot not written"
+    say "neovim: no LazyVim config on this machine, plugin file not written"
     return 0
   fi
   nvim_ours || return 0
-  local mine; mine="$(nvim_dot_elsewhere)" && {
+
+  local dot_spec="" clip_lua="" mine
+  if mine="$(nvim_dot_elsewhere)"; then
     say "neovim: $mine already marks a modified buffer in lualine."
     # nvim_ours has already run, so a file at this path is one we wrote. A user
     # who installed first and wrote their own override later would otherwise
     # keep both, which is the pair of dots this guard exists to prevent.
-    if [ -e "$NVIM_PLUGIN" ]; then
-      rm -f "$NVIM_PLUGIN"
+    if grep -q 'vim\.bo\.modified' "$NVIM_PLUGIN" 2>/dev/null; then
       say "     The dot this component wrote was removed, so only one is drawn."
     else
       say "     The dot was not written. Two would be drawn side by side."
     fi
     say "     Delete $mine to hand the dot back to this component."
-    return 0
-  }
-  local dot; dot="$(cfg_get neovim.unsaved_dot_color '#f38ba8')"
-  mkdir -p "$(dirname "$NVIM_PLUGIN")"
-  cat > "$NVIM_PLUGIN" <<H
--- $NVIM_MARK. Remove it with: setup.sh disable neovim
---
+  else
+    local dot; dot="$(cfg_get neovim.unsaved_dot_color '#f38ba8')"
+    dot_spec="$(cat <<H
+
 -- LazyVim marks an unsaved buffer by recolouring the filename and nothing
 -- else, because its pretty_path component sets modified_sign = "". A glance
 -- at the statusline then cannot tell a saved buffer from an unsaved one.
@@ -2957,7 +3014,45 @@ return {
   },
 }
 H
-  say "neovim: unsaved-changes dot written to $NVIM_PLUGIN"
+)"
+  fi
+
+  if [ "$(cfg_get neovim.osc52_clipboard true)" = "true" ]; then
+    # Whichever lua sets vim.g.clipboard last wins, and the user's own files
+    # load after ours, so ours would only add a forced clipboard option.
+    if mine="$(nvim_user_sets 'g\.clipboard')"; then
+      say "neovim: $mine already sets vim.g.clipboard."
+      if grep -q 'vim\.g\.clipboard' "$NVIM_PLUGIN" 2>/dev/null; then
+        say "     The OSC 52 copy this component wrote was removed."
+      else
+        say "     The OSC 52 copy was not written."
+      fi
+    else
+      clip_lua="$NVIM_CLIPBOARD_LUA"
+      if mine="$(nvim_user_sets '[.]o[pt]*[.]clipboard')"; then
+        say "neovim: $mine sets clipboard, so y keeps the value set there"
+      else
+        clip_lua="$clip_lua$NVIM_UNNAMEDPLUS_LUA"
+      fi
+      clip_lua="${clip_lua}end
+"
+    fi
+  fi
+
+  if [ -z "$dot_spec$clip_lua" ]; then
+    rm -f "$NVIM_PLUGIN"
+    return 0
+  fi
+  mkdir -p "$(dirname "$NVIM_PLUGIN")"
+  {
+    printf -- '-- %s. Remove it with: setup.sh disable neovim\n' "$NVIM_MARK"
+    printf '%s' "$clip_lua"
+    # Every file under lua/plugins must return a spec, even an empty one.
+    if [ -n "$dot_spec" ]; then printf '%s\n' "$dot_spec"; else printf '\nreturn {}\n'; fi
+  } > "$NVIM_PLUGIN"
+  [ -n "$dot_spec" ] && say "neovim: unsaved-changes dot written to $NVIM_PLUGIN"
+  [ -n "$clip_lua" ] && say "neovim: OSC 52 copy written to $NVIM_PLUGIN"
+  return 0
 }
 
 apply_delta() {
@@ -3339,6 +3434,13 @@ case "$ACTION" in
       say "clipboard: xclip stand-in, copying to your terminal over OSC 52"
     else
       say "clipboard: none - run apply, or copy will fail in gh-dash and friends"
+    fi
+    if grep -q 'vim\.g\.clipboard' "$NVIM_PLUGIN" 2>/dev/null; then
+      say "neovim clipboard: OSC 52, written by this setup"
+    elif mine="$(nvim_user_sets 'g\.clipboard')"; then
+      say "neovim clipboard: set by $mine"
+    elif [ "$(cfg_get neovim.enabled false)" = "true" ]; then
+      say "neovim clipboard: none - run apply, or :%y+ fails over SSH"
     fi
     # Ask the opener itself rather than repeating its rules here. Two copies
     # of this decision drifting apart is exactly how o came to claim it had

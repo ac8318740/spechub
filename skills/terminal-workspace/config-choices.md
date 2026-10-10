@@ -41,10 +41,15 @@ Then ask about these settings, in this order:
     - Ask for the name `tailscale status` prints on **this** machine, not the name the user calls their laptop
     - Taildrop sends only between devices one Tailscale account owns on one tailnet, so confirm both ends match before setting it
     - Tell them to run `sudo tailscale set --operator=$USER` once on this machine, because `tailscale file cp` refuses a non-root caller without it
-- **`neovim.enabled`**: off by default, and the only component that is. Turn it on for a user who edits in LazyVim and wants a visible mark on a buffer with unsaved changes
+- **`neovim.enabled`**: off by default, and the only component that is. Turn it on for a user who edits in LazyVim, and always on a machine they reach over SSH
+    - Over SSH, LazyVim turns clipboard sync off and `:%y+` fails with `clipboard: No provider`
+    - `neovim.osc52_clipboard`, on by default, sends each copy to the user's own clipboard over OSC 52
+        - `p` pastes what neovim copied last, because Windows Terminal refuses OSC 52 reads
+        - The file does nothing on a machine with a display or inside tmux
+        - `apply` leaves it out when a file the user wrote already sets `vim.g.clipboard`, and names that file
     - LazyVim recolours the filename and shows no sign of its own, so a modified buffer is easy to miss
     - `apply` writes `~/.config/nvim/lua/plugins/spechub.lua` and edits nothing the user wrote
-    - `apply` skips the file when a lualine override the user wrote already marks a modified buffer, and names that file
+    - `apply` leaves the dot out when a lualine override the user wrote already marks a modified buffer, and names that file
         - The statusline would otherwise carry two dots side by side
     - Tell such a user to delete their own file to hand the dot to this component
 - **`remote.clipboard_shim`**: leave it `true` on any machine reached over SSH. It puts an `xclip` on `$PATH`, backed by `spechub-clip`. That stand-in is the only reason gh-dash's `y` and `Y` work there. `apply` skips it when the machine has a real `xclip` or a display

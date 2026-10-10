@@ -13,7 +13,7 @@ Read this file when the user asks what a component does, which key turns it on, 
 | tuicr | Reviews a pull request inside the terminal. | `tuicr.enabled` |
 | lazygit | Stages, commits, amends and pushes, on one key. | `lazygit.enabled` |
 | harlequin | A SQL editor in the terminal, on one key. Installed by uv, and launched by spechub-db. | `harlequin.enabled` |
-| neovim | A dot in the LazyVim statusline for a buffer with unsaved changes. Installs nothing, writes one file, and starts off. | `neovim.enabled` |
+| neovim | A dot in the LazyVim statusline for a buffer with unsaved changes, and copy over SSH through OSC 52. Installs nothing, writes one file, and starts off. | `neovim.enabled` |
 | yazi | A file manager, with markdown drawn live by spechub-md. One key sends the hovered file to the machine the user sits at. | `yazi.enabled` |
 | markdown | Markdown with its mermaid diagrams drawn as text, or served to a browser. Installs spechub-md, mermaid-ascii and glow. | `markdown.enabled` |
 | remote | Copy and open, on a machine with no display of its own. Installs spechub-clip and spechub-open. | `remote.enabled` |
