@@ -141,8 +141,6 @@ and its `.gitignore` for the next map.
 - Residue: domains spot-checked, ADRs and glossary entries written
 - Disposal: deleted, or archive path
 - Reminder: commit with `/spechub:commit`
-- Suggestion: run `/spechub:reflect` to turn this session's lessons into skill
-  edits, records, or issues
 
 ## Legacy: archiving a `spechub/changes/` directory
 

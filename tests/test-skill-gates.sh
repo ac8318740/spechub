@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Guards the lead-session check that opens the handoff, compact-and-continue and
-# reflect skills.
+# Guards the lead-session check that opens the handoff and compact-and-continue
+# skills.
 #
 # Handoff and compact-and-continue refuse to run outside the lead session,
 # because both write state the lead alone owns: the context-pressure quiet
 # marker, keyed on CLAUDE_CODE_SESSION_ID, and the shared spechub/HANDOFF.md
-# anchor. Reflect refuses because a teammate shares the lead's session id, so
-# it would review the lead's transcript instead of its own.
+# anchor.
 #
 # The first version of that check read an environment variable, and the variable
 # does not mean what it looked like it meant (#146). Claude Code sets
@@ -39,9 +38,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${SCRIPT_DIR}/.."
 HANDOFF="${ROOT}/skills/handoff/SKILL.md"
 COMPACT="${ROOT}/skills/compact-and-continue/SKILL.md"
-REFLECT="${ROOT}/skills/reflect/SKILL.md"
 
-for f in "$HANDOFF" "$COMPACT" "$REFLECT"; do
+for f in "$HANDOFF" "$COMPACT"; do
   [ -f "$f" ] || { echo "FATAL: missing $f" >&2; exit 1; }
 done
 
@@ -135,7 +133,7 @@ run_check() {
 # is the thing most likely to be deleted by someone who decides the two skills
 # should diverge. Running every block means the behavioural cases keep their meaning
 # on that day.
-every_check() { echo "handoff:$H_CHECK compact:$C_CHECK reflect:$R_CHECK"; }
+every_check() { echo "handoff:$H_CHECK compact:$C_CHECK"; }
 
 # ---------------------------------------------------------------------------
 # Case 1: no skill BRANCHES on CLAUDE_CODE_CHILD_SESSION
@@ -179,15 +177,11 @@ fi
 echo "Case 2: every gated skill carries a runnable lead check"
 H_CHECK="$WORK/handoff-check.sh"
 C_CHECK="$WORK/compact-check.sh"
-R_CHECK="$WORK/reflect-check.sh"
 extract_check "$HANDOFF" > "$H_CHECK"
 extract_check "$COMPACT" > "$C_CHECK"
-extract_check "$REFLECT" > "$R_CHECK"
 check "handoff carries a <!-- lead-check --> block"           '[ -s "$H_CHECK" ]'
 check "compact-and-continue carries one too"                  '[ -s "$C_CHECK" ]'
-check "reflect carries one too"                               '[ -s "$R_CHECK" ]'
 check "handoff and compact carry the same check"              'diff -q "$H_CHECK" "$C_CHECK" >/dev/null'
-check "handoff and reflect carry the same check"              'diff -q "$H_CHECK" "$R_CHECK" >/dev/null'
 # Without this, a renamed placeholder makes sed a no-op, Case 3 still passes
 # for the wrong reason and Case 4 fails pointing at the wrong thing.
 check "the <nonce> placeholder was substituted"               'grep -q "$MARK" "$H_CHECK"'
@@ -196,7 +190,7 @@ check "the block names the session-id variable"               'grep -q CLAUDE_CO
 # Nothing below can mean anything if the blocks did not extract. This fatal
 # path prints a Result line, unlike the missing-file one at the top of the
 # file, so run-all.sh reports a failed check rather than a broken suite.
-if [ ! -s "$H_CHECK" ] || [ ! -s "$C_CHECK" ] || [ ! -s "$R_CHECK" ]; then
+if [ ! -s "$H_CHECK" ] || [ ! -s "$C_CHECK" ]; then
   printf '\nResult: %d passed, %d failed\n' "$pass" "$((fail + 1))"
   echo "FATAL: no lead-check block to run; skipping the behavioural cases" >&2
   exit 1
@@ -240,7 +234,6 @@ extract_check_raw() {
 }
 check "the handoff nonce placeholder is angle-bracketed"  '[ "$(raw_block "$HANDOFF")" = "n=spechub-whoami-<nonce>" ]'
 check "the compact nonce placeholder matches"             '[ "$(raw_block "$COMPACT")" = "n=spechub-whoami-<nonce>" ]'
-check "the reflect nonce placeholder matches"             '[ "$(raw_block "$REFLECT")" = "n=spechub-whoami-<nonce>" ]'
 check "an unsubstituted block is a bash syntax error"     '! bash -n <(extract_check_raw "$HANDOFF") 2>/dev/null'
 
 # ---------------------------------------------------------------------------

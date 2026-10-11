@@ -200,7 +200,6 @@ For work with open decisions, chart it with `/spechub:map` first.
 |-------|-------------|
 | `/spechub:commit` | Commit, and update the specs under `spechub/specs/` from the diff first |
 | `/spechub:archive` | Close a finished map, after checking the decisions reached your specs and notes, then delete the nodes |
-| `/spechub:reflect` | Find the lessons in this session and put each where the next session will meet it (Claude also invokes it after a correction) |
 | `/spechub:sync` | Update the specs from code changes, outside a commit |
 | `/spechub:handoff` | Hand work to a visible agent, a new one in its own pane or one already running, with acknowledgement |
 | `/spechub:compact-and-continue` | Anchor the session's load-bearing state to survive compaction, then continue in place |
